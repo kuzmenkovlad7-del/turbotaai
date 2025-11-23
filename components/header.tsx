@@ -32,16 +32,26 @@ export default function Header() {
         element.scrollIntoView({ behavior: "smooth", block: "start" })
         setMobileMenuOpen(false)
       }
+    } else {
+      // при переходе на другую страницу закрываем мобильное меню
+      setMobileMenuOpen(false)
+    }
+  }
+
+  const scrollToAssistant = () => {
+    const element = document.querySelector("#assistant")
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" })
     }
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur-sm">
-      <div className="container mx-auto flex h-16 items-center justify-between px-4">
+    <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-sm">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <Link
           href="/"
-          className="flex items-center gap-2 transition-opacity hover:opacity-80"
+          className="flex items-center gap-2 rounded-full px-1 py-1 transition-colors hover:bg-slate-50"
         >
           <Logo />
           <span className="text-xl font-semibold text-slate-900">Myitra</span>
@@ -67,24 +77,18 @@ export default function Header() {
 
           <Link href="/login">
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="text-slate-800 hover:bg-slate-100"
+              className="border-slate-200 bg-white px-4 text-sm font-medium text-slate-800 hover:bg-slate-100 hover:text-slate-900"
             >
               {t("Sign In")}
             </Button>
           </Link>
 
           <Button
-            onClick={() => {
-              const element = document.querySelector("#assistant")
-              if (element) {
-                element.scrollIntoView({ behavior: "smooth", block: "start" })
-              }
-            }}
+            onClick={scrollToAssistant}
             size="sm"
-            variant="outline"
-            className="rounded-full border-slate-900 bg-white px-5 text-slate-900 hover:bg-slate-900 hover:text-white hover:shadow-md"
+            className="rounded-full bg-slate-900 px-5 text-sm font-medium text-white shadow-sm hover:bg-slate-800 hover:shadow-md"
           >
             {t("Talk Now")}
           </Button>
@@ -129,7 +133,7 @@ export default function Header() {
                 <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
                   <Button
                     variant="outline"
-                    className="w-full border-slate-300 text-slate-800 hover:bg-slate-100"
+                    className="w-full border-slate-200 bg-white text-slate-800 hover:bg-slate-100 hover:text-slate-900"
                   >
                     {t("Sign In")}
                   </Button>
@@ -138,13 +142,7 @@ export default function Header() {
                 <Button
                   onClick={() => {
                     setMobileMenuOpen(false)
-                    const element = document.querySelector("#assistant")
-                    if (element) {
-                      element.scrollIntoView({
-                        behavior: "smooth",
-                        block: "start",
-                      })
-                    }
+                    scrollToAssistant()
                   }}
                   className="w-full rounded-full bg-slate-900 text-white hover:bg-slate-800"
                 >
