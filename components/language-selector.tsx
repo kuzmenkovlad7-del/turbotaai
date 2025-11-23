@@ -38,7 +38,7 @@ export function LanguageSelector() {
           aria-label={t("Select Language")}
           disabled={isChanging || isLoading}
           size="sm"
-          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="flex items-center gap-1.5 text-muted-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
         >
           <Globe className="h-4 w-4 shrink-0" />
           <span className="hidden sm:inline text-sm">{currentLanguage.label}</span>
@@ -57,15 +57,15 @@ export function LanguageSelector() {
                 className={cn(
                   "flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-md transition-colors text-left disabled:cursor-not-allowed",
                   isActive
-                    ? "bg-violet-50 text-gray-900"
-                    : "text-gray-700 hover:bg-violet-50 hover:text-gray-900"
+                    ? "bg-accent/10 text-foreground border-l-2 border-accent"
+                    : "text-foreground hover:bg-accent/10 hover:text-foreground"
                 )}
               >
                 <span className="text-base">{language.flag}</span>
                 <span className="flex-1">{language.label}</span>
                 <span className="text-xs text-gray-500">({language.code})</span>
                 {isActive && (
-                  <Check className="h-4 w-4 text-gray-900" />
+                  <Check className="h-4 w-4 text-accent" />
                 )}
               </button>
             )
