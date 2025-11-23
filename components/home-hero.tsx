@@ -64,9 +64,9 @@ export function HomeHero() {
               <div className="absolute bottom-4 left-4 right-4 rounded-full border border-accent/20 bg-white/95 backdrop-blur-sm shadow-md px-4 py-3 hover:shadow-lg transition-shadow cursor-pointer">
                 <div className="flex items-center gap-3">
                   {/* Pulsating Circle Icon with Hands */}
-                  <div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-accent to-[hsl(var(--brand-blue))]">
+                  <div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-[hsl(var(--brand-indigo))] to-[hsl(var(--brand-violet))]">
                     <HandHeart className="h-5 w-5 text-white z-10" />
-                    <div className="absolute inset-0 rounded-full bg-gradient-to-br from-accent to-[hsl(var(--brand-blue))] animate-pulse-circle" />
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[hsl(var(--brand-indigo))] to-[hsl(var(--brand-violet))] animate-pulse-circle" />
                   </div>
 
                   {/* Text */}

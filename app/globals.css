@@ -14,8 +14,8 @@ body {
 
 @layer base {
   :root {
-    /* Myitra medical/psychology brand - violet-blue accent */
-    --background: 0 0% 100%; /* Pure white */
+    /* Myitra production design system - indigo-violet */
+    --background: 0 0% 100%; /* Pure white #FFFFFF */
     --foreground: 222 47% 11%; /* Near-black text #0F172A */
     --card: 0 0% 100%; /* White cards */
     --card-foreground: 222 47% 11%;
@@ -27,17 +27,17 @@ body {
     --secondary-foreground: 222 47% 11%;
     --muted: 220 14% 96%; /* Very light gray #F8FAFC */
     --muted-foreground: 215 16% 47%; /* Gray text #64748B */
-    --accent: 250 95% 76%; /* Soft lilac #A78BFA - primary brand accent */
-    --accent-foreground: 222 47% 11%; /* Dark text on accent */
+    --accent: 239 84% 67%; /* Indigo-violet #6366F1 - primary brand accent */
+    --accent-foreground: 0 0% 100%; /* White text on accent */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 220 13% 91%; /* Light gray borders #E2E8F0 */
     --input: 220 13% 91%;
-    --ring: 250 95% 76%; /* Accent color for focus rings */
+    --ring: 239 84% 67%; /* Accent color for focus rings */
     --radius: 0.75rem;
-    /* Brand gradient: soft lilac to deep blue */
-    --brand-lilac: 250 95% 76%; /* #A78BFA */
-    --brand-blue: 221 83% 53%; /* #3B82F6 */
+    /* Brand gradient: indigo to violet */
+    --brand-indigo: 239 84% 67%; /* #6366F1 */
+    --brand-violet: 258 90% 66%; /* #8B5CF6 */
   }
 }
 
