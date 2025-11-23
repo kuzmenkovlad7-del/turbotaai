@@ -51,7 +51,7 @@ export function TranslationDebug() {
 
       {isOpen && (
         <div className="bg-white border border-gray-300 rounded-md shadow-xl p-4 mt-2 max-h-96 overflow-auto w-96">
-          <h3 className="font-bold mb-2">Translation Stats for {currentLanguage.name}</h3>
+          <h3 className="font-bold mb-2">Translation Stats for {currentLanguage.label}</h3>
           <div className="mb-4">
             <div className="flex justify-between mb-1">
               <span>Total strings:</span>

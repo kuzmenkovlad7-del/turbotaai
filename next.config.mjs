@@ -16,7 +16,6 @@ const nextConfig = {
     ],
     unoptimized: true,
   },
-  serverExternalPackages: ['sharp'],
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {

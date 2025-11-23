@@ -17,42 +17,20 @@ import { useLanguage } from "@/lib/i18n/language-context"
 import { languages } from "@/lib/i18n/languages"
 import { cn } from "@/lib/utils"
 
-// Group languages by region
-const languageGroups = {
-  Europe: ["en", "fr", "de", "es", "it", "pt", "da", "sv", "el", "et", "lv", "lt", "pl", "ro"],
-  Asia: ["zh", "ja", "ko"],
-  "Middle East": ["ar", "he"],
-  "Central Asia": ["kk", "ky", "tg", "uz"],
-  "Eastern Europe": ["uk", "ru"], // Updated to prioritize Ukrainian
-  Other: ["az", "tr", "vi"],
-}
-
 export function LanguageSelector() {
   const { currentLanguage, changeLanguage, t, forceRetranslate, isLoading } = useLanguage()
   const [open, setOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [isChanging, setIsChanging] = useState(false)
 
-  // Group languages for display
-  const groupedLanguages = useMemo(() => {
-    // If there's a search query, don't group
-    if (searchQuery) {
-      const filteredLanguages = languages.filter(
-        (lang) =>
-          lang.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          lang.code.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-      return { "Search Results": filteredLanguages }
-    }
+  const filteredLanguages = useMemo(() => {
+    if (!searchQuery) return languages
 
-    // Otherwise, group by region
-    const groups: Record<string, typeof languages> = {}
-
-    Object.entries(languageGroups).forEach(([region, codes]) => {
-      groups[region] = languages.filter((lang) => codes.includes(lang.code))
-    })
-
-    return groups
+    return languages.filter(
+      (lang) =>
+        lang.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        lang.code.toLowerCase().includes(searchQuery.toLowerCase()),
+    )
   }, [searchQuery])
 
   // Enhanced language change handler with complete cleanup
@@ -119,7 +97,7 @@ export function LanguageSelector() {
             <Globe className="h-4 w-4 shrink-0 hidden sm:block" />
             <span className="truncate">
               <span>{currentLanguage.flag}</span>
-              <span className="hidden sm:inline ml-1">{currentLanguage.name}</span>
+              <span className="hidden sm:inline ml-1">{currentLanguage.label}</span>
             </span>
           </div>
           <ChevronDown
@@ -137,37 +115,27 @@ export function LanguageSelector() {
           />
           <CommandList className="max-h-[300px]">
             <CommandEmpty>{t("No language found.")}</CommandEmpty>
-
-            {Object.entries(groupedLanguages).map(([group, langs]) => (
-              <div key={group}>
-                {langs.length > 0 && (
-                  <>
-                    <CommandGroup heading={searchQuery ? "" : group}>
-                      {langs.map((language) => (
-                        <CommandItem
-                          key={language.code}
-                          value={`${language.name}-${language.code}`}
-                          onSelect={() => handleLanguageChange(language.code)}
-                          disabled={isChanging || currentLanguage.code === language.code}
-                          className="flex items-center gap-2 disabled:opacity-50"
-                        >
-                          <span className="mr-1">{language.flag}</span>
-                          {language.name}
-                          <span className="ml-1 text-xs text-gray-500">({language.code})</span>
-                          <Check
-                            className={cn(
-                              "ml-auto h-4 w-4",
-                              currentLanguage.code === language.code ? "opacity-100" : "opacity-0",
-                            )}
-                          />
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                    <CommandSeparator />
-                  </>
-                )}
-              </div>
-            ))}
+            <CommandGroup>
+              {filteredLanguages.map((language) => (
+                <CommandItem
+                  key={language.code}
+                  value={`${language.label}-${language.code}`}
+                  onSelect={() => handleLanguageChange(language.code)}
+                  disabled={isChanging || currentLanguage.code === language.code}
+                  className="flex items-center gap-2 disabled:opacity-50"
+                >
+                  <span className="mr-1">{language.flag}</span>
+                  {language.label}
+                  <span className="ml-1 text-xs text-gray-500">({language.code})</span>
+                  <Check
+                    className={cn(
+                      "ml-auto h-4 w-4",
+                      currentLanguage.code === language.code ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                </CommandItem>
+              ))}
+            </CommandGroup>
           </CommandList>
         </Command>
       </PopoverContent>

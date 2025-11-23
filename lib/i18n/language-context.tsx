@@ -169,18 +169,18 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
 
         // Update state
         setCurrentLanguage(initialLanguage || defaultLanguage)
-        setIsRTL((initialLanguage || defaultLanguage).dir === "rtl")
+        setIsRTL((initialLanguage || defaultLanguage).direction === "rtl")
         setTranslations(initialTranslations)
         previousLanguageRef.current = initialLanguageCode
 
         // Set document direction and language only in browser
         if (typeof document !== "undefined") {
-          document.documentElement.dir = (initialLanguage || defaultLanguage).dir
+          document.documentElement.dir = (initialLanguage || defaultLanguage).direction
           document.documentElement.lang = (initialLanguage || defaultLanguage).code
 
           // Add language-specific class to body
           document.body.classList.add(`lang-${initialLanguageCode}`)
-          if ((initialLanguage || defaultLanguage).dir === "rtl") {
+          if ((initialLanguage || defaultLanguage).direction === "rtl") {
             document.body.classList.add("rtl")
           }
 
@@ -228,7 +228,7 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
       console.log(`🌐 Changing language from ${previousLanguageRef.current} to ${code}`)
 
       setCurrentLanguage(newLanguage)
-      setIsRTL(newLanguage.dir === "rtl")
+      setIsRTL(newLanguage.direction === "rtl")
 
       // Load translations for the new language (with caching)
       let newTranslations = translationCacheRef.current.get(code)
@@ -255,14 +255,14 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
 
         // Add new language classes
         document.body.classList.add(`lang-${code}`)
-        if (newLanguage.dir === "rtl") {
+        if (newLanguage.direction === "rtl") {
           document.body.classList.add("rtl")
         } else {
           document.body.classList.add("ltr")
         }
 
         // Update document properties
-        document.documentElement.dir = newLanguage.dir
+        document.documentElement.dir = newLanguage.direction
         document.documentElement.lang = newLanguage.code
 
         // Force complete retranslation after a short delay
