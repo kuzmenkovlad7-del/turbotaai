@@ -14,7 +14,7 @@ import { Eye, EyeOff, AlertCircle, CheckCircle2, Mail, Lock, User, ArrowRight, B
 
 export default function RegisterForm() {
   const { t } = useLanguage()
-  const { signUp } = useAuth()
+  const { signUp, authDisabled } = useAuth()
   const router = useRouter()
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
@@ -24,6 +24,39 @@ export default function RegisterForm() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [emailConfirmationSent, setEmailConfirmationSent] = useState(false)
+
+  if (authDisabled) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-5rem)] px-4">
+        <Card className="w-full max-w-md shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+          <CardHeader className="text-center pb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-gray-600 to-gray-500 rounded-full mb-4 shadow-lg mx-auto">
+              <AlertCircle className="h-8 w-8 text-white" />
+            </div>
+            <CardTitle className="text-2xl font-bold text-gray-900">
+              {t("Регистрация временно недоступна")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-center text-gray-600">
+              {t("Это демо-окружение. Для работы с реальной регистрацией добавьте ключи Supabase в файл .env.local:")}
+            </p>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 font-mono text-xs space-y-2">
+              <div className="text-gray-700">NEXT_PUBLIC_SUPABASE_URL=...</div>
+              <div className="text-gray-700">NEXT_PUBLIC_SUPABASE_ANON_KEY=...</div>
+            </div>
+            <div className="pt-4 border-t border-gray-100">
+              <Link href="/">
+                <Button className="w-full" variant="outline">
+                  {t("Вернуться на главную")}
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

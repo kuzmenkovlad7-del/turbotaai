@@ -1,24 +1,36 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export const supabase = createSupabaseClient(supabaseUrl, supabaseAnonKey)
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 
-// Re-export createClient for compatibility
+if (!isSupabaseConfigured && process.env.NODE_ENV !== "production") {
+  console.warn(
+    "⚠️ Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your .env.local file."
+  )
+}
+
+export const supabase = isSupabaseConfigured
+  ? createSupabaseClient(supabaseUrl as string, supabaseAnonKey as string)
+  : null
+
 export { createClient } from "@supabase/supabase-js"
 
-// Default export
 export default supabase
 
-// Create a singleton instance for the browser client
 let browserClient: ReturnType<typeof createSupabaseClient> | null = null
 
 export function getSupabaseBrowserClient() {
+  if (!isSupabaseConfigured) {
+    console.warn("Supabase is not configured")
+    return null
+  }
+
   if (browserClient) return browserClient
 
   try {
-    browserClient = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+    browserClient = createSupabaseClient(supabaseUrl as string, supabaseAnonKey as string, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
@@ -44,18 +56,17 @@ export function getSupabaseBrowserClient() {
   }
 }
 
-// Create a server client (to be used in server components or API routes)
 export function getSupabaseServerClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  const serverSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 
-  if (!supabaseUrl || !supabaseServiceKey) {
+  if (!serverSupabaseUrl || !supabaseServiceKey) {
     console.warn("Missing Supabase server environment variables")
     return null
   }
 
   try {
-    return createSupabaseClient(supabaseUrl, supabaseServiceKey, {
+    return createSupabaseClient(serverSupabaseUrl, supabaseServiceKey, {
       auth: {
         persistSession: false,
       },

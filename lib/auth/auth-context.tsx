@@ -2,12 +2,13 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import type { User, Session } from "@supabase/supabase-js"
-import { supabase } from "@/lib/supabase-client"
+import { supabase, isSupabaseConfigured } from "@/lib/supabase-client"
 
 interface AuthContextType {
   user: User | null
   session: Session | null
   loading: boolean
+  authDisabled: boolean
   signIn: (email: string, password: string) => Promise<any>
   signUp: (email: string, password: string, username?: string) => Promise<any>
   signOut: () => Promise<void>
@@ -21,9 +22,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const authDisabled = !isSupabaseConfigured
 
   useEffect(() => {
-    // Get initial session
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(false)
+      return
+    }
+
     const getInitialSession = async () => {
       try {
         const {
@@ -45,7 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     getInitialSession()
 
-    // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -64,6 +69,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signIn = async (email: string, password: string) => {
+    if (!isSupabaseConfigured || !supabase) {
+      console.warn("Auth is disabled: Supabase not configured")
+      return {
+        data: null,
+        error: new Error("Authentication is currently unavailable. Please configure Supabase."),
+      }
+    }
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -77,6 +90,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signUp = async (email: string, password: string, username?: string) => {
+    if (!isSupabaseConfigured || !supabase) {
+      console.warn("Auth is disabled: Supabase not configured")
+      return {
+        data: null,
+        error: new Error("Authentication is currently unavailable. Please configure Supabase."),
+      }
+    }
+
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -95,6 +116,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      console.warn("Auth is disabled: Supabase not configured")
+      return
+    }
+
     try {
       const { error } = await supabase.auth.signOut()
       if (error) {
@@ -106,6 +132,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const resetPassword = async (email: string) => {
+    if (!isSupabaseConfigured || !supabase) {
+      console.warn("Auth is disabled: Supabase not configured")
+      return {
+        data: null,
+        error: new Error("Authentication is currently unavailable. Please configure Supabase."),
+      }
+    }
+
     try {
       const { data, error } = await supabase.auth.resetPasswordForEmail(email)
       return { data, error }
@@ -116,12 +150,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const updateProfile = async (updates: { username?: string; avatar_url?: string | null }) => {
+    if (!isSupabaseConfigured || !supabase) {
+      console.warn("Auth is disabled: Supabase not configured")
+      return { error: new Error("Authentication is currently unavailable. Please configure Supabase.") }
+    }
+
     try {
       if (!user) {
         return { error: new Error("No user logged in") }
       }
 
-      // Update user metadata in Supabase Auth
       const { data, error } = await supabase.auth.updateUser({
         data: {
           username: updates.username,
@@ -133,7 +171,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error }
       }
 
-      // Update local user state
       if (data.user) {
         setUser(data.user)
       }
@@ -149,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     session,
     loading,
+    authDisabled,
     signIn,
     signUp,
     signOut,

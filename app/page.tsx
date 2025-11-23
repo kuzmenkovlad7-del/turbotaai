@@ -3,13 +3,11 @@
 import { Button } from "@/components/ui/button"
 import { PhoneCall, MessageSquare, Video } from "lucide-react"
 import ServiceFeatures from "@/components/service-features"
-import HeroSection from "@/components/hero-section"
+import { HomeHero } from "@/components/home-hero"
 import ContactSection from "@/components/contact-section"
 import { useLanguage } from "@/lib/i18n/language-context"
-import { AutoTranslate } from "@/components/auto-translate"
 import { keyframes } from "@emotion/react"
 import styled from "@emotion/styled"
-import Header from "@/components/header"
 import { useState } from "react"
 import AIChatDialog from "@/components/ai-chat-dialog"
 import VoiceCallDialog from "@/components/voice-call-dialog"
@@ -88,20 +86,10 @@ export default function Home() {
 
   return (
     <AnimatedContainer>
-      <main
-        className="min-h-screen flex flex-col pt-16"
-        style={{
-          backgroundImage: "url('/blue-waves-bg.png')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundAttachment: "fixed",
-        }}
-      >
-        <Header />
-        <AutoTranslate className="flex-grow">
-          <HeroSection />
+      <div>
+        <HomeHero />
 
-          <section className="py-16 px-4 md:px-6 lg:px-8">
+        <section id="assistant" className="py-16 px-4 md:px-6 lg:px-8 bg-slate-900">
             <div className="max-w-6xl mx-auto">
               <div className="bg-white/80 backdrop-blur-sm p-8 rounded-2xl">
                 <h2 className="text-3xl md:text-4xl font-bold text-center mb-12 text-primary-900">
@@ -189,9 +177,11 @@ export default function Home() {
             </div>
           </section>
 
-          <ServiceFeatures />
+        <ServiceFeatures />
+        <section id="contacts">
           <ContactSection />
-        </AutoTranslate>
+        </section>
+
         <AIChatDialog
           isOpen={isChatOpen}
           onClose={() => setIsChatOpen(false)}
@@ -219,7 +209,7 @@ export default function Home() {
             setIsVideoCallOpen(false)
           }}
         />
-      </main>
+      </div>
     </AnimatedContainer>
   )
 }
