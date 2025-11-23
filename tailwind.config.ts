@@ -47,7 +47,7 @@ const config: Config = {
           900: "#581c87",
           950: "#3b0764",
         },
-        // Rainbow gradient colors
+        // Rainbow gradient colors for CTA
         "color-1": "hsl(var(--color-1))",
         "color-2": "hsl(var(--color-2))",
         "color-3": "hsl(var(--color-3))",
@@ -101,11 +101,17 @@ const config: Config = {
           "0%": { backgroundPosition: "0%" },
           "100%": { backgroundPosition: "200%" },
         },
+        "shine-pulse": {
+          "0%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+          "100%": { backgroundPosition: "0% 50%" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         rainbow: "rainbow var(--speed, 2s) infinite linear",
+        "shine-pulse": "shine-pulse 18s linear infinite",
       },
     },
   },
