@@ -26,27 +26,42 @@ export default function Home() {
       {/* Contact Methods Section */}
       <section
         id="assistant"
-        className="-mt-6 pb-20 pt-0 px-4 md:px-6 lg:px-8"
+        className="relative -mt-6 bg-gradient-to-b from-slate-50 via-slate-50 to-white pb-20 pt-14 md:-mt-10 md:pt-20"
       >
-        <div className="mx-auto max-w-6xl rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.12)] backdrop-blur-sm sm:p-8 lg:p-10">
-          <h2 className="mb-8 text-center text-3xl font-bold text-slate-900 md:text-4xl">
-            Как вы хотите связаться с нами?
-          </h2>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-slate-100/60 to-transparent" />
+        <div className="relative z-10 mx-auto max-w-6xl px-4 md:px-6 lg:px-8">
+          <div className="mb-12 text-center">
+            <p className="mb-3 inline-flex items-center rounded-full bg-white px-4 py-1 text-xs font-medium text-slate-500 shadow-sm ring-1 ring-slate-200">
+              💬 {t("Choose how you want to talk")}
+            </p>
+            <h2 className="mb-4 text-3xl font-bold text-slate-900 md:text-4xl">
+              {t("How would you like to contact us?")}
+            </h2>
+            <p className="mx-auto max-w-2xl text-sm text-slate-600 md:text-base">
+              {t(
+                "Start with a quick chat, a voice call or a video session with our AI-psychologist — choose the format that feels safest right now.",
+              )}
+            </p>
+          </div>
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             <ContactMethodCard
               icon={MessageSquare}
-              title="Чат с ИИ-психологом"
-              description="Текстовая поддержка в любой момент, когда нужно выговориться."
-              buttonText="Начать чат"
+              title={t("Chat with AI-psychologist")}
+              description={t(
+                "Text support at any moment when you need to talk and sort out your thoughts.",
+              )}
+              buttonText={t("Start chat")}
               onClick={() => setIsChatOpen(true)}
             />
 
             <ContactMethodCard
               icon={PhoneCall}
-              title="Позвонить ИИ-психологу"
-              description="Голосовой формат для более живой поддержки."
-              buttonText="Начать голосовой звонок"
+              title={t("Call AI-psychologist")}
+              description={t(
+                "Voice format for more lively support when you want to hear a calm voice.",
+              )}
+              buttonText={t("Start voice call")}
               onClick={() => {
                 if (
                   typeof window !== "undefined" &&
@@ -68,9 +83,11 @@ export default function Home() {
 
             <ContactMethodCard
               icon={Video}
-              title="Видеозвонок с ИИ"
-              description="Сессия с 3D-персонажем лицом к лицу."
-              buttonText="Начать видеозвонок"
+              title={t("Video session with AI")}
+              description={t(
+                "Face-to-face session with a 3D-avatar when you want to feel presence and eye contact.",
+              )}
+              buttonText={t("Start video call")}
               onClick={() => {
                 if (typeof window !== "undefined" && !navigator.mediaDevices) {
                   alert(
