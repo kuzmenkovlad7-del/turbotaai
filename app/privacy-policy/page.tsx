@@ -9,7 +9,7 @@ export default function PrivacyPolicyPage() {
     <div className="container mx-auto px-4 py-16">
       <div className="max-w-4xl mx-auto bg-card rounded-3xl shadow-lg p-8 md:p-12">
         <h1 className="text-4xl font-bold mb-8 text-foreground">{t("Privacy Policy")}</h1>
-        <p className="text-sm text-muted-foreground mb-8">Last Updated: November 2024</p>
+        <p className="text-sm text-muted-foreground mb-8">Last Updated: November 2025</p>
 
         <div className="space-y-8 text-muted-foreground">
           <section>
@@ -124,19 +124,6 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-2xl font-semibold mb-4 text-foreground">Changes to This Policy</h2>
             <div className="space-y-4">
               <p>We may update this Privacy Policy periodically to reflect changes in our practices or legal requirements. We will notify you of significant changes via email or through prominent notice on our platform. Continued use of our services after such notification constitutes acceptance of the updated policy.</p>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold mb-4 text-foreground">{t("Contact Us")}</h2>
-            <div className="space-y-4">
-              <p>If you have questions about this Privacy Policy or our data practices, please contact us:</p>
-              <div className="ml-2 mt-4">
-                <p><strong>Email:</strong> privacy@myitra.com</p>
-                <p><strong>Address:</strong> Myitra Psychology Services</p>
-                <p className="ml-16">123 AI Avenue</p>
-                <p className="ml-16">Tech City, TC 12345</p>
-              </div>
             </div>
           </section>
         </div>
