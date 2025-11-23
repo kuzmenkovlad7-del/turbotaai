@@ -20,7 +20,9 @@ export default function ContactForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
     const { name, value } = e.target
     setFormState((prev) => ({ ...prev, [name]: value }))
 
@@ -64,7 +66,7 @@ export default function ContactForm() {
     setIsSubmitting(true)
 
     try {
-      // Здесь потом легко заменить на реальный API-запрос
+      // сюда позже легко подставить реальный API вызов
       await new Promise((resolve) => setTimeout(resolve, 1500))
       setIsSubmitted(true)
       setFormState({
@@ -83,17 +85,19 @@ export default function ContactForm() {
   return (
     <div className="mx-auto w-full max-w-2xl">
       {isSubmitted ? (
-        <div className="rounded-xl bg-primary/10 p-8 text-center">
-          <CheckCircle className="mx-auto mb-4 h-16 w-16 text-primary" />
-          <h3 className="mb-2 text-2xl font-bold text-primary">
+        <div className="rounded-xl bg-indigo-50/80 p-8 text-center">
+          <CheckCircle className="mx-auto mb-4 h-12 w-12 text-indigo-600" />
+          <h3 className="mb-2 text-2xl font-bold text-slate-900">
             {t("Thank you for your message!")}
           </h3>
-          <p className="mb-4 text-foreground">
-            {t("We've received your inquiry and will get back to you as soon as possible.")}
+          <p className="mb-4 text-sm text-slate-700">
+            {t(
+              "We've received your inquiry and will get back to you as soon as possible.",
+            )}
           </p>
           <Button
             onClick={() => setIsSubmitted(false)}
-            className="rounded-full bg-primary-600 px-6 py-2 text-white hover:bg-primary-700"
+            className="rounded-full bg-slate-900 px-6 py-2 text-white hover:bg-slate-800"
           >
             {t("Send another message")}
           </Button>
@@ -101,7 +105,10 @@ export default function ContactForm() {
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="name" className="mb-1 block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="name"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
               {t("Your Name")} <span className="text-red-500">*</span>
             </label>
             <Input
@@ -110,7 +117,9 @@ export default function ContactForm() {
               value={formState.name}
               onChange={handleChange}
               placeholder={t("Enter your full name")}
-              className={errors.name ? "border-red-500" : "border-gray-300"}
+              className={
+                errors.name ? "border-red-500" : "border-slate-200 focus-visible:ring-1"
+              }
               aria-invalid={!!errors.name}
               aria-describedby={errors.name ? "name-error" : undefined}
             />
@@ -122,7 +131,10 @@ export default function ContactForm() {
           </div>
 
           <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="email"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
               {t("Email Address")} <span className="text-red-500">*</span>
             </label>
             <Input
@@ -132,7 +144,11 @@ export default function ContactForm() {
               value={formState.email}
               onChange={handleChange}
               placeholder={t("Enter your email address")}
-              className={errors.email ? "border-red-500" : "border-gray-300"}
+              className={
+                errors.email
+                  ? "border-red-500"
+                  : "border-slate-200 focus-visible:ring-1"
+              }
               aria-invalid={!!errors.email}
               aria-describedby={errors.email ? "email-error" : undefined}
             />
@@ -144,7 +160,10 @@ export default function ContactForm() {
           </div>
 
           <div>
-            <label htmlFor="subject" className="mb-1 block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="subject"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
               {t("Subject")} <span className="text-red-500">*</span>
             </label>
             <Input
@@ -153,7 +172,11 @@ export default function ContactForm() {
               value={formState.subject}
               onChange={handleChange}
               placeholder={t("Enter the subject of your message")}
-              className={errors.subject ? "border-red-500" : "border-gray-300"}
+              className={
+                errors.subject
+                  ? "border-red-500"
+                  : "border-slate-200 focus-visible:ring-1"
+              }
               aria-invalid={!!errors.subject}
               aria-describedby={errors.subject ? "subject-error" : undefined}
             />
@@ -165,7 +188,10 @@ export default function ContactForm() {
           </div>
 
           <div>
-            <label htmlFor="message" className="mb-1 block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="message"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
               {t("Your Message")} <span className="text-red-500">*</span>
             </label>
             <Textarea
@@ -175,7 +201,9 @@ export default function ContactForm() {
               onChange={handleChange}
               placeholder={t("Type your message here...")}
               rows={6}
-              className={`${errors.message ? "border-red-500" : "border-gray-300"} resize-none`}
+              className={`${
+                errors.message ? "border-red-500" : "border-slate-200 focus-visible:ring-1"
+              } resize-none`}
               aria-invalid={!!errors.message}
               aria-describedby={errors.message ? "message-error" : undefined}
             />
@@ -190,11 +218,11 @@ export default function ContactForm() {
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center gap-2 rounded-full bg-slate-900 px-8 py-6 text-lg text-white hover:bg-slate-800"
+              className="flex items-center gap-2 rounded-full bg-slate-900 px-8 py-5 text-base text-white hover:bg-slate-800"
             >
               {isSubmitting ? (
                 <>
-                  <div className="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  <div className="mr-1 h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   {t("Sending...")}
                 </>
               ) : (
