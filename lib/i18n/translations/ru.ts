@@ -87,6 +87,35 @@ export const ru = {
   "Detected language": "Обнаруженный язык",
   Language: "Язык",
 
+  // Auth Unavailable Messages
+  "Authentication is temporarily unavailable. Please contact support.":
+    "Авторизация временно недоступна. Пожалуйста, свяжитесь с поддержкой.",
+  "Авторизация временно отключена": "Авторизация временно отключена",
+  "Регистрация временно недоступна": "Регистрация временно недоступна",
+  "Это демо-окружение. Для работы с реальной авторизацией добавьте ключи Supabase в файл .env.local:":
+    "Это демо-окружение. Для работы с реальной авторизацией добавьте ключи Supabase в файл .env.local:",
+  "Вернуться на главную": "Вернуться на главную",
+  Guest: "Гость",
+
+  // Assistant Modal Translations
+  "AI Psychologist (Chat)": "ИИ-психолог (Чат)",
+  "AI Psychologist (Voice Call)": "ИИ-психолог (Голосовой звонок)",
+  "AI Psychologist (Video Call)": "ИИ-психолог (Видеозвонок)",
+  "Choose Your AI Psychologist": "Выберите AI-психолога",
+  "Select the AI psychologist you'd like to speak with during your video call.":
+    "Выберите ИИ-психолога, с которым вы хотите поговорить во время видеозвонка.",
+  "Voice communication language": "Язык голосового общения",
+  "Video call language": "Язык видеозвонка",
+  "Chat language": "Язык чата",
+  "AI will understand and respond in this language with native accent":
+    "ИИ будет понимать и отвечать на этом языке с родным акцентом",
+  "Choose AI voice gender:": "Выберите пол голоса ИИ:",
+  "Start Session": "Начать сессию",
+  "Start Call": "Начать звонок",
+  "End Call": "Завершить звонок",
+  "Close": "Закрыть",
+  User: "Пользователь",
+
   // Services Page
   "Our Services": "Наши услуги",
   "Explore our range of AI-powered psychological support services designed to meet your unique needs.":
@@ -125,4 +154,29 @@ export const ru = {
   "Ready to get started?": "Готовы начать?",
   "Choose the service that best fits your needs and preferences. All services include our first 5 minutes free guarantee.":
     "Выберите услугу, которая лучше всего соответствует вашим потребностям и предпочтениям. Все услуги включают гарантию первых 5 минут бесплатно.",
+
+  // Hero Section - New Keys
+  "Myitra Platform · AI + Psychology": "Платформа Myitra · ИИ + Психология",
+  "Live Psychological Support,": "Живая психологическая поддержка,",
+  "AI-Enhanced": "усиленная ИИ",
+  "Licensed psychologists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
+    "Лицензированные психологи с поддержкой ИИ-ассистентов. Помогаем собрать анамнез, вести дневник и напоминаем о сессиях.",
+  "Talk Now": "Поговорить сейчас",
+  "View Services": "Посмотреть услуги",
+  "AI Chat 24/7": "ИИ-чат 24/7",
+  "Voice Calls": "Голосовые звонки",
+  "Video Sessions": "Видеосессии",
+  "Myitra Psychology Session": "Психологическая сессия Myitra",
+  "3 Assistant Modes": "3 режима ассистента",
+  "chat · voice · video": "чат · голос · видео",
+  "Welcome Back": "Добро пожаловать снова",
+  "Sign in to continue your journey with AI Psychology": "Войдите, чтобы продолжить свой путь с ИИ-психологией",
+  "Enter your credentials to access your account": "Введите свои данные для доступа к аккаунту",
+  "Signing in...": "Вход...",
+  "Forgot password?": "Забыли пароль?",
+  "Hide password": "Скрыть пароль",
+  "Show password": "Показать пароль",
+  "Create account": "Создать аккаунт",
+  "By signing in, you agree to our": "Входя, вы соглашаетесь с нашими",
+  "and": "и",
 }

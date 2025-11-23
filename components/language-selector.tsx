@@ -91,7 +91,7 @@ export function LanguageSelector() {
           aria-expanded={open}
           aria-label={t("Select Language")}
           disabled={isChanging || isLoading}
-          className="flex items-center gap-1 sm:gap-2 border-primary-700 border-2 text-primary-800 hover:bg-lavender-100 w-[44px] sm:w-[180px] justify-between overflow-hidden bg-transparent disabled:opacity-50"
+          className="flex items-center gap-1 sm:gap-2 border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 w-[44px] sm:w-[180px] justify-between overflow-hidden bg-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-0 transition-colors"
         >
           <div className="flex items-center gap-1 sm:gap-2 truncate">
             <Globe className="h-4 w-4 shrink-0 hidden sm:block" />
@@ -105,8 +105,8 @@ export function LanguageSelector() {
           />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0" align="end">
-        <Command>
+      <PopoverContent className="w-[300px] p-0 bg-white border-slate-200 shadow-lg" align="end">
+        <Command className="bg-white">
           <CommandInput
             placeholder={t("Search languages")}
             value={searchQuery}

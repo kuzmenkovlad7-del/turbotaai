@@ -15,14 +15,14 @@ const iconPulseKeyframes = keyframes`
 `
 
 const cardRiseKeyframes = keyframes`
-  0% { transform: translateY(0); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-  100% { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(2,90,160,0.12); }
+  0% { transform: translateY(0); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+  100% { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.1); }
 `
 
 const glowKeyframes = keyframes`
-  0% { box-shadow: 0 0 0 0 rgba(2,90,160,0); }
-  50% { box-shadow: 0 0 8px 2px rgba(2,90,160,0.2); }
-  100% { box-shadow: 0 0 0 0 rgba(2,90,160,0); }
+  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+  50% { box-shadow: 0 0 12px 3px rgba(59, 130, 246, 0.15); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
 `
 
 // Update the styled component with smoother animations
@@ -42,12 +42,12 @@ const AnimatedFeatureContainer = styled.div`
       }
       
       .feature-title {
-        color: var(--color-primary-700);
+        color: rgb(30, 58, 138);
         transition: color 0.3s ease;
       }
-      
+
       .feature-description {
-        color: var(--color-primary-900);
+        color: rgb(51, 65, 85);
         transition: color 0.3s ease;
       }
     }
@@ -92,25 +92,13 @@ export default function ServiceFeatures() {
 
   return (
     <AnimatedFeatureContainer>
-      <section
-        className="py-12 sm:py-16 px-4 md:px-6 lg:px-8 bg-waves"
-        style={
-          {
-            backgroundImage: "url('/blue-waves-bg.png')",
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundAttachment: "fixed",
-            "--color-primary-700": "#025aa0",
-            "--color-primary-900": "#0a416f",
-          } as React.CSSProperties
-        }
-      >
+      <section className="py-12 sm:py-16 px-4 md:px-6 lg:px-8 bg-gradient-to-b from-white to-slate-50">
         <div className="max-w-6xl mx-auto">
-          <div className="bg-white/80 backdrop-blur-sm p-6 sm:p-8 rounded-2xl">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-3 sm:mb-4 text-primary-900">
+          <div className="p-6 sm:p-8">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-3 sm:mb-4 text-slate-900">
               {t("Key Features")}
             </h2>
-            <p className="text-sm sm:text-base text-gray-600 text-center mb-8 sm:mb-12 max-w-3xl mx-auto px-4">
+            <p className="text-sm sm:text-base text-slate-600 text-center mb-8 sm:mb-12 max-w-3xl mx-auto px-4">
               {t(
                 "Our AI-powered psychological support service combines cutting-edge technology with professional care principles.",
               )}
@@ -118,12 +106,12 @@ export default function ServiceFeatures() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
               {features.map((feature, index) => (
-                <div key={index} className="bg-white p-5 sm:p-6 rounded-xl shadow-sm feature-card touch-manipulation">
-                  <div className="h-12 w-12 rounded-full bg-lavender-100 flex items-center justify-center mb-4 text-primary-700 feature-icon-container">
+                <div key={index} className="bg-white p-5 sm:p-6 rounded-xl shadow-md border border-slate-200 feature-card touch-manipulation">
+                  <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center mb-4 text-blue-600 feature-icon-container">
                     {feature.icon}
                   </div>
-                  <h3 className="text-lg sm:text-xl font-semibold mb-2 feature-title">{feature.title}</h3>
-                  <p className="text-sm sm:text-base text-gray-600 feature-description leading-relaxed">
+                  <h3 className="text-lg sm:text-xl font-semibold mb-2 text-slate-900 feature-title">{feature.title}</h3>
+                  <p className="text-sm sm:text-base text-slate-600 feature-description leading-relaxed">
                     {feature.description}
                   </p>
                 </div>

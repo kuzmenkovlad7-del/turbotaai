@@ -34,10 +34,10 @@ export default function MobileNav() {
             <span className="sr-only">Toggle menu</span>
           </Button>
         </SheetTrigger>
-        <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+        <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-white">
           <div className="flex flex-col h-full">
             <div className="flex justify-between items-center py-4">
-              <h2 className="text-lg font-semibold">Menu</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Menu</h2>
               <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
                 <X className="h-6 w-6" />
                 <span className="sr-only">Close menu</span>

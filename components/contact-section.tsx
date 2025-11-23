@@ -17,14 +17,14 @@ const iconPulseKeyframes = keyframes`
 `
 
 const cardRiseKeyframes = keyframes`
-  0% { transform: translateY(0); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-  100% { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(2,90,160,0.12); }
+  0% { transform: translateY(0); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+  100% { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.1); }
 `
 
 const glowKeyframes = keyframes`
-  0% { box-shadow: 0 0 0 0 rgba(2,90,160,0); }
-  50% { box-shadow: 0 0 8px 2px rgba(2,90,160,0.2); }
-  100% { box-shadow: 0 0 0 0 rgba(2,90,160,0); }
+  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+  50% { box-shadow: 0 0 12px 3px rgba(59, 130, 246, 0.15); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
 `
 
 // Update the styled component with smoother animations
@@ -44,12 +44,12 @@ const AnimatedContactContainer = styled.div`
       }
       
       .contact-title {
-        color: var(--color-primary-700);
+        color: rgb(30, 58, 138);
         transition: color 0.3s ease;
       }
-      
+
       .contact-details {
-        color: var(--color-primary-900);
+        color: rgb(37, 99, 235);
         transition: color 0.3s ease;
       }
     }
@@ -85,23 +85,13 @@ export default function ContactSection() {
       <AutoTranslate>
         <section
           id="contact"
-          className="py-16 px-4 md:px-6 lg:px-8 bg-waves"
-          style={
-            {
-              backgroundImage: "url('/blue-waves-bg.png')",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              backgroundAttachment: "fixed",
-              "--color-primary-700": "#025aa0",
-              "--color-primary-900": "#0a416f",
-            } as React.CSSProperties
-          }
+          className="py-16 px-4 md:px-6 lg:px-8 bg-gradient-to-b from-slate-50 to-white"
         >
           <div className="max-w-6xl mx-auto">
-            <div className="bg-white/80 backdrop-blur-sm p-8 rounded-2xl">
+            <div className="p-8">
               <div className="text-center mb-12">
-                <h2 className="text-3xl md:text-4xl font-bold text-primary-900 mb-4">{t("Contact Us")}</h2>
-                <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+                <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">{t("Contact Us")}</h2>
+                <p className="text-lg text-slate-600 max-w-3xl mx-auto">
                   {t(
                     "Have questions or need assistance? Reach out to our support team and we'll get back to you as soon as possible.",
                   )}
@@ -112,20 +102,20 @@ export default function ContactSection() {
                 {contactInfo.map((item, index) => (
                   <div
                     key={index}
-                    className="bg-white p-6 rounded-xl shadow-sm flex flex-col items-center text-center contact-card"
+                    className="bg-white p-6 rounded-xl shadow-md border border-slate-200 flex flex-col items-center text-center contact-card"
                   >
-                    <div className="h-12 w-12 rounded-full bg-lavender-100 flex items-center justify-center mb-4 text-primary-700 contact-icon-container">
+                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center mb-4 text-blue-600 contact-icon-container">
                       {item.icon}
                     </div>
-                    <h3 className="text-xl font-semibold mb-2 contact-title">{item.title}</h3>
-                    <p className="text-primary-700 font-medium mb-2 contact-details">{item.details}</p>
-                    <p className="text-gray-500">{item.description}</p>
+                    <h3 className="text-xl font-semibold mb-2 text-slate-900 contact-title">{item.title}</h3>
+                    <p className="text-blue-600 font-medium mb-2 contact-details">{item.details}</p>
+                    <p className="text-slate-500">{item.description}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 md:p-8">
-                <h3 className="text-2xl font-bold text-primary-900 mb-6 text-center">{t("Send Us a Message")}</h3>
+              <div className="bg-white rounded-xl shadow-md border border-slate-200 p-4 sm:p-6 md:p-8">
+                <h3 className="text-2xl font-bold text-slate-900 mb-6 text-center">{t("Send Us a Message")}</h3>
                 <ContactForm />
               </div>
             </div>

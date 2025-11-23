@@ -4,6 +4,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
+export const hasSupabaseEnv = isSupabaseConfigured
 
 if (!isSupabaseConfigured && process.env.NODE_ENV !== "production") {
   console.warn(

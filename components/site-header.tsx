@@ -2,11 +2,10 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Menu, X } from "lucide-react"
+import { Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { LanguageSelector } from "@/components/language-selector"
-import { RainbowButton } from "@/components/ui/rainbow-button"
 import { useLanguage } from "@/lib/i18n/language-context"
 import Logo from "@/components/logo"
 
@@ -33,12 +32,12 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur-xl">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
-        <div className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <Logo />
-          <span className="text-xl font-bold text-white">Myitra</span>
-        </div>
+          <span className="text-xl font-bold text-slate-900">Myitra</span>
+        </Link>
 
         <nav className="hidden items-center gap-6 lg:flex">
           {mainLinks.map((link) => (
@@ -46,44 +45,45 @@ export function SiteHeader() {
               key={link.href}
               href={link.href}
               onClick={(e) => scrollToSection(e, link.href)}
-              className="text-sm font-medium text-slate-300 transition-colors hover:text-white"
+              className="text-sm font-medium text-slate-700 transition-colors hover:text-primary-600"
             >
               {t(link.label)}
             </Link>
           ))}
         </nav>
 
-        <div className="hidden items-center gap-4 lg:flex">
+        <div className="hidden items-center gap-3 lg:flex">
           <LanguageSelector />
           <Link href="/login">
-            <Button variant="ghost" className="text-slate-300 hover:text-white">
-              {t("Войти")}
+            <Button variant="ghost" className="text-slate-700 hover:text-slate-900">
+              {t("Sign In")}
             </Button>
           </Link>
-          <RainbowButton
+          <Button
             onClick={() => {
               const element = document.querySelector("#assistant")
               if (element) {
                 element.scrollIntoView({ behavior: "smooth", block: "start" })
               }
             }}
+            className="bg-primary-600 hover:bg-primary-700 text-white"
           >
             {t("Поговорить сейчас")}
-          </RainbowButton>
+          </Button>
         </div>
 
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild className="lg:hidden">
-            <Button variant="ghost" size="icon" className="text-slate-300">
+            <Button variant="ghost" size="icon" className="text-slate-700">
               <Menu className="h-6 w-6" />
               <span className="sr-only">Toggle menu</span>
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-[300px] bg-slate-950 border-white/10">
+          <SheetContent side="left" className="w-[300px] bg-white border-slate-200">
             <div className="flex flex-col gap-6 pt-6">
               <div className="flex items-center gap-2">
                 <Logo />
-                <span className="text-xl font-bold text-white">Myitra</span>
+                <span className="text-xl font-bold text-slate-900">Myitra</span>
               </div>
 
               <nav className="flex flex-col gap-4">
@@ -92,24 +92,24 @@ export function SiteHeader() {
                     key={link.href}
                     href={link.href}
                     onClick={(e) => scrollToSection(e, link.href)}
-                    className="text-base font-medium text-slate-300 transition-colors hover:text-white"
+                    className="text-base font-medium text-slate-700 transition-colors hover:text-primary-600"
                   >
                     {t(link.label)}
                   </Link>
                 ))}
               </nav>
 
-              <div className="border-t border-white/10 pt-6">
+              <div className="border-t border-slate-200 pt-6">
                 <LanguageSelector />
               </div>
 
               <div className="flex flex-col gap-3">
                 <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="outline" className="w-full border-white/20 text-slate-300">
-                    {t("Войти")}
+                  <Button variant="outline" className="w-full">
+                    {t("Sign In")}
                   </Button>
                 </Link>
-                <RainbowButton
+                <Button
                   onClick={() => {
                     setMobileMenuOpen(false)
                     const element = document.querySelector("#assistant")
@@ -117,10 +117,10 @@ export function SiteHeader() {
                       element.scrollIntoView({ behavior: "smooth", block: "start" })
                     }
                   }}
-                  className="w-full"
+                  className="w-full bg-primary-600 hover:bg-primary-700 text-white"
                 >
                   {t("Поговорить сейчас")}
-                </RainbowButton>
+                </Button>
               </div>
             </div>
           </SheetContent>

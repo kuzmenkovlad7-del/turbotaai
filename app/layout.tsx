@@ -41,7 +41,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} min-h-screen bg-slate-950 text-slate-50 antialiased`} suppressHydrationWarning>
+      <body className={`${inter.className} min-h-screen bg-white text-slate-900 antialiased`} suppressHydrationWarning>
         <AuthProvider>
           <LanguageProvider>
             <RTLWrapper>

@@ -233,6 +233,35 @@ export const uk = {
   "Detected language": "Виявлена мова",
   Language: "Мова",
 
+  // Auth Unavailable Messages
+  "Authentication is temporarily unavailable. Please contact support.":
+    "Авторизація тимчасово недоступна. Будь ласка, зверніться до підтримки.",
+  "Авторизация временно отключена": "Авторизація тимчасово вимкнена",
+  "Регистрация временно недоступна": "Реєстрація тимчасово недоступна",
+  "Это демо-окружение. Для работы с реальной авторизацией добавьте ключи Supabase в файл .env.local:":
+    "Це демо-середовище. Для роботи з реальною авторизацією додайте ключі Supabase у файл .env.local:",
+  "Вернуться на главную": "Повернутися на головну",
+  Guest: "Гість",
+
+  // Assistant Modal Translations
+  "AI Psychologist (Chat)": "ШІ-психолог (Чат)",
+  "AI Psychologist (Voice Call)": "ШІ-психолог (Голосовий дзвінок)",
+  "AI Psychologist (Video Call)": "ШІ-психолог (Відеодзвінок)",
+  "Choose Your AI Psychologist": "Виберіть AI-психолога",
+  "Select the AI psychologist you'd like to speak with during your video call.":
+    "Виберіть ШІ-психолога, з яким ви хочете поговорити під час відеодзвінка.",
+  "Voice communication language": "Мова голосового спілкування",
+  "Video call language": "Мова відеодзвінка",
+  "Chat language": "Мова чату",
+  "AI will understand and respond in this language with native accent":
+    "ШІ розумітиме та відповідатиме цією мовою з рідним акцентом",
+  "Choose AI voice gender:": "Оберіть стать голосу ШІ:",
+  "Start Session": "Почати сесію",
+  "Start Call": "Почати дзвінок",
+  "End Call": "Завершити дзвінок",
+  "Close": "Закрити",
+  User: "Користувач",
+
   // Contact Section
   "Contact Us": "Зв'яжіться з нами",
   "Have questions or need assistance? Reach out to our support team and we'll get back to you as soon as possible.":
@@ -267,4 +296,29 @@ export const uk = {
   "Subject is required": "Тема обов'язкова",
   "Message is required": "Повідомлення обов'язкове",
   "Message must be at least 10 characters": "Повідомлення повинно містити щонайменше 10 символів",
+
+  // Hero Section - New Keys
+  "Myitra Platform · AI + Psychology": "Платформа Myitra · ШІ + Психологія",
+  "Live Psychological Support,": "Жива психологічна підтримка,",
+  "AI-Enhanced": "посилена ШІ",
+  "Licensed psychologists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
+    "Ліцензовані психологи з підтримкою ШІ-асистентів. Допомагаємо зібрати анамнез, вести щоденник і нагадуємо про сесії.",
+  "Talk Now": "Поговорити зараз",
+  "View Services": "Переглянути послуги",
+  "AI Chat 24/7": "ШІ-чат 24/7",
+  "Voice Calls": "Голосові дзвінки",
+  "Video Sessions": "Відеосесії",
+  "Myitra Psychology Session": "Психологічна сесія Myitra",
+  "3 Assistant Modes": "3 режими асистента",
+  "chat · voice · video": "чат · голос · відео",
+  "Welcome Back": "Ласкаво просимо знову",
+  "Sign in to continue your journey with AI Psychology": "Увійдіть, щоб продовжити свою подорож з ШІ-психологією",
+  "Enter your credentials to access your account": "Введіть свої дані для доступу до акаунту",
+  "Signing in...": "Вхід...",
+  "Forgot password?": "Забули пароль?",
+  "Hide password": "Приховати пароль",
+  "Show password": "Показати пароль",
+  "Create account": "Створити акаунт",
+  "By signing in, you agree to our": "Входячи, ви погоджуєтесь з нашими",
+  "and": "та",
 }

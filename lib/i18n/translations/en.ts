@@ -242,6 +242,35 @@ export const en = {
   "Detected language": "Detected language",
   Language: "Language",
 
+  // Auth Unavailable Messages
+  "Authentication is temporarily unavailable. Please contact support.":
+    "Authentication is temporarily unavailable. Please contact support.",
+  "Авторизация временно отключена": "Authentication temporarily disabled",
+  "Регистрация временно недоступна": "Registration temporarily unavailable",
+  "Это демо-окружение. Для работы с реальной авторизацией добавьте ключи Supabase в файл .env.local:":
+    "This is a demo environment. To enable real authentication, add Supabase keys to your .env.local file:",
+  "Вернуться на главную": "Return to homepage",
+  Guest: "Guest",
+
+  // Assistant Modal Translations
+  "AI Psychologist (Chat)": "AI Psychologist (Chat)",
+  "AI Psychologist (Voice Call)": "AI Psychologist (Voice Call)",
+  "AI Psychologist (Video Call)": "AI Psychologist (Video Call)",
+  "Choose Your AI Psychologist": "Choose Your AI Psychologist",
+  "Select the AI psychologist you'd like to speak with during your video call.":
+    "Select the AI psychologist you'd like to speak with during your video call.",
+  "Voice communication language": "Voice communication language",
+  "Video call language": "Video call language",
+  "Chat language": "Chat language",
+  "AI will understand and respond in this language with native accent":
+    "AI will understand and respond in this language with native accent",
+  "Choose AI voice gender:": "Choose AI voice gender:",
+  "Start Session": "Start Session",
+  "Start Call": "Start Call",
+  "End Call": "End Call",
+  "Close": "Close",
+  User: "User",
+
   // Misc
   "AI Psychologist": "AI Psychologist",
   "Select Language": "Select Language",
@@ -541,6 +570,31 @@ export const en = {
   "View all": "View all",
   Hide: "Hide",
   Show: "Show",
+
+  // Hero Section - New Keys
+  "Myitra Platform · AI + Psychology": "Myitra Platform · AI + Psychology",
+  "Live Psychological Support,": "Live Psychological Support,",
+  "AI-Enhanced": "AI-Enhanced",
+  "Licensed psychologists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
+    "Licensed psychologists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.",
+  "Talk Now": "Talk Now",
+  "View Services": "View Services",
+  "AI Chat 24/7": "AI Chat 24/7",
+  "Voice Calls": "Voice Calls",
+  "Video Sessions": "Video Sessions",
+  "Myitra Psychology Session": "Myitra Psychology Session",
+  "3 Assistant Modes": "3 Assistant Modes",
+  "chat · voice · video": "chat · voice · video",
+  "Welcome Back": "Welcome Back",
+  "Sign in to continue your journey with AI Psychology": "Sign in to continue your journey with AI Psychology",
+  "Enter your credentials to access your account": "Enter your credentials to access your account",
+  "Signing in...": "Signing in...",
+  "Forgot password?": "Forgot password?",
+  "Hide password": "Hide password",
+  "Show password": "Show password",
+  "Create account": "Create account",
+  "By signing in, you agree to our": "By signing in, you agree to our",
+  "and": "and",
 
   // Meta Tags and SEO
   "AI Psychology Support Platform": "AI Psychology Support Platform",

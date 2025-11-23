@@ -89,24 +89,24 @@ export default function Home() {
       <div>
         <HomeHero />
 
-        <section id="assistant" className="py-16 px-4 md:px-6 lg:px-8 bg-slate-900">
+        <section id="assistant" className="py-16 px-4 md:px-6 lg:px-8 bg-slate-50">
             <div className="max-w-6xl mx-auto">
-              <div className="bg-white/80 backdrop-blur-sm p-8 rounded-2xl">
-                <h2 className="text-3xl md:text-4xl font-bold text-center mb-12 text-primary-900">
+              <div className="bg-white backdrop-blur-sm p-8 rounded-2xl shadow-lg border border-slate-200">
+                <h2 className="text-3xl md:text-4xl font-bold text-center mb-12 text-slate-900">
                   {t("How would you like to connect?")}
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="phone-container flex flex-col items-center p-8 rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow">
-                    <div className="h-16 w-16 rounded-full bg-primary-600 flex items-center justify-center mb-6">
+                  <div className="phone-container flex flex-col items-center p-8 rounded-xl bg-gradient-to-br from-white to-slate-50 shadow-md hover:shadow-xl transition-all border border-slate-100">
+                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center mb-6 shadow-lg">
                       <PhoneCall className="h-8 w-8 text-white phone-icon" />
                     </div>
-                    <h3 className="text-xl font-semibold mb-3">{t("Call an AI Psychologist")}</h3>
-                    <p className="text-gray-600 text-center mb-6">
+                    <h3 className="text-xl font-semibold mb-3 text-slate-900">{t("Call an AI Psychologist")}</h3>
+                    <p className="text-slate-600 text-center mb-6">
                       {t("Speak directly with our AI psychologist for immediate support.")}
                     </p>
                     <Button
-                      className="bg-primary-600 hover:bg-primary-700 text-white w-full"
+                      className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white w-full shadow-md hover:shadow-lg transition-all"
                       onClick={() => {
                         if (
                           typeof window !== "undefined" &&
@@ -127,8 +127,8 @@ export default function Home() {
                     </Button>
                   </div>
 
-                  <div className="chat-container flex flex-col items-center p-8 rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow">
-                    <div className="h-16 w-16 rounded-full bg-primary-700 flex items-center justify-center mb-6 relative">
+                  <div className="chat-container flex flex-col items-center p-8 rounded-xl bg-gradient-to-br from-white to-slate-50 shadow-md hover:shadow-xl transition-all border border-slate-100">
+                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center mb-6 relative shadow-lg">
                       <MessageSquare className="h-8 w-8 text-white chat-icon transition-opacity duration-300" />
                       <div className="typing-dots absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300">
                         <div className="typing-dot h-2 w-2 bg-white rounded-full mx-1"></div>
@@ -136,28 +136,28 @@ export default function Home() {
                         <div className="typing-dot h-2 w-2 bg-white rounded-full mx-1"></div>
                       </div>
                     </div>
-                    <h3 className="text-xl font-semibold mb-3">{t("Chat with AI")}</h3>
-                    <p className="text-gray-600 text-center mb-6">
+                    <h3 className="text-xl font-semibold mb-3 text-slate-900">{t("Chat with AI")}</h3>
+                    <p className="text-slate-600 text-center mb-6">
                       {t("Text-based conversation with our AI for support at your own pace.")}
                     </p>
                     <Button
-                      className="bg-primary-700 hover:bg-primary-800 text-white w-full"
+                      className="bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white w-full shadow-md hover:shadow-lg transition-all"
                       onClick={() => setIsChatOpen(true)}
                     >
                       {t("Start Chat")}
                     </Button>
                   </div>
 
-                  <div className="video-container flex flex-col items-center p-8 rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow">
-                    <div className="h-16 w-16 rounded-full bg-primary-800 flex items-center justify-center mb-6">
+                  <div className="video-container flex flex-col items-center p-8 rounded-xl bg-gradient-to-br from-white to-slate-50 shadow-md hover:shadow-xl transition-all border border-slate-100">
+                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center mb-6 shadow-lg">
                       <Video className="h-8 w-8 text-white video-icon" />
                     </div>
-                    <h3 className="text-xl font-semibold mb-3">{t("Video Call with AI")}</h3>
-                    <p className="text-gray-600 text-center mb-6">
+                    <h3 className="text-xl font-semibold mb-3 text-slate-900">{t("Video Call with AI")}</h3>
+                    <p className="text-slate-600 text-center mb-6">
                       {t("Face-to-face session with our 3D animated AI psychologist.")}
                     </p>
                     <Button
-                      className="bg-primary-800 hover:bg-primary-900 text-white w-full"
+                      className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white w-full shadow-md hover:shadow-lg transition-all"
                       onClick={() => {
                         if (typeof window !== "undefined" && !navigator.mediaDevices) {
                           alert(
