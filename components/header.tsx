@@ -54,7 +54,7 @@ export default function Header() {
           className="flex items-center gap-2 rounded-full px-1 py-1 transition-colors hover:bg-slate-50"
         >
           <Logo />
-          <span className="text-xl font-semibold text-slate-900">Myitra</span>
+          <span className="text-xl font-semibold text-slate-900">MyITRA</span>
         </Link>
 
         {/* Desktop nav */}
@@ -108,7 +108,7 @@ export default function Header() {
               <div className="flex items-center gap-2">
                 <Logo />
                 <span className="text-xl font-semibold text-slate-900">
-                  Myitra
+                  MyITRA
                 </span>
               </div>
 
