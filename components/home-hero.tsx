@@ -41,13 +41,13 @@ export function HomeHero() {
             <div className="flex flex-col gap-4 sm:flex-row">
               <Button
                 onClick={() => scrollToSection("#assistant")}
-                className="h-12 px-8 text-base bg-gradient-to-r from-primary via-accent to-primary text-primary-foreground shadow-xl animate-pulse-soft"
+                className="h-12 px-8 text-base bg-gradient-to-r from-primary to-accent text-primary-foreground shadow-xl animate-pulse-soft hover:shadow-2xl transition-shadow"
               >
                 {t("Talk Now")}
               </Button>
               <Button
                 variant="outline"
-                className="h-12 border-slate-300 bg-white px-8 text-base text-slate-700 hover:bg-slate-50 shadow-sm"
+                className="h-12 border-primary bg-white px-8 text-base text-primary hover:bg-primary/5 shadow-sm"
                 onClick={() => scrollToSection("#assistant")}
               >
                 {t("View Services")}

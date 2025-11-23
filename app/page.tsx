@@ -98,7 +98,7 @@ export default function Home() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   <div className="phone-container flex flex-col items-center p-8 rounded-xl bg-gradient-to-br from-white to-slate-50 shadow-md hover:shadow-xl transition-all border border-slate-100">
-                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center mb-6 shadow-lg">
+                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center mb-6 shadow-lg">
                       <PhoneCall className="h-8 w-8 text-white phone-icon" />
                     </div>
                     <h3 className="text-xl font-semibold mb-3 text-slate-900">{t("Call an AI Psychologist")}</h3>
@@ -106,7 +106,7 @@ export default function Home() {
                       {t("Speak directly with our AI psychologist for immediate support.")}
                     </p>
                     <Button
-                      className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white w-full shadow-md hover:shadow-lg transition-all"
+                      className="bg-gradient-to-r from-primary to-accent text-primary-foreground w-full shadow-md hover:shadow-lg transition-all"
                       onClick={() => {
                         if (
                           typeof window !== "undefined" &&
@@ -128,7 +128,7 @@ export default function Home() {
                   </div>
 
                   <div className="chat-container flex flex-col items-center p-8 rounded-xl bg-gradient-to-br from-white to-slate-50 shadow-md hover:shadow-xl transition-all border border-slate-100">
-                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center mb-6 relative shadow-lg">
+                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center mb-6 relative shadow-lg">
                       <MessageSquare className="h-8 w-8 text-white chat-icon transition-opacity duration-300" />
                       <div className="typing-dots absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300">
                         <div className="typing-dot h-2 w-2 bg-white rounded-full mx-1"></div>
@@ -141,7 +141,7 @@ export default function Home() {
                       {t("Text-based conversation with our AI for support at your own pace.")}
                     </p>
                     <Button
-                      className="bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white w-full shadow-md hover:shadow-lg transition-all"
+                      className="bg-gradient-to-r from-primary to-accent text-primary-foreground w-full shadow-md hover:shadow-lg transition-all"
                       onClick={() => setIsChatOpen(true)}
                     >
                       {t("Start Chat")}
@@ -149,7 +149,7 @@ export default function Home() {
                   </div>
 
                   <div className="video-container flex flex-col items-center p-8 rounded-xl bg-gradient-to-br from-white to-slate-50 shadow-md hover:shadow-xl transition-all border border-slate-100">
-                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center mb-6 shadow-lg">
+                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center mb-6 shadow-lg">
                       <Video className="h-8 w-8 text-white video-icon" />
                     </div>
                     <h3 className="text-xl font-semibold mb-3 text-slate-900">{t("Video Call with AI")}</h3>
@@ -157,7 +157,7 @@ export default function Home() {
                       {t("Face-to-face session with our 3D animated AI psychologist.")}
                     </p>
                     <Button
-                      className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white w-full shadow-md hover:shadow-lg transition-all"
+                      className="bg-gradient-to-r from-primary to-accent text-primary-foreground w-full shadow-md hover:shadow-lg transition-all"
                       onClick={() => {
                         if (typeof window !== "undefined" && !navigator.mediaDevices) {
                           alert(

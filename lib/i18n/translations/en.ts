@@ -669,4 +669,17 @@ export const en = {
 
   // Contacts Page
   "Contact Page Description": "Get in touch with us for support, inquiries, or partnership opportunities.",
+  "Name is required": "Name is required",
+  "Email is required": "Email is required",
+  "Subject is required": "Subject is required",
+  "Message is required": "Message is required",
+  "Message must be at least 10 characters": "Message must be at least 10 characters",
+
+  // Navigation keys
+  "nav.home": "Home",
+  "nav.programs": "Programs",
+  "nav.clientStories": "Client Stories",
+  "nav.contacts": "Contacts",
+  "nav.privacyPolicy": "Privacy Policy",
+  "nav.termsOfUse": "Terms of Use",
 }

@@ -14,26 +14,26 @@ body {
 
 @layer base {
   :root {
-    /* Myitra psychological palette - light theme only */
-    --background: 220 40% 99%; /* #F7F8FF - soft off-white with blue tint */
+    /* Myitra brand palette - light theme with violet/pink */
+    --background: 240 20% 99%; /* #F9FAFF - very light near-white */
     --foreground: 222 47% 11%; /* #0B1020 - dark navy for main text */
     --card: 0 0% 100%; /* #FFFFFF - pure white cards */
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 221 83% 53%; /* #2563EB - brand blue */
+    --primary: 258 90% 66%; /* #8B5CF6 - soft lavender/violet */
     --primary-foreground: 0 0% 100%; /* #FFFFFF */
-    --secondary: 220 40% 98%;
+    --secondary: 240 20% 98%;
     --secondary-foreground: 222 47% 11%;
-    --muted: 220 60% 97%; /* #EEF1FF - soft blue tinted muted bg */
+    --muted: 240 20% 97%; /* Light gray/blue-gray */
     --muted-foreground: 215 16% 47%; /* #4B5563 - muted text */
-    --accent: 271 91% 65%; /* #A855F7 - lavender/soft purple (more vivid) */
+    --accent: 330 81% 60%; /* #EC4899 - soft pink for gradients */
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 214 32% 91%; /* #E2E8F0 */
-    --input: 214 32% 91%;
-    --ring: 213 97% 87%; /* #93C5FD - soft blue ring */
+    --border: 220 13% 91%; /* Light gray border */
+    --input: 220 13% 91%;
+    --ring: 258 90% 66%; /* Match primary */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;

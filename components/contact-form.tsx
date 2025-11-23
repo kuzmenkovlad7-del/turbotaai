@@ -86,10 +86,10 @@ export default function ContactForm() {
   return (
     <div className="w-full max-w-2xl mx-auto">
       {isSubmitted ? (
-        <div className="bg-green-50 p-8 rounded-xl text-center">
-          <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-          <h3 className="text-2xl font-bold text-green-800 mb-2">{t("Thank you for your message!")}</h3>
-          <p className="text-green-700 mb-4">
+        <div className="bg-primary/10 p-8 rounded-xl text-center">
+          <CheckCircle className="h-16 w-16 text-primary mx-auto mb-4" />
+          <h3 className="text-2xl font-bold text-primary mb-2">{t("Thank you for your message!")}</h3>
+          <p className="text-foreground mb-4">
             {t("We've received your inquiry and will get back to you as soon as possible.")}
           </p>
           <Button onClick={() => setIsSubmitted(false)} className="bg-primary-600 hover:bg-primary-700 text-white">

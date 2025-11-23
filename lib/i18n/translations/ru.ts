@@ -179,4 +179,20 @@ export const ru = {
   "Create account": "Создать аккаунт",
   "By signing in, you agree to our": "Входя, вы соглашаетесь с нашими",
   "and": "и",
+
+  // Contact Form Validation
+  "Name is required": "Имя обязательно",
+  "Email is required": "Email обязателен",
+  "Subject is required": "Тема обязательна",
+  "Message is required": "Сообщение обязательно",
+  "Message must be at least 10 characters": "Сообщение должно содержать не менее 10 символов",
+  "All rights reserved": "Все права защищены",
+
+  // Navigation keys
+  "nav.home": "Главная",
+  "nav.programs": "Программы",
+  "nav.clientStories": "Истории клиентов",
+  "nav.contacts": "Контакты",
+  "nav.privacyPolicy": "Политика конфиденциальности",
+  "nav.termsOfUse": "Пользовательское соглашение",
 }

@@ -321,4 +321,20 @@ export const uk = {
   "Create account": "Створити акаунт",
   "By signing in, you agree to our": "Входячи, ви погоджуєтесь з нашими",
   "and": "та",
+
+  // Contact Form Validation
+  "Name is required": "Ім'я обов'язкове",
+  "Email is required": "Email обов'язковий",
+  "Subject is required": "Тема обов'язкова",
+  "Message is required": "Повідомлення обов'язкове",
+  "Message must be at least 10 characters": "Повідомлення має містити не менше 10 символів",
+  "All rights reserved": "Всі права захищені",
+
+  // Navigation keys
+  "nav.home": "Головна",
+  "nav.programs": "Програми",
+  "nav.clientStories": "Історії клієнтів",
+  "nav.contacts": "Контакти",
+  "nav.privacyPolicy": "Політика конфіденційності",
+  "nav.termsOfUse": "Умови користування",
 }

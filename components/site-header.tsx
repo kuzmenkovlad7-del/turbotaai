@@ -10,10 +10,10 @@ import { useLanguage } from "@/lib/i18n/language-context"
 import Logo from "@/components/logo"
 
 const mainLinks = [
-  { href: "/", label: "Home" },
-  { href: "#programs", label: "Programs" },
-  { href: "#stories", label: "Client Stories" },
-  { href: "#contacts", label: "Contacts" },
+  { href: "/", label: "nav.home" },
+  { href: "/programs", label: "nav.programs" },
+  { href: "/client-stories", label: "nav.clientStories" },
+  { href: "/contacts", label: "nav.contacts" },
 ]
 
 export function SiteHeader() {

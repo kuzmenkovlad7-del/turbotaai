@@ -81,7 +81,7 @@ export default function LoginForm() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-primary-600 to-primary-500 rounded-full mb-4 shadow-lg">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-primary to-accent rounded-full mb-4 shadow-lg">
             <Brain className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{t("Welcome Back")}</h1>
@@ -161,7 +161,7 @@ export default function LoginForm() {
 
               <Button
                 type="submit"
-                className="w-full h-12 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white font-medium rounded-lg transition-all duration-200 transform hover:scale-[1.02] disabled:transform-none shadow-lg touch-manipulation"
+                className="w-full h-12 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-white font-medium rounded-lg transition-all duration-200 transform hover:scale-[1.02] disabled:transform-none shadow-lg touch-manipulation"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -197,11 +197,11 @@ export default function LoginForm() {
         <div className="text-center mt-6">
           <p className="text-xs text-gray-500">
             {t("By signing in, you agree to our")}{" "}
-            <Link href="/terms" className="text-primary-600 hover:underline">
+            <Link href="/terms-of-use" className="text-primary hover:underline">
               {t("Terms of Service")}
             </Link>{" "}
             {t("and")}{" "}
-            <Link href="/privacy" className="text-primary-600 hover:underline">
+            <Link href="/privacy-policy" className="text-primary hover:underline">
               {t("Privacy Policy")}
             </Link>
           </p>
