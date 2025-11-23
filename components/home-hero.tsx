@@ -1,7 +1,6 @@
 // components/home-hero.tsx
 "use client"
 
-import type React from "react"
 import Image from "next/image"
 import { ArrowRight } from "lucide-react"
 import { RainbowButton } from "@/components/ui/rainbow-button"
@@ -10,129 +9,104 @@ import { useLanguage } from "@/lib/i18n/language-context"
 export function HomeHero() {
   const { t } = useLanguage()
 
-  const chips = [
-    t("When it feels bad right now"),
-    t("Anxiety & stress programs"),
-    t("Gentle long-term support"),
-  ]
+  const scrollToAssistant = () => {
+    if (typeof window === "undefined") return
+    const el = document.getElementById("assistant")
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
 
   return (
-    <section
-      className="
-        relative overflow-hidden
-        bg-gradient-to-r from-slate-50 via-slate-50 to-indigo-50/35
-      "
-    >
-      {/* мягкий фон справа */}
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-full max-w-xl bg-[radial-gradient(circle_at_top,_rgba(129,140,248,0.6),transparent_60%)]" />
-
-      <div
-        className="
-          relative mx-auto flex max-w-6xl flex-col items-start
-          px-4 pt-10 pb-16
-          md:px-6 lg:px-8
-          md:grid md:grid-cols-2 md:items-center
-          lg:pt-16 lg:pb-20
-          min-h-[calc(100vh-88px)]
-        "
-      >
-        {/* Левая колонка: текст + кнопки */}
-        <div className="relative z-10 max-w-xl">
-          {/* бейджик статуса */}
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-white px-4 py-1 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
-            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(16,185,129,0.35)]" />
-            {t("AI-psychologist nearby 24/7")}
+    <section className="relative overflow-hidden bg-soft-grid">
+      <div className="mx-auto flex min-h-[calc(100vh-88px)] max-w-6xl flex-col gap-10 px-4 py-10 md:flex-row md:items-center md:px-6 lg:px-8 lg:py-14">
+        {/* ЛЕВАЯ ЧАСТЬ */}
+        <div className="relative z-10 flex-1">
+          {/* бейдж сверху */}
+          <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-1 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(16,185,129,0.25)]" />
+            <span>{t("AI-psychologist nearby 24/7")}</span>
           </div>
 
-          <h1 className="mb-5 text-3xl font-bold leading-tight text-slate-900 sm:text-4xl md:text-5xl">
+          <h1 className="mt-6 text-4xl font-semibold leading-tight text-slate-900 md:text-5xl lg:text-[52px] lg:leading-[1.05]">
             {t("Live psychological support, powered by AI")}
           </h1>
 
-          <p className="mb-7 max-w-lg text-sm text-slate-600 sm:text-base">
+          <p className="mt-5 max-w-xl text-sm leading-relaxed text-slate-600 md:text-base">
             {t(
               "Talk to an AI-powered psychologist when you feel exhausted, anxious or alone. They listen, ask clarifying questions and gently guide you with exercises — in chat, voice or video.",
             )}
           </p>
 
-          {/* Кнопки */}
-          <div className="mb-6 flex flex-wrap items-center gap-3">
-            <a href="#assistant">
-              <RainbowButton className="h-12 rounded-full px-7 text-sm font-semibold text-white">
-                <span>{t("Talk now")}</span>
-                <ArrowRight className="h-4 w-4" />
-              </RainbowButton>
-            </a>
+          {/* КНОПКИ */}
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            {/* ГЛАВНАЯ РАДУЖНАЯ КНОПКА */}
+            <RainbowButton
+              type="button"
+              onClick={scrollToAssistant}
+              className="hero-cta shadow-[0_20px_45px_rgba(15,23,42,0.35)]"
+            >
+              <span>{t("Talk now")}</span>
+              <ArrowRight className="h-4 w-4" />
+            </RainbowButton>
 
+            {/* ВТОРАЯ КНОПКА — БЕЗ БАГА С БЕЛЫМ ТЕКСТОМ */}
             <button
               type="button"
-              className="
-                inline-flex h-12 items-center justify-center rounded-full
-                border border-slate-200 bg-white px-6 text-sm font-semibold
-                text-slate-900 shadow-sm
-                transition-colors
-                hover:bg-slate-100 hover:text-slate-900
-              "
+              onClick={() => {
+                const el = document.getElementById("programs")
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+              }}
+              className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-7 text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
             >
               {t("Programs")}
             </button>
           </div>
 
-          {/* чипы под кнопками */}
-          <div className="flex flex-wrap gap-3">
-            {chips.map((chip) => (
-              <span
-                key={chip}
-                className="
-                  inline-flex items-center rounded-full
-                  border border-slate-200 bg-white px-4 py-1
-                  text-xs text-slate-600 shadow-sm
-                "
-              >
-                {chip}
-              </span>
-            ))}
+          {/* ЧИПЫ */}
+          <div className="mt-6 flex flex-wrap gap-3 text-xs md:text-sm">
+            <span className="inline-flex items-center rounded-full bg-white px-4 py-2 text-slate-600 shadow-sm ring-1 ring-slate-200">
+              {t("When it feels bad right now")}
+            </span>
+            <span className="inline-flex items-center rounded-full bg-white px-4 py-2 text-slate-600 shadow-sm ring-1 ring-slate-200">
+              {t("Anxiety & stress programs")}
+            </span>
+            <span className="inline-flex items-center rounded-full bg-white px-4 py-2 text-slate-600 shadow-sm ring-1 ring-slate-200">
+              {t("Gentle long-term support")}
+            </span>
           </div>
         </div>
 
-        {/* Правая колонка: психолог + бейдж ассистентов */}
-        <div className="relative mt-10 flex justify-center md:mt-0">
-          {/* большая мягкая "аура" */}
-          <div className="pointer-events-none absolute inset-0 translate-x-4 bg-[radial-gradient(circle_at_top,_rgba(165,180,252,0.75),transparent_65%)]" />
+        {/* ПРАВАЯ ЧАСТЬ С ПСИХОЛОГОМ */}
+        <div className="relative flex flex-1 items-end justify-center md:justify-end">
+          <div className="relative h-[430px] w-[320px] overflow-hidden rounded-[40px] bg-gradient-to-b from-indigo-100 via-sky-100 to-purple-100 shadow-[0_32px_80px_rgba(15,23,42,0.24)] md:h-[460px] md:w-[340px]">
+            {/* Сам фон с fade вверху */}
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0_0,rgba(255,255,255,0.9),transparent_55%),radial-gradient(circle_at_100%_0,rgba(191,219,254,0.9),transparent_55%)] opacity-70" />
 
-          {/* фотография психолога без рамки */}
-          <div className="relative z-10 flex items-end">
-            <Image
-              src="/ai-psychology-hero.png"
-              alt="MyITRA AI psychologist"
-              width={520}
-              height={720}
-              priority
-              className="h-auto w-full max-w-sm md:max-w-md object-contain drop-shadow-2xl"
-            />
-          </div>
+            {/* ФОТО ПСИХОЛОГА */}
+            <div className="relative z-10 flex h-full items-end justify-center">
+              <Image
+                src="/ai-psychology-hero.png"
+                alt="MyITRA AI psychologist"
+                width={520}
+                height={640}
+                priority
+                className="h-[390px] w-auto object-contain md:h-[420px]"
+              />
+            </div>
 
-          {/* карточка 3 assistant modes */}
-          <div
-            className="
-              absolute bottom-6 right-2 z-20
-              w-full max-w-xs
-              rounded-3xl bg-white/95 px-5 py-3
-              shadow-[0_18px_45px_rgba(15,23,42,0.25)]
-              ring-1 ring-slate-200/70
-              backdrop-blur-md
-            "
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 to-indigo-500 text-white shadow-lg">
-                💬
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-xs font-semibold text-slate-900">
-                  {t("3 assistant modes · chat · voice · video")}
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  {t("Choose how it's more comfortable for you to talk.")}
-                </p>
+            {/* БЕЙДЖ 3 assistant modes — ЛЕЖИТ ВНИЗУ КАРТОЧКИ */}
+            <div className="pointer-events-none absolute inset-x-6 bottom-5 z-20">
+              <div className="flex items-center gap-3 rounded-full bg-white/95 px-4 py-3 text-xs shadow-[0_14px_40px_rgba(15,23,42,0.35)] ring-1 ring-slate-100">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-fuchsia-500 via-purple-500 to-sky-500 text-white shadow-[0_0_0_4px_rgba(129,140,248,0.35)]">
+                  <span className="text-lg leading-none">💬</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[11px] font-semibold text-slate-800 sm:text-xs">
+                    {t("3 assistant modes · chat · voice · video")}
+                  </span>
+                  <span className="text-[10px] text-slate-500 sm:text-[11px]">
+                    {t("Choose how it’s more comfortable for you to talk.")}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
