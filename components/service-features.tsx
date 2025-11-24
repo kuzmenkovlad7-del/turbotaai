@@ -1,3 +1,4 @@
+// components/service-features.tsx
 "use client"
 
 import {
@@ -16,44 +17,44 @@ export default function ServiceFeatures() {
   const features = [
     {
       icon: Clock,
-      title: t("Support in minutes, not weeks"),
+      title: t("Support in minutes when it feels really bad"),
       description: t(
-        "Open chat, voice or video exactly when it feels bad — without waiting lists, schedules or registration forms.",
+        "Open chat, voice or video exactly when it feels bad right now — без очередей, анкет и ожидания записи.",
       ),
     },
     {
       icon: UserCircle,
-      title: t("Feels like a calm human conversation"),
+      title: t("Feels like a calm, respectful human conversation"),
       description: t(
-        "The assistant listens, asks gentle clarifying questions and offers exercises instead of generic advice.",
+        "Ассистент сначала слушает и задаёт мягкие уточняющие вопросы, а уже потом предлагает короткие упражнения и шаги.",
       ),
     },
     {
       icon: Globe,
-      title: t("Ukrainian, Russian and English"),
+      title: t("Works in 10+ languages"),
       description: t(
-        "MyITRA automatically adapts to your language and can switch during the conversation if you change it.",
+        "Украинский, русский, английский и другие популярные языки. Язык можно менять прямо во время диалога.",
       ),
     },
     {
       icon: BarChart,
-      title: t("Helps notice your progress"),
+      title: t("From quick help to 7–21 day programs"),
       description: t(
-        "Session history and mood dynamics help you see small steps forward, even when it feels like nothing changes.",
+        "Готовые сценарии: «когда плохо прямо сейчас», работа с тревогой и стрессом, а также мягкие программы на 7–21 день с регулярными чек-инами.",
       ),
     },
     {
       icon: Shield,
       title: t("Safe and confidential space"),
       description: t(
-        "Your conversations are encrypted and not used for advertising. You decide what to share and when to delete it.",
+        "Разговоры шифруются и не используются для рекламы. Вы сами решаете, что рассказывать и когда удалять историю.",
       ),
     },
     {
       icon: CreditCard,
-      title: t("Transparent pricing without subscriptions"),
+      title: t("Simple pricing with a free start"),
       description: t(
-        "First minutes are free; after that you only pay for the time you actually use. No hidden fees or long-term contracts.",
+        "На запуске: тестовый период и несколько бесплатных вопросов. Затем — прозрачные тарифы без скрытых платежей: разовый доступ и помесячная подписка.",
       ),
     },
   ]
