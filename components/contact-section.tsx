@@ -1,6 +1,6 @@
 "use client"
 
-import { Mail, Phone, MapPin, Clock, Globe, Shield } from "lucide-react"
+import { Mail, Globe, Shield, Clock } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { AutoTranslate } from "./auto-translate"
 import ContactForm from "./contact-form"
@@ -12,35 +12,23 @@ export default function ContactSection() {
     {
       icon: Mail,
       title: t("Email us"),
-      details: "support@myitra.app",
+      details: "support@aipsychologist.com",
       description: t(
-        "For questions about the service, payments or technical issues.",
+        "All questions about the service, payments, access to the assistant or cooperation — please write to this address.",
       ),
-    },
-    {
-      icon: Phone,
-      title: t("Call us"),
-      details: "+380 00 000 00 00",
-      description: t("On business days, 10:00–18:00 (Kyiv time)."),
-    },
-    {
-      icon: MapPin,
-      title: t("Office"),
-      details: t("Remote-first team based in Ukraine and EU"),
-      description: t("Meetings are held online by appointment."),
     },
   ]
 
   const stats = [
     {
       icon: Clock,
-      label: t("Average reply"),
+      label: t("Average reply time"),
       value: t("within 24 hours"),
     },
     {
       icon: Globe,
       label: t("Languages"),
-      value: t("Ukrainian · Russian · English"),
+      value: t("Ukrainian · Russian · English (other later)"),
     },
     {
       icon: Shield,
@@ -59,11 +47,11 @@ export default function ContactSection() {
           {/* Заголовок + мини-статы */}
           <div className="mb-10 text-center md:mb-12">
             <h2 className="mb-3 text-3xl font-bold text-slate-900 md:text-4xl">
-              {t("Contact MyITRA team")}
+              {t("Contact the MyITRA team")}
             </h2>
             <p className="mx-auto max-w-3xl text-sm text-slate-600 sm:text-base">
               {t(
-                "Have questions about how the AI-psychologist works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible.",
+                "If you have questions about how the AI-psychologist works, payments, access or want to discuss partnership — send us a message, and we will reply as soon as possible.",
               )}
             </p>
 
@@ -90,7 +78,7 @@ export default function ContactSection() {
           <div className="grid items-start gap-10 md:grid-cols-[minmax(0,1.05fr)_minmax(0,1.2fr)]">
             {/* Контактные карточки */}
             <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4">
                 {contactInfo.map((item) => {
                   const Icon = item.icon
                   return (
