@@ -16,52 +16,30 @@ const inter = Inter({ subsets: ["latin"] })
 const fullTitle = `${APP_NAME} — AI-psychologist nearby 24/7`
 
 export const metadata: Metadata = {
-  metadataBase: new URL(APP_URL),
   title: {
-    default: fullTitle,
-    template: `%s | ${APP_NAME}`,
+    default: "MyITRA — AI-psychologist nearby 24/7",
+    template: "%s | MyITRA",
   },
   description:
-    "TurbotaAI — AI-psychologist nearby 24/7. Gentle psychological support in chat, voice or video when you feel exhausted, anxious or alone.",
-  keywords: [
-    "TurbotaAI",
-    "AI psychologist",
-    "AI therapist",
-    "online therapy",
-    "mental health support",
-    "чат с психологом",
-    "онлайн психолог",
-    "психолог 24/7",
-    "ШІ-психолог",
-  ],
+    "MyITRA — AI-psychologist nearby 24/7. Live psychological support in chat, voice or video when you feel exhausted, anxious or alone.",
   icons: {
-    // один и тот же файл как логотип и фавикон
-    icon: "/logo-turbotaai.svg",
-    shortcut: "/logo-turbotaai.svg",
+    icon: "/icon.png",
+    shortcut: "/favicon.ico",          // если сделаешь .ico
     apple: "/apple-touch-icon.png",
   },
-  alternates: {
-    canonical: "/",
-    languages: {
-      en: "/",
-      uk: "/uk",
-      ru: "/ru",
-    },
-  },
   openGraph: {
-    title: fullTitle,
+    title: "MyITRA — AI-psychologist nearby 24/7",
     description:
       "Talk to an AI-powered psychologist in chat, voice or video. Gentle, always-on support when it feels bad, anxious or lonely.",
-    url: "/",
-    siteName: APP_NAME,
+    url: "https://turbotaai.com",
+    siteName: "MyITRA",
     type: "website",
-    locale: "en_US",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: `${APP_NAME} — AI-powered psychological support`,
+        alt: "MyITRA — AI-powered psychological support",
       },
     ],
   },
