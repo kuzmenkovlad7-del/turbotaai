@@ -9,27 +9,16 @@ import { AutoTranslate } from "@/components/auto-translate"
 export default function ContactsPage() {
   const { t } = useLanguage()
 
-  const contactInfo = [
-    {
-      icon: Mail,
-      title: t("Email us"),
-      details: "support@aipsychologist.com",
-      description: t(
-        "All questions about the service, payments, access to the assistant or cooperation — please write to this address.",
-      ),
-    },
-  ]
-
   const stats = [
     {
       icon: Clock,
-      label: t("Average reply time"),
+      label: t("Average reply"),
       value: t("within 24 hours"),
     },
     {
       icon: Globe,
       label: t("Languages"),
-      value: t("Ukrainian · Russian · English (other later)"),
+      value: t("Ukrainian · Russian · English"),
     },
     {
       icon: Shield,
@@ -37,6 +26,15 @@ export default function ContactsPage() {
       value: t("encrypted conversations"),
     },
   ]
+
+  const emailCard = {
+    icon: Mail,
+    title: t("Email us"),
+    details: "support@aipsychologist.com",
+    description: t(
+      "All questions about the service, payments, access to the assistant or cooperation — please write to this address.",
+    ),
+  }
 
   return (
     <AutoTranslate>
@@ -78,33 +76,23 @@ export default function ContactsPage() {
               </div>
             </header>
 
-            {/* Content grid */}
+            {/* Контент */}
             <div className="grid items-start gap-10 md:grid-cols-[minmax(0,1.05fr)_minmax(0,1.2fr)]">
-              {/* Left: contact card + note */}
+              {/* Лево */}
               <div className="space-y-6">
-                <div className="grid grid-cols-1 gap-4">
-                  {contactInfo.map((item) => {
-                    const Icon = item.icon
-                    return (
-                      <div
-                        key={item.title}
-                        className="flex h-full flex-col rounded-2xl bg-slate-50/80 p-5 text-left shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:bg-white hover:shadow-md hover:shadow-indigo-100/60"
-                      >
-                        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <h3 className="mb-1 text-base font-semibold text-slate-900">
-                          {item.title}
-                        </h3>
-                        <p className="mb-1 text-sm font-medium text-indigo-600">
-                          {item.details}
-                        </p>
-                        <p className="text-xs text-slate-600 sm:text-sm">
-                          {item.description}
-                        </p>
-                      </div>
-                    )
-                  })}
+                <div className="flex h-full flex-col rounded-2xl bg-slate-50/80 p-5 text-left shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:bg-white hover:shadow-md hover:shadow-indigo-100/60">
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                    <emailCard.icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mb-1 text-base font-semibold text-slate-900">
+                    {emailCard.title}
+                  </h3>
+                  <p className="mb-1 text-sm font-medium text-indigo-600">
+                    {emailCard.details}
+                  </p>
+                  <p className="text-xs text-slate-600 sm:text-sm">
+                    {emailCard.description}
+                  </p>
                 </div>
 
                 <div className="rounded-2xl bg-slate-50/70 p-5 text-sm text-slate-600 ring-1 ring-slate-200">
@@ -114,7 +102,7 @@ export default function ContactsPage() {
                 </div>
               </div>
 
-              {/* Right: form */}
+              {/* Право — форма */}
               <div className="rounded-2xl bg-slate-50/80 p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-7 lg:p-8">
                 <h2 className="mb-6 text-center text-xl font-semibold text-slate-900 md:text-2xl">
                   {t("Send us a message")}
