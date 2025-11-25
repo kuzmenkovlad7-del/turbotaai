@@ -7,12 +7,18 @@ import { Button } from "@/components/ui/button"
 import { useLanguage } from "@/lib/i18n/language-context"
 import Logo from "@/components/logo"
 
-const mainLinks = [
-  { href: "/", label: "nav.home" },
-  { href: "/programs", label: "nav.programs" },
-  { href: "/client-stories", label: "nav.clientStories" },
-  { href: "/about", label: "About Us" },
-  { href: "/contacts", label: "nav.contacts" },
+type MainLink = {
+  href: string
+  labelKey?: string
+  label?: string
+}
+
+const mainLinks: MainLink[] = [
+  { href: "/", labelKey: "nav.home" },
+  { href: "/programs", labelKey: "nav.programs" },
+  { href: "/client-stories", labelKey: "nav.clientStories" },
+  { href: "/about", label: "About" },
+  { href: "/contacts", labelKey: "nav.contacts" },
 ]
 
 const legalLinks = [
@@ -29,6 +35,9 @@ const socialLinks = [
 export default function Footer() {
   const { t } = useLanguage()
   const currentYear = new Date().getFullYear()
+
+  const renderLabel = (link: MainLink) =>
+    link.labelKey ? t(link.labelKey) : link.label
 
   return (
     <footer className="mt-16 w-full border-t border-slate-200 bg-white">
@@ -78,7 +87,7 @@ export default function Footer() {
                   href={link.href}
                   className="transition-colors hover:text-slate-900"
                 >
-                  {t(link.label)}
+                  {renderLabel(link)}
                 </Link>
               ))}
             </nav>
@@ -89,7 +98,9 @@ export default function Footer() {
             <h3 className="text-sm font-semibold text-slate-900">
               {t("Contact Us")}
             </h3>
-            <p className="text-sm text-slate-600">support@aipsychologist.com</p>
+            <p className="text-sm text-slate-600">
+              support@aipsychologist.com
+            </p>
 
             <div className="flex flex-wrap gap-2">
               {socialLinks.map((link) => (
@@ -129,8 +140,3 @@ export default function Footer() {
               </Link>
             ))}
           </nav>
-        </div>
-      </div>
-    </footer>
-  )
-}
