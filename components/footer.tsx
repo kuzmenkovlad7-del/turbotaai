@@ -8,6 +8,7 @@ import Logo from "@/components/logo"
 
 const mainLinks = [
   { href: "/", label: "nav.home" },
+  { href: "/about", label: "nav.about" },
   { href: "/programs", label: "nav.programs" },
   { href: "/client-stories", label: "nav.clientStories" },
   { href: "/contacts", label: "nav.contacts" },
@@ -29,15 +30,15 @@ export default function Footer() {
   const currentYear = new Date().getFullYear()
 
   return (
-    <footer className="mt-16 w-full border-t border-slate-200 bg-white">
-      <div className="container mx-auto px-4 py-10 lg:py-12">
+    <footer className="mt-16 w-full border-top border-slate-200 bg-white">
+      <div className="mx-auto max-w-6xl px-4 py-10 lg:py-12">
         <div className="grid gap-10 md:grid-cols-3 lg:grid-cols-4">
           {/* Логотип + слоган + дисклеймер */}
-          <div className="md:col-span-2 space-y-4">
+          <div className="space-y-4 md:col-span-2">
             <div className="flex items-center gap-2">
               <Logo />
               <span className="text-lg font-semibold text-slate-900">
-                Myitra
+                MyITRA
               </span>
             </div>
 
@@ -47,7 +48,7 @@ export default function Footer() {
               )}
             </p>
 
-            <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-xs sm:text-sm text-slate-700">
+            <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-xs text-slate-700 sm:text-sm">
               <p className="font-semibold text-violet-900">
                 {t("This is not an emergency service")}
               </p>
@@ -87,7 +88,7 @@ export default function Footer() {
             <h3 className="text-sm font-semibold text-slate-900">
               {t("Contact Us")}
             </h3>
-            <p className="text-sm text-slate-600">support@myitra.com</p>
+            <p className="text-sm text-slate-600">support@aipsychologist.com</p>
 
             <div className="flex flex-wrap gap-2">
               {socialLinks.map((link) => (
@@ -114,7 +115,7 @@ export default function Footer() {
         {/* Нижняя полоса */}
         <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-slate-200 pt-6 text-xs text-slate-500 sm:flex-row">
           <p>
-            © {currentYear} Myitra. {t("All rights reserved")}.
+            © {currentYear} MyITRA. {t("All rights reserved")}.
           </p>
           <nav className="flex flex-wrap items-center gap-4">
             {legalLinks.map((link) => (
