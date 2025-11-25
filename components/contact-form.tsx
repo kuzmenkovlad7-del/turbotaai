@@ -87,7 +87,7 @@ export default function ContactForm() {
       })
     } catch (error) {
       console.error("Error submitting form:", error)
-      // при желании можно повесить тост/ошибку
+      // TODO: можно повесить тост
     } finally {
       setIsSubmitting(false)
     }
@@ -115,8 +115,98 @@ export default function ContactForm() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* поля те же самые */}
-          {/* ... код полей без изменений ... */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label
+                htmlFor="name"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                {t("Your name")}
+              </label>
+              <Input
+                id="name"
+                name="name"
+                value={formState.name}
+                onChange={handleChange}
+                placeholder={t("How can we address you?")}
+              />
+              {errors.name && (
+                <p className="mt-1 text-xs text-red-500">{errors.name}</p>
+              )}
+            </div>
+
+            <div>
+              <label
+                htmlFor="email"
+                className="mb-1 block text-xs font-medium text-slate-700"
+              >
+                {t("E-mail")}
+              </label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                value={formState.email}
+                onChange={handleChange}
+                placeholder="you@example.com"
+              />
+              {errors.email && (
+                <p className="mt-1 text-xs text-red-500">{errors.email}</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label
+              htmlFor="subject"
+              className="mb-1 block text-xs font-medium text-slate-700"
+            >
+              {t("Subject")}
+            </label>
+            <Input
+              id="subject"
+              name="subject"
+              value={formState.subject}
+              onChange={handleChange}
+              placeholder={t("What is your question about?")}
+            />
+            {errors.subject && (
+              <p className="mt-1 text-xs text-red-500">{errors.subject}</p>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="message"
+              className="mb-1 block text-xs font-medium text-slate-700"
+            >
+              {t("Message")}
+            </label>
+            <Textarea
+              id="message"
+              name="message"
+              rows={5}
+              value={formState.message}
+              onChange={handleChange}
+              placeholder={t(
+                "Describe your situation or question, we will reply as soon as possible.",
+              )}
+            />
+            {errors.message && (
+              <p className="mt-1 text-xs text-red-500">{errors.message}</p>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end">
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              {isSubmitting ? t("Sending...") : t("Send message")}
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </form>
       )}
     </div>
