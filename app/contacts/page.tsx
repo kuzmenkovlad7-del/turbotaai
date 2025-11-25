@@ -1,13 +1,7 @@
+// app/contacts/page.tsx
 "use client"
 
-import {
-  Mail,
-  Phone,
-  MapPin,
-  Clock,
-  Globe,
-  Shield,
-} from "lucide-react"
+import { Mail, Clock, Globe, Shield } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import ContactForm from "@/components/contact-form"
 import { AutoTranslate } from "@/components/auto-translate"
@@ -19,35 +13,23 @@ export default function ContactsPage() {
     {
       icon: Mail,
       title: t("Email us"),
-      details: "support@myitra.app",
+      details: "support@aipsychologist.com",
       description: t(
-        "For questions about the service, payments or technical issues.",
+        "All questions about the service, payments, access to the assistant or cooperation — please write to this address.",
       ),
-    },
-    {
-      icon: Phone,
-      title: t("Call us"),
-      details: "+380 00 000 00 00",
-      description: t("On business days, 10:00–18:00 (Kyiv time)."),
-    },
-    {
-      icon: MapPin,
-      title: t("Office"),
-      details: t("Remote-first team based in Ukraine and EU"),
-      description: t("Meetings are held online by appointment."),
     },
   ]
 
   const stats = [
     {
       icon: Clock,
-      label: t("Average reply"),
+      label: t("Average reply time"),
       value: t("within 24 hours"),
     },
     {
       icon: Globe,
       label: t("Languages"),
-      value: t("Ukrainian · Russian · English"),
+      value: t("Ukrainian · Russian · English (other later)"),
     },
     {
       icon: Shield,
@@ -98,9 +80,9 @@ export default function ContactsPage() {
 
             {/* Content grid */}
             <div className="grid items-start gap-10 md:grid-cols-[minmax(0,1.05fr)_minmax(0,1.2fr)]">
-              {/* Left: contact cards + note */}
+              {/* Left: contact card + note */}
               <div className="space-y-6">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4">
                   {contactInfo.map((item) => {
                     const Icon = item.icon
                     return (
