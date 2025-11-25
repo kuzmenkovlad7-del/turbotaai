@@ -89,7 +89,13 @@ export default function Footer() {
             <h3 className="text-sm font-semibold text-slate-900">
               {t("Contact Us")}
             </h3>
-            <p className="text-sm text-slate-600">{APP_SUPPORT_EMAIL}</p>
+            <Link
+              href={`mailto:${APP_SUPPORT_EMAIL}`}
+              className="text-sm text-slate-600 hover:text-slate-900 underline underline-offset-4"
+>
+              {APP_SUPPORT_EMAIL}
+            </Link>
+
 
             <div className="flex flex-wrap gap-2">
               {socialLinks.map((link) => (
