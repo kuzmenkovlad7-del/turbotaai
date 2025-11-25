@@ -11,12 +11,18 @@ import { LanguageSelector } from "@/components/language-selector"
 import { useLanguage } from "@/lib/i18n/language-context"
 import Logo from "@/components/logo"
 
-const mainLinks = [
-  { href: "/", label: "nav.home" },
-  { href: "/programs", label: "nav.programs" },
-  { href: "/client-stories", label: "nav.clientStories" },
-  { href: "/about", label: "About Us" }, // уже есть в переводах
-  { href: "/contacts", label: "nav.contacts" },
+type MainLink = {
+  href: string
+  labelKey?: string
+  label?: string
+}
+
+const mainLinks: MainLink[] = [
+  { href: "/", labelKey: "nav.home" },
+  { href: "/programs", labelKey: "nav.programs" },
+  { href: "/client-stories", labelKey: "nav.clientStories" },
+  { href: "/about", label: "About" }, // пока без ключа перевода
+  { href: "/contacts", labelKey: "nav.contacts" },
 ]
 
 export default function Header() {
@@ -46,6 +52,9 @@ export default function Header() {
     }
   }
 
+  const renderLabel = (link: MainLink) =>
+    link.labelKey ? t(link.labelKey) : link.label
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-sm">
       <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6 lg:px-10 xl:px-16">
@@ -67,7 +76,7 @@ export default function Header() {
               onClick={(e) => scrollToSection(e, link.href)}
               className="text-sm font-medium text-slate-700 transition-colors hover:text-slate-900"
             >
-              {t(link.label)}
+              {renderLabel(link)}
             </Link>
           ))}
         </nav>
@@ -121,7 +130,7 @@ export default function Header() {
                     onClick={(e) => scrollToSection(e, link.href)}
                     className="text-base font-medium text-slate-800 transition-colors hover:text-slate-900"
                   >
-                    {t(link.label)}
+                    {renderLabel(link)}
                   </Link>
                 ))}
               </nav>
