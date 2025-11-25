@@ -12,6 +12,7 @@ import Logo from "@/components/logo"
 
 const mainLinks = [
   { href: "/", label: "nav.home" },
+  { href: "/about", label: "nav.about" },
   { href: "/programs", label: "nav.programs" },
   { href: "/client-stories", label: "nav.clientStories" },
   { href: "/contacts", label: "nav.contacts" },
@@ -46,7 +47,7 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-sm">
-      <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6 lg:px-10 xl:px-16">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <Link
           href="/"
