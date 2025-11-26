@@ -1,47 +1,111 @@
-import { ContactForm } from "@/components/contact-form";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+// components/contact-section.tsx
+"use client"
 
-function ContactSection() {
+import { Mail, Clock, Shield } from "lucide-react"
+import { useLanguage } from "@/lib/i18n/language-context"
+import ContactForm from "@/components/contact-form"
+import { AutoTranslate } from "@/components/auto-translate"
+
+export default function ContactSection() {
+  const { t } = useLanguage()
+
+  const stats = [
+    {
+      icon: Clock,
+      label: t("Average reply"),
+      value: t("within 24 hours"),
+    },
+    {
+      icon: Shield,
+      label: t("Privacy"),
+      value: t("encrypted conversations"),
+    },
+  ]
+
+  const emailCard = {
+    icon: Mail,
+    title: t("Email us"),
+    details: "support@turbotaai.com",
+    description: t(
+      "All questions about the service, payments, access to the assistant or cooperation — please write to this address.",
+    ),
+  }
+
   return (
-    <section id="contact" className="py-24 bg-background">
-      <div className="container mx-auto px-4 max-w-6xl grid gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-start">
-        <div className="space-y-6">
-          <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">
-            Поговорімо про TurbotaAI для вас
-          </h2>
-          <p className="text-base md:text-lg text-muted-foreground">
-            Залиште контакти й кілька речень про свою ситуацію.
-            Ми повернемося з коротким коментарем та варіантами наступних кроків:
-            тестова сесія, демо продукту або консультація зі спеціалістом.
-          </p>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li>• Відповідь зазвичай протягом 24 годин у робочі дні.</li>
-            <li>• Уся інформація конфіденційна, без передачі третім сторонам.</li>
-            <li>• Можемо відповідати українською та англійською.</li>
-          </ul>
+    <AutoTranslate>
+      <section
+        id="contacts"
+        className="bg-gradient-to-b from-white via-slate-50 to-white py-16 md:py-20"
+      >
+        <div className="mx-auto max-w-6xl px-4 md:px-6 lg:px-8">
+          <div className="mb-10 text-center">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              {t("Support, partnerships and press")}
+            </div>
+            <h2 className="mb-3 text-3xl font-bold text-slate-900 sm:text-4xl md:text-5xl">
+              {t("Contact TurbotaAI team")}
+            </h2>
+            <p className="mx-auto max-w-3xl text-sm text-slate-600 sm:text-base">
+              {t(
+                "Have questions about how the AI-psychologist works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible.",
+              )}
+            </p>
+          </div>
+
+          <div className="grid items-start gap-10 md:grid-cols-[minmax(0,1.05fr)_minmax(0,1.2fr)]">
+            {/* Левая колонка */}
+            <div className="space-y-6">
+              <div className="flex flex-col rounded-2xl bg-slate-50/80 p-5 text-left shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:bg-white hover:shadow-md hover:shadow-indigo-100/60">
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                  <emailCard.icon className="h-5 w-5" />
+                </div>
+                <h3 className="mb-1 text-base font-semibold text-slate-900">
+                  {emailCard.title}
+                </h3>
+                <p className="mb-1 text-sm font-medium text-indigo-600">
+                  {emailCard.details}
+                </p>
+                <p className="text-xs text-slate-600 sm:text-sm">
+                  {emailCard.description}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-slate-50/70 p-5 text-sm text-slate-600 ring-1 ring-slate-200">
+                {t(
+                  "For urgent situations, please contact local emergency services or a crisis line in your country. TurbotaAI is not a substitute for emergency medical help.",
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                {stats.map((item) => {
+                  const Icon = item.icon
+                  return (
+                    <div
+                      key={item.label}
+                      className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1 text-xs text-slate-600 ring-1 ring-slate-200"
+                    >
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="font-medium">{item.label} ·</span>
+                      <span className="text-slate-500">{item.value}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Правая колонка – форма */}
+            <div className="rounded-2xl bg-slate-50/80 p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-7 lg:p-8">
+              <h3 className="mb-6 text-center text-xl font-semibold text-slate-900 md:text-2xl">
+                {t("Send us a message")}
+              </h3>
+              <ContactForm />
+            </div>
+          </div>
         </div>
-
-        <Card className="border border-primary/20 shadow-lg shadow-primary/10">
-          <CardHeader>
-            <CardTitle className="text-xl">Коротка заявка</CardTitle>
-            <CardDescription>
-              Заповніть форму — ми підберемо формат співпраці саме під вас.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ContactForm />
-          </CardContent>
-        </Card>
-      </div>
-    </section>
-  );
+      </section>
+    </AutoTranslate>
+  )
 }
-
-export { ContactSection };
-export default ContactSection;
