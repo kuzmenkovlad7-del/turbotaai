@@ -1,86 +1,81 @@
-// app/api/contact/route.ts
-import { NextResponse } from "next/server"
-import nodemailer from "nodemailer"
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const { name, email, subject, message } = body
+    const body = await req.json();
+    const { name, email, message } = body as {
+      name?: string;
+      email?: string;
+      message?: string;
+    };
 
-    if (!name || !email || !subject || !message) {
+    if (!email || !message) {
       return NextResponse.json(
-        { ok: false, error: "Missing required fields" },
-        { status: 400 },
-      )
+        { error: "Missing required fields" },
+        { status: 400 }
+      );
     }
 
-    const webhookUrl = process.env.N8N_CONTACT_WEBHOOK_URL
+    const apiKey = process.env.MAILGUN_API_KEY;
+    const domain = process.env.MAILGUN_DOMAIN;
+    const to = process.env.CONTACT_RECEIVER_EMAIL;
 
-    // Вариант 1 — отправляем в n8n
-    if (webhookUrl) {
-      await fetch(webhookUrl, {
+    if (!apiKey || !domain || !to) {
+      console.error("Mailgun env vars are not set.");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+
+    const params = new URLSearchParams();
+    params.append("from", `TurbotaAI <no-reply@${domain}>`);
+    params.append("to", to);
+    params.append("subject", "Нове звернення з сайту TurbotaAI");
+    params.append(
+      "text",
+      [
+        "Нове повідомлення з контактної форми TurbotaAI:",
+        "",
+        `Ім'я: ${name || "—"}`,
+        `Email: ${email}`,
+        "",
+        "Повідомлення:",
+        message,
+        "",
+        "— Автоматичне повідомлення TurbotaAI",
+      ].join("\n")
+    );
+
+    const auth = Buffer.from(`api:${apiKey}`).toString("base64");
+
+    const mailgunRes = await fetch(
+      `https://api.mailgun.net/v3/${domain}/messages`,
+      {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: JSON.stringify({
-          source: "turbotaai-contact-form",
-          name,
-          email,
-          subject,
-          message,
-        }),
-      })
+        body: params.toString(),
+      }
+    );
 
-      return NextResponse.json({ ok: true })
-    }
-
-    // Вариант 2 — отправляем напрямую на почту (Google Workspace)
-    const host = process.env.EMAIL_SERVER_HOST
-    const user = process.env.EMAIL_SERVER_USER
-    const pass = process.env.EMAIL_SERVER_PASSWORD
-
-    if (!host || !user || !pass) {
-      console.error("No N8N webhook or SMTP config")
+    if (!mailgunRes.ok) {
+      const text = await mailgunRes.text();
+      console.error("Mailgun error:", mailgunRes.status, text);
       return NextResponse.json(
-        { ok: false, error: "Config error" },
-        { status: 500 },
-      )
+        { error: "Failed to send email" },
+        { status: 500 }
+      );
     }
 
-    const transporter = nodemailer.createTransport({
-      host,
-      port: Number(process.env.EMAIL_SERVER_PORT || 587),
-      secure: false,
-      auth: {
-        user,
-        pass,
-      },
-    })
-
-    const to =
-      process.env.CONTACT_FORM_RECIPIENT || process.env.EMAIL_SERVER_USER
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || user,
-      to,
-      subject: `[TurbotaAI] ${subject}`,
-      replyTo: email,
-      text: `
-Имя: ${name}
-Email: ${email}
-
-Сообщение:
-${message}
-      `.trim(),
-    })
-
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("Contact API error:", error)
+    console.error("Contact form error:", error);
     return NextResponse.json(
-      { ok: false, error: "Internal server error" },
-      { status: 500 },
-    )
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
