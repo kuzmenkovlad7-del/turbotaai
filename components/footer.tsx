@@ -7,40 +7,38 @@ import { useLanguage } from "@/lib/i18n/language-context"
 import Logo from "@/components/logo"
 import { APP_NAME, APP_SUPPORT_EMAIL } from "@/lib/app-config"
 
-const mainLinks = [
-  { href: "/", label: "nav.home" },
-  { href: "/programs", label: "nav.programs" },
-  { href: "/client-stories", label: "nav.clientStories" },
-  { href: "/about", label: "nav.about" },
-  { href: "/contacts", label: "nav.contacts" },
+type FooterLink = {
+  href: string
+  labelKey?: string
+  label?: string
+}
+
+const mainLinks: FooterLink[] = [
+  { href: "/", labelKey: "nav.home" },
+  { href: "/programs", labelKey: "nav.programs" },
+  { href: "/client-stories", labelKey: "nav.clientStories" },
+  // здесь — только текст, без nav.about
+  { href: "/about", label: "About" },
+  { href: "/contacts", labelKey: "nav.contacts" },
 ]
 
-const legalLinks = [
-  { href: "/privacy-policy", label: "nav.privacyPolicy" },
-  { href: "/terms-of-use", label: "nav.termsOfUse" },
+const legalLinks: FooterLink[] = [
+  { href: "/privacy-policy", labelKey: "nav.privacyPolicy" },
+  { href: "/terms-of-use", labelKey: "nav.termsOfUse" },
 ]
 
 const socialLinks = [
-  {
-    href: "https://instagram.com/turbotaai",
-    icon: Instagram,
-    label: "Instagram",
-  },
-  {
-    href: "https://facebook.com/turbotaai",
-    icon: Facebook,
-    label: "Facebook",
-  },
-  {
-    href: "https://github.com/turbotaai",
-    icon: Github,
-    label: "Github",
-  },
+  { href: "https://instagram.com/turbotaai", icon: Instagram, label: "Instagram" },
+  { href: "https://facebook.com/turbotaai", icon: Facebook, label: "Facebook" },
+  { href: "https://github.com/turbotaai", icon: Github, label: "Github" },
 ]
 
 export default function Footer() {
   const { t } = useLanguage()
   const currentYear = new Date().getFullYear()
+
+  const renderLabel = (link: FooterLink) =>
+    link.labelKey ? t(link.labelKey) : link.label
 
   return (
     <footer className="mt-16 w-full border-t border-slate-200 bg-white">
@@ -67,7 +65,7 @@ export default function Footer() {
               </p>
               <p className="mt-1">
                 {t(
-                  "TurbotaAI is not a replacement for a licensed psychologist or psychiatrist.",
+                  "Myitra is not a replacement for a licensed psychologist or psychiatrist.",
                 )}
               </p>
               <p className="mt-1">
@@ -90,7 +88,7 @@ export default function Footer() {
                   href={link.href}
                   className="transition-colors hover:text-slate-900"
                 >
-                  {t(link.label)}
+                  {renderLabel(link)}
                 </Link>
               ))}
             </nav>
@@ -143,7 +141,7 @@ export default function Footer() {
                 href={link.href}
                 className="transition-colors hover:text-slate-700"
               >
-                {t(link.label)}
+                {renderLabel(link)}
               </Link>
             ))}
           </nav>
