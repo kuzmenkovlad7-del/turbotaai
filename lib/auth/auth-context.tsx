@@ -1,71 +1,76 @@
-// lib/auth/auth-context.tsx
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react"
+import React, { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 
-interface AuthUser {
-  email: string | null
+type AuthUser = {
+  email: string
 }
 
-interface AuthContextValue {
+type AuthContextValue = {
   user: AuthUser | null
-  loading: boolean
+  isLoading: boolean
   signInDemo: (email: string) => Promise<void>
-  signOutDemo: () => Promise<void>
+  signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+const STORAGE_KEY = "turbotaai_demo_user"
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [loading, setLoading] = useState<boolean>(false)
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Пробуем восстановить "демо-логин" из localStorage
+  // Читаем демо-юзера из localStorage
   useEffect(() => {
+    if (typeof window === "undefined") return
+
     try {
-      const stored = typeof window !== "undefined" ? window.localStorage.getItem("demoUser") : null
-      if (stored) {
-        setUser(JSON.parse(stored))
+      const raw = window.localStorage.getItem(STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as AuthUser
+        if (parsed?.email) {
+          setUser(parsed)
+        }
       }
-    } catch (e) {
-      console.warn("Failed to read demo user from localStorage", e)
+    } catch {
+      // игнорируем ошибки парсинга
+    } finally {
+      setIsLoading(false)
     }
   }, [])
 
   const signInDemo = async (email: string) => {
-    setLoading(true)
-    try {
-      const demoUser = { email }
-      setUser(demoUser)
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("demoUser", JSON.stringify(demoUser))
-      }
-    } finally {
-      setLoading(false)
+    const trimmed = email.trim() || "guest@demo.turbotaai.com"
+    const u: AuthUser = { email: trimmed }
+
+    setUser(u)
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(u))
     }
   }
 
-  const signOutDemo = async () => {
-    setLoading(true)
-    try {
-      setUser(null)
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem("demoUser")
-      }
-    } finally {
-      setLoading(false)
+  const signOut = async () => {
+    setUser(null)
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(STORAGE_KEY)
     }
   }
 
-  return (
-    <AuthContext.Provider value={{ user, loading, signInDemo, signOutDemo }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  const value: AuthContextValue = {
+    user,
+    isLoading,
+    signInDemo,
+    signOut,
+  }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
   const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider")
+  if (!ctx) {
+    throw new Error("useAuth must be used within AuthProvider")
+  }
   return ctx
 }
