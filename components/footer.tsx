@@ -11,7 +11,7 @@ const mainLinks = [
   { href: "/", label: "nav.home" },
   { href: "/programs", label: "nav.programs" },
   { href: "/client-stories", label: "nav.clientStories" },
-  { href: "/about", label: "nav.about" },      // <-- добавили
+  { href: "/about", label: "nav.about" },            // ← About
   { href: "/contacts", label: "nav.contacts" },
 ]
 
@@ -89,13 +89,13 @@ export default function Footer() {
             <h3 className="text-sm font-semibold text-slate-900">
               {t("Contact Us")}
             </h3>
-            <Link
-              href={`mailto:${APP_SUPPORT_EMAIL}`}
-              className="text-sm text-slate-600 hover:text-slate-900 underline underline-offset-4"
->
-              {APP_SUPPORT_EMAIL}
-            </Link>
 
+            <a
+              href={`mailto:${APP_SUPPORT_EMAIL}`}
+              className="text-sm text-slate-600 hover:text-slate-900 underline underline-offset-2"
+            >
+              {APP_SUPPORT_EMAIL}
+            </a>
 
             <div className="flex flex-wrap gap-2">
               {socialLinks.map((link) => (
