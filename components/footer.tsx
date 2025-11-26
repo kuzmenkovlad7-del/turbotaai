@@ -11,7 +11,7 @@ const mainLinks = [
   { href: "/", label: "nav.home" },
   { href: "/programs", label: "nav.programs" },
   { href: "/client-stories", label: "nav.clientStories" },
-  { href: "/about", label: "nav.about" },            // ← About
+  { href: "/about", label: "nav.about" },
   { href: "/contacts", label: "nav.contacts" },
 ]
 
@@ -21,9 +21,21 @@ const legalLinks = [
 ]
 
 const socialLinks = [
-  { href: "https://instagram.com", icon: Instagram, label: "Instagram" },
-  { href: "https://facebook.com", icon: Facebook, label: "Facebook" },
-  { href: "https://github.com", icon: Github, label: "Github" },
+  {
+    href: "https://instagram.com/turbotaai",
+    icon: Instagram,
+    label: "Instagram",
+  },
+  {
+    href: "https://facebook.com/turbotaai",
+    icon: Facebook,
+    label: "Facebook",
+  },
+  {
+    href: "https://github.com/turbotaai",
+    icon: Github,
+    label: "Github",
+  },
 ]
 
 export default function Footer() {
@@ -35,7 +47,7 @@ export default function Footer() {
       <div className="container mx-auto px-4 py-10 lg:py-12">
         <div className="grid gap-10 md:grid-cols-3 lg:grid-cols-4">
           {/* Логотип + слоган + дисклеймер */}
-          <div className="md:col-span-2 space-y-4">
+          <div className="space-y-4 md:col-span-2">
             <div className="flex items-center gap-2">
               <Logo />
               <span className="text-lg font-semibold text-slate-900">
@@ -49,13 +61,13 @@ export default function Footer() {
               )}
             </p>
 
-            <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-xs sm:text-sm text-slate-700">
+            <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-xs text-slate-700 sm:text-sm">
               <p className="font-semibold text-violet-900">
                 {t("This is not an emergency service")}
               </p>
               <p className="mt-1">
                 {t(
-                  "Myitra is not a replacement for a licensed psychologist or psychiatrist.",
+                  "TurbotaAI is not a replacement for a licensed psychologist or psychiatrist.",
                 )}
               </p>
               <p className="mt-1">
@@ -92,7 +104,7 @@ export default function Footer() {
 
             <a
               href={`mailto:${APP_SUPPORT_EMAIL}`}
-              className="text-sm text-slate-600 hover:text-slate-900 underline underline-offset-2"
+              className="text-sm text-slate-600 underline underline-offset-2 hover:text-slate-900"
             >
               {APP_SUPPORT_EMAIL}
             </a>
