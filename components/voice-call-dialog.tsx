@@ -316,4 +316,124 @@ export default function VoiceCallDialog({
             <ScrollArea className="flex-1 px-5 pt-4 pb-2">
               <div className="space-y-3">
                 {!isCallActive && (
-                  <div className="rounded
+                  <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-xs text-slate-700">
+                    <p className="font-medium text-slate-900 mb-1">
+                      {t("How it works")}
+                    </p>
+                    <p>
+                      {t(
+                        "Press the button to start the call. Allow microphone access, then speak as if with a real psychologist.",
+                      )}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {t(
+                        "Your e-mail will be used only to personalize the session.",
+                      )}{" "}
+                      ({userEmailDisplay})
+                    </p>
+                  </div>
+                )}
+
+                {transcript && (
+                  <div className="rounded-2xl bg-blue-50 px-3 py-3 text-xs md:text-sm text-slate-900">
+                    <p className="font-medium text-blue-800 mb-1">
+                      {t("You said in {{language}}:", {
+                        language: currentLanguage.name,
+                      })}
+                    </p>
+                    <p>{transcript}</p>
+                  </div>
+                )}
+
+                {aiResponse && (
+                  <div className="rounded-2xl bg-emerald-50 px-3 py-3 text-xs md:text-sm text-slate-900">
+                    <p className="mb-1 flex items-center gap-1 font-medium text-emerald-800">
+                      <Brain className="h-3.5 w-3.5" />
+                      {t("AI Psychologist in {{language}}:", {
+                        language: currentLanguage.name,
+                      })}
+                    </p>
+                    <p>{aiResponse}</p>
+                  </div>
+                )}
+
+                {networkError && (
+                  <div className="rounded-2xl bg-rose-50 px-3 py-3 text-xs text-rose-700">
+                    {networkError}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+
+            <div className="border-t border-slate-100 px-5 py-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                  <Sparkles className="h-3 w-3" />
+                  {isListening
+                    ? t("Listening… you can speak.")
+                    : isCallActive
+                      ? t("Paused. Turn on microphone to continue.")
+                      : t(
+                          "In crisis situations, please contact local emergency services immediately.",
+                        )}
+                </div>
+
+                {isCallActive && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="icon"
+                      onClick={toggleMic}
+                      className={`h-8 w-8 rounded-full border ${
+                        isMicMuted
+                          ? "border-rose-200 bg-rose-50 text-rose-600"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      {isMicMuted ? (
+                        <MicOff className="h-4 w-4" />
+                      ) : (
+                        <Mic className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      onClick={endCall}
+                      className="h-8 w-8 rounded-full bg-rose-600 text-white hover:bg-rose-700"
+                    >
+                      <Phone className="h-4 w-4 rotate-[135deg]" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {!isCallActive && (
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    onClick={startCall}
+                    disabled={isConnecting}
+                    className="h-9 rounded-full bg-indigo-600 px-5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-70"
+                  >
+                    {isConnecting ? (
+                      <>
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        {t("Connecting")}
+                      </>
+                    ) : (
+                      <>
+                        <Phone className="mr-1 h-3 w-3" />
+                        {t("Start voice session")}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
