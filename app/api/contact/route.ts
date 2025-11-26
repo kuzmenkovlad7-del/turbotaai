@@ -1,74 +1,74 @@
-// app/api/contact/route.ts
-import type { NextRequest } from "next"
-import { NextResponse } from "next/server"
+// myitra-assistant-core/app/api/contact/route.ts
+import { NextResponse } from 'next/server'
+import {
+  CONTACT_EMAIL_FROM,
+  CONTACT_EMAIL_TO,
+  SITE_NAME,
+} from '@/lib/app-config'
 
-const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY
-const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN
-const CONTACT_TO_EMAIL = process.env.CONTACT_TO_EMAIL || "support@turbotaai.com"
+function getMailgunAuthHeader() {
+  const apiKey = process.env.MAILGUN_API_KEY
+  if (!apiKey) {
+    throw new Error('MAILGUN_API_KEY is not set')
+  }
+  const token = Buffer.from(`api:${apiKey}`).toString('base64')
+  return `Basic ${token}`
+}
 
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const body = await req.json()
-    const { name, email, subject, message } = body
+    const { name, email, message } = await request.json()
 
-    if (!name || !email || !subject || !message) {
+    if (!name || !email || !message) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: 'Missing fields' },
         { status: 400 },
       )
     }
 
-    if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) {
-      console.error("MAILGUN env is not configured")
-      return NextResponse.json(
-        { error: "Email service is not configured" },
-        { status: 500 },
-      )
-    }
+    const domain =
+      process.env.MAILGUN_DOMAIN || 'turbotaai.com'
 
-    const formData = new URLSearchParams()
-    formData.append("from", `MyITRA Website <no-reply@${MAILGUN_DOMAIN}>`)
-    formData.append("to", CONTACT_TO_EMAIL)
-    formData.append("subject", `[MyITRA] Новое сообщение с сайта: ${subject}`)
-    formData.append(
-      "text",
-      [
-        `Имя: ${name}`,
+    const params = new URLSearchParams({
+      from: CONTACT_EMAIL_FROM,
+      to: CONTACT_EMAIL_TO,
+      subject: `[${SITE_NAME}] Новий запит з форми`,
+      text: [
+        `Ім'я: ${name}`,
         `Email: ${email}`,
-        "",
-        "Сообщение:",
+        '',
+        'Повідомлення:',
         message,
-      ].join("\n"),
-    )
+      ].join('\n'),
+    })
 
-    const mgRes = await fetch(
-      `https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`,
+    const res = await fetch(
+      `https://api.mailgun.net/v3/${domain}/messages`,
       {
-        method: "POST",
+        method: 'POST',
         headers: {
-          Authorization:
-            "Basic " +
-            Buffer.from(`api:${MAILGUN_API_KEY}`).toString("base64"),
-          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: getMailgunAuthHeader(),
+          'Content-Type':
+            'application/x-www-form-urlencoded',
         },
-        body: formData.toString(),
+        body: params.toString(),
       },
     )
 
-    if (!mgRes.ok) {
-      const text = await mgRes.text()
-      console.error("Mailgun error:", text)
+    if (!res.ok) {
+      const text = await res.text()
+      console.error('Mailgun error:', text)
       return NextResponse.json(
-        { error: "Failed to send email" },
+        { error: 'Mail service error' },
         { status: 500 },
       )
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error("Contact form error:", error)
+    console.error('Contact API error', error)
     return NextResponse.json(
-      { error: "Something went wrong" },
+      { error: 'Unexpected error' },
       { status: 500 },
     )
   }
