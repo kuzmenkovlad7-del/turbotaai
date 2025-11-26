@@ -15,9 +15,8 @@ import { useLanguage } from "@/lib/i18n/language-context"
 import { ShineBorder } from "@/components/ui/shine-border"
 import { RainbowButton } from "@/components/ui/rainbow-button"
 
-// webhooks ассистентов берём из .env
 const CHAT_WEBHOOK =
-  process.env.NEXT_PUBLIC_N8N_CHAT_WEBHOOK_URL || "/api/chat"
+  process.env.NEXT_PUBLIC_N8N_CHAT_WEBHOOK_URL || ""
 const VOICE_WEBHOOK =
   process.env.NEXT_PUBLIC_N8N_VOICE_WEBHOOK_URL || ""
 const VIDEO_WEBHOOK =
@@ -31,6 +30,14 @@ export default function Home() {
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false)
 
   const openChat = () => {
+    if (!CHAT_WEBHOOK) {
+      alert(
+        t(
+          "Chat assistant is temporarily unavailable. Webhook is not configured yet.",
+        ),
+      )
+      return
+    }
     setIsChatOpen(true)
   }
 
@@ -87,7 +94,7 @@ export default function Home() {
     <div className="bg-slate-50">
       <HomeHero />
 
-      {/* Contact Methods Section */}
+      {/* Блок с тремя форматами общения */}
       <section
         id="assistant"
         className="relative -mt-10 bg-gradient-to-b from-slate-50 via-slate-50 to-white pb-28 pt-20 md:-mt-16 md:pt-24"
@@ -171,7 +178,6 @@ export default function Home() {
                 />
               </div>
 
-              {/* Общий радужный CTA под карточками */}
               <div className="mt-10 flex justify-center">
                 <RainbowButton
                   type="button"
@@ -189,9 +195,7 @@ export default function Home() {
 
       <ServiceFeatures />
 
-      <section id="contacts">
-        <ContactSection />
-      </section>
+      <ContactSection />
 
       {/* Модальные окна ассистентов */}
       <AIChatDialog
@@ -204,7 +208,7 @@ export default function Home() {
         isOpen={isVoiceCallOpen}
         onClose={() => setIsVoiceCallOpen(false)}
         webhookUrl={VOICE_WEBHOOK}
-        openAiApiKey="" // OpenAI остаётся в n8n
+        openAiApiKey="" // OpenAI в n8n
         onError={(error) => {
           console.error("Voice call error:", error)
           alert(
@@ -220,7 +224,7 @@ export default function Home() {
         isOpen={isVideoCallOpen}
         onClose={() => setIsVideoCallOpen(false)}
         webhookUrl={VIDEO_WEBHOOK}
-        openAiApiKey="" // OpenAI остаётся в n8n
+        openAiApiKey="" // OpenAI в n8n
         onError={(error) => {
           console.error("Video call error:", error)
           alert(
