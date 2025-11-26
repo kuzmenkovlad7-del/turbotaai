@@ -1,113 +1,64 @@
+// lib/auth/auth-context.tsx
 "use client"
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react"
-import {
-  getSupabaseBrowserClient,
-  hasSupabaseEnv,
-} from "@/lib/supabase-client"
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react"
 
-type AuthContextType = {
-  user: any | null
-  loading: boolean
-  authDisabled: boolean
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>
-  signUp: (
-    email: string,
-    password: string,
-    extra?: { fullName?: string },
-  ) => Promise<{ error: Error | null }>
-  signOut: () => Promise<void>
+interface AuthUser {
+  email: string | null
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+interface AuthContextValue {
+  user: AuthUser | null
+  loading: boolean
+  signInDemo: (email: string) => Promise<void>
+  signOutDemo: () => Promise<void>
+}
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<any | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [loading, setLoading] = useState<boolean>(false)
 
+  // Пробуем восстановить "демо-логин" из localStorage
   useEffect(() => {
-    if (!hasSupabaseEnv) {
-      setLoading(false)
-      return
-    }
-
-    const supabase = getSupabaseBrowserClient()
-    if (!supabase) {
-      setLoading(false)
-      return
-    }
-
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null)
-      setLoading(false)
-    })
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
-
-    return () => {
-      subscription.unsubscribe()
+    try {
+      const stored = typeof window !== "undefined" ? window.localStorage.getItem("demoUser") : null
+      if (stored) {
+        setUser(JSON.parse(stored))
+      }
+    } catch (e) {
+      console.warn("Failed to read demo user from localStorage", e)
     }
   }, [])
 
-  const signIn = async (email: string, password: string) => {
-    if (!hasSupabaseEnv) {
-      return { error: new Error("Auth is disabled") }
+  const signInDemo = async (email: string) => {
+    setLoading(true)
+    try {
+      const demoUser = { email }
+      setUser(demoUser)
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("demoUser", JSON.stringify(demoUser))
+      }
+    } finally {
+      setLoading(false)
     }
-    const supabase = getSupabaseBrowserClient()
-    const { error } = await supabase!.auth.signInWithPassword({
-      email,
-      password,
-    })
-    return { error: error as Error | null }
   }
 
-  const signUp = async (
-    email: string,
-    password: string,
-    extra?: { fullName?: string },
-  ) => {
-    if (!hasSupabaseEnv) {
-      return { error: new Error("Auth is disabled") }
+  const signOutDemo = async () => {
+    setLoading(true)
+    try {
+      setUser(null)
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("demoUser")
+      }
+    } finally {
+      setLoading(false)
     }
-    const supabase = getSupabaseBrowserClient()
-    const { error } = await supabase!.auth.signUp({
-      email,
-      password,
-      options: {
-        data: extra?.fullName ? { full_name: extra.fullName } : undefined,
-      },
-    })
-    return { error: error as Error | null }
-  }
-
-  const signOut = async () => {
-    if (!hasSupabaseEnv) return
-    const supabase = getSupabaseBrowserClient()
-    await supabase!.auth.signOut()
   }
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        authDisabled: !hasSupabaseEnv,
-        signIn,
-        signUp,
-        signOut,
-      }}
-    >
+    <AuthContext.Provider value={{ user, loading, signInDemo, signOutDemo }}>
       {children}
     </AuthContext.Provider>
   )
@@ -115,8 +66,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext)
-  if (!ctx) {
-    throw new Error("useAuth must be used within AuthProvider")
-  }
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider")
   return ctx
 }
