@@ -1,10 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
-import { Phone, X, Brain, Mic, MicOff, Wifi, WifiOff } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
+import { Button } from "@/components/ui/button"
+import { Phone, X, Wifi, WifiOff, Brain, Mic, MicOff } from "lucide-react"
 
 declare global {
   interface Window {
@@ -20,15 +20,6 @@ interface VoiceCallDialogProps {
   userEmail?: string
 }
 
-function getLocale(code: string): string {
-  const map: Record<string, string> = {
-    en: "en-US",
-    ru: "ru-RU",
-    uk: "uk-UA",
-  }
-  return map[code] || "en-US"
-}
-
 export default function VoiceCallDialog({
   isOpen,
   onClose,
@@ -39,265 +30,247 @@ export default function VoiceCallDialog({
   const { user } = useAuth()
 
   const [isCallActive, setIsCallActive] = useState(false)
-  const [isListening, setIsListening] = useState(false)
-  const [isAiSpeaking, setIsAiSpeaking] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
+  const [isListening, setIsListening] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
-  const [connectionOk, setConnectionOk] = useState(true)
-
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false)
+  const [voiceGender, setVoiceGender] = useState<"female" | "male">("female")
   const [transcript, setTranscript] = useState("")
   const [aiResponse, setAiResponse] = useState("")
-  const [errorMsg, setErrorMsg] = useState("")
+  const [networkError, setNetworkError] = useState<string | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connected" | "disconnected"
+  >("disconnected")
 
-  const recognitionRef = useRef<any>(null)
-  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const recognitionRef = useRef<any | null>(null)
 
-  const locale = getLocale(currentLanguage.code)
-  const userEmailDisplay = userEmail || user?.email || "guest@example.com"
+  const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
-  // ========= SPEECH SYNTHESIS =========
+  // Когда модалка закрывается — всё гасим
+  useEffect(() => {
+    if (!isOpen) {
+      stopEverything()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen])
 
-  const speak = useCallback(
-    (text: string) => {
-      if (!window.speechSynthesis) return
+  const stopEverything = useCallback(() => {
+    setIsCallActive(false)
+    setIsListening(false)
+    setIsAiSpeaking(false)
+    setTranscript("")
+    setAiResponse("")
+    setConnectionStatus("disconnected")
+    setNetworkError(null)
 
+    if (recognitionRef.current) {
       try {
-        window.speechSynthesis.cancel()
-        if (!text.trim()) return
-
-        const utterance = new SpeechSynthesisUtterance(text)
-        utterance.lang = locale
-
-        const voices = window.speechSynthesis.getVoices()
-        const matched =
-          voices.find((v) => v.lang.toLowerCase().startsWith(locale.toLowerCase())) ||
-          voices.find((v) => v.lang.toLowerCase().startsWith("en")) ||
-          voices[0]
-
-        if (matched) {
-          utterance.voice = matched
-        }
-
-        utterance.rate = 1
-        utterance.pitch = 1
-        utterance.onstart = () => setIsAiSpeaking(true)
-        utterance.onend = () => {
-          setIsAiSpeaking(false)
-          currentUtteranceRef.current = null
-        }
-        utterance.onerror = () => {
-          setIsAiSpeaking(false)
-          currentUtteranceRef.current = null
-        }
-
-        currentUtteranceRef.current = utterance
-        window.speechSynthesis.speak(utterance)
+        recognitionRef.current.stop()
       } catch (e) {
-        console.error("Speech synthesis error:", e)
-        setIsAiSpeaking(false)
+        console.error(e)
       }
+      recognitionRef.current = null
+    }
+
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
+  }, [])
+
+  // Запуск speech recognition
+  const startRecognition = useCallback(() => {
+    if (typeof window === "undefined") return
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) {
+      setNetworkError(
+        t(
+          "Your browser does not support voice recognition. Please use Chrome or another modern browser.",
+        ),
+      )
+      return
+    }
+
+    const recognition = new SR()
+    recognition.continuous = true
+    recognition.interimResults = false
+    recognition.lang = currentLanguage.code.startsWith("uk")
+      ? "uk-UA"
+      : currentLanguage.code.startsWith("ru")
+        ? "ru-RU"
+        : "en-US"
+
+    recognition.onstart = () => {
+      setIsListening(true)
+      setConnectionStatus("connected")
+      setNetworkError(null)
+    }
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event)
+      setNetworkError(t("Error while listening. Please try again."))
+      setIsListening(false)
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+      // Если звонок ещё активен и микрофон не мутнут — аккуратно перезапускаем
+      if (isCallActive && !isMicMuted) {
+        setTimeout(() => {
+          try {
+            recognition.start()
+          } catch (e) {
+            console.error(e)
+          }
+        }, 400)
+      }
+    }
+
+    recognition.onresult = (event: any) => {
+      const last = event.results[event.results.length - 1]
+      if (!last || !last.isFinal) return
+
+      const text = last[0]?.transcript?.trim()
+      if (!text) return
+
+      setTranscript((prev) => (prev ? `${prev} ${text}` : text))
+      handleUserText(text)
+    }
+
+    try {
+      recognition.start()
+      recognitionRef.current = recognition
+    } catch (e) {
+      console.error("Cannot start recognition", e)
+      setNetworkError(
+        t("Could not start microphone. Check permissions and try again."),
+      )
+    }
+  }, [currentLanguage.code, isCallActive, isMicMuted, t])
+
+  // Озвучка ответа
+  const speakText = useCallback(
+    (text: string) => {
+      if (typeof window === "undefined" || !window.speechSynthesis) return
+
+      const utterance = new SpeechSynthesisUtterance(text)
+
+      utterance.lang = currentLanguage.code.startsWith("uk")
+        ? "uk-UA"
+        : currentLanguage.code.startsWith("ru")
+          ? "ru-RU"
+          : "en-US"
+
+      const voices = window.speechSynthesis.getVoices()
+      if (voices.length) {
+        const langPrefix = utterance.lang.slice(0, 2)
+        let candidates = voices.filter((v) => v.lang.startsWith(langPrefix))
+        if (!candidates.length) {
+          candidates = voices.filter((v) => v.lang.startsWith("en"))
+        }
+
+        const genderHints =
+          voiceGender === "female"
+            ? ["female", "woman", "girl", "zira", "samantha"]
+            : ["male", "man", "boy", "david", "alex"]
+
+        const selected =
+          candidates.find((v) =>
+            genderHints.some((h) => v.name.toLowerCase().includes(h)),
+          ) || candidates[0]
+
+        if (selected) utterance.voice = selected
+      }
+
+      utterance.rate = 1
+      utterance.pitch = 1
+      utterance.onstart = () => setIsAiSpeaking(true)
+      utterance.onend = () => setIsAiSpeaking(false)
+      utterance.onerror = () => setIsAiSpeaking(false)
+
+      window.speechSynthesis.speak(utterance)
     },
-    [locale],
+    [currentLanguage.code, voiceGender],
   )
 
-  // ========= OPENAI CALL =========
-
-  const sendToAssistant = useCallback(
+  // Отправка текста в наш /api/chat
+  const handleUserText = useCallback(
     async (text: string) => {
-      if (!text.trim()) return
       try {
-        setErrorMsg("")
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             query: text,
             language: currentLanguage.code,
-            email: userEmailDisplay,
-            channel: "voice",
+            email: effectiveEmail,
+            mode: "voice",
           }),
         })
 
         if (!res.ok) {
-          const errText = await res.text().catch(() => "")
-          console.error("Voice /api/chat error:", res.status, errText)
-          throw new Error("Voice assistant error")
+          throw new Error(`Chat API error: ${res.status}`)
         }
 
         const data = await res.json()
-        const reply: string =
+        const answer: string =
           (data && (data.text as string)) ||
           t("I'm sorry, I couldn't process your message. Please try again.")
 
-        setAiResponse(reply)
-        speak(reply)
-      } catch (err: any) {
-        console.error("sendToAssistant error:", err)
-        const msg = t("I'm sorry, I couldn't process your message. Please try again.")
-        setAiResponse(msg)
-        setErrorMsg(msg)
-        if (onError) onError(err as Error)
+        setAiResponse(answer)
+        speakText(answer)
+      } catch (error: any) {
+        console.error("Voice call error:", error)
+        setNetworkError(t("Connection error. Please try again."))
+        if (onError && error instanceof Error) onError(error)
       }
     },
-    [currentLanguage.code, onError, speak, t, userEmailDisplay],
+    [currentLanguage.code, effectiveEmail, onError, speakText, t],
   )
 
-  // ========= SPEECH RECOGNITION =========
+  // Старт звонка
+  const startCall = useCallback(
+    (gender: "female" | "male") => {
+      setVoiceGender(gender)
+      setIsConnecting(true)
+      setNetworkError(null)
 
-  const startRecognition = useCallback(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      setErrorMsg(t("Your browser does not support voice input. Please try using Chrome."))
-      setConnectionOk(false)
-      return
-    }
+      setTimeout(() => {
+        setIsCallActive(true)
+        setIsConnecting(false)
+        startRecognition()
+      }, 200)
+    },
+    [startRecognition],
+  )
 
-    const recognition = new SpeechRecognition()
-    recognition.lang = locale
-    recognition.continuous = true
-    recognition.interimResults = true
+  // Завершение звонка
+  const endCall = useCallback(() => {
+    stopEverything()
+  }, [stopEverything])
 
-    recognition.onstart = () => {
-      setIsListening(true)
-      setConnectionOk(true)
-    }
+  // Мут/анмут
+  const toggleMic = () => {
+    const next = !isMicMuted
+    setIsMicMuted(next)
 
-    recognition.onresult = (event: any) => {
-      let finalText = ""
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i]
-        if (result.isFinal) {
-          finalText += result[0].transcript
-        }
-      }
-
-      if (finalText.trim()) {
-        const cleaned = finalText.trim()
-        setTranscript((prev) => (prev ? `${prev} ${cleaned}` : cleaned))
-        sendToAssistant(cleaned)
-      }
-    }
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error:", event.error)
-      setIsListening(false)
-      setConnectionOk(false)
-      if (event.error === "not-allowed") {
-        setErrorMsg(t("Microphone access denied. Please allow access in browser settings."))
-      } else {
-        setErrorMsg(t("Voice recognition error. Please try again."))
-      }
-    }
-
-    recognition.onend = () => {
-      setIsListening(false)
-      if (isCallActive && !isMicMuted) {
-        // пробуем перезапустить, чтобы сессия была “длинной”
-        try {
-          recognition.start()
-        } catch {
-          // если не получилось – просто остановимся
-        }
-      }
-    }
-
-    recognitionRef.current = recognition
-
-    try {
-      recognition.start()
-    } catch (e) {
-      console.error("Failed to start recognition:", e)
-      setErrorMsg(t("Failed to start voice recognition."))
-      setConnectionOk(false)
-    }
-  }, [isCallActive, isMicMuted, locale, sendToAssistant, t])
-
-  // ========= КНОПКИ: старт / стоп / mute =========
-
-  const startCall = async () => {
-    setIsConnecting(true)
-    setErrorMsg("")
-    setAiResponse("")
-    setTranscript("")
-
-    setIsCallActive(true)
-    setConnectionOk(true)
-
-    // небольшая задержка, чтобы модалка успела отрисоваться
-    setTimeout(() => {
-      startRecognition()
-      setIsConnecting(false)
-    }, 200)
-  }
-
-  const endCall = () => {
-    setIsCallActive(false)
-    setIsListening(false)
-    setIsAiSpeaking(false)
-    setIsConnecting(false)
-
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.onend = null
-        recognitionRef.current.stop()
-      } catch (e) {
-        console.error("Stop recognition error:", e)
-      }
-      recognitionRef.current = null
-    }
-
-    if (currentUtteranceRef.current && window.speechSynthesis) {
-      window.speechSynthesis.cancel()
-      currentUtteranceRef.current = null
-    }
-
-    setTimeout(onClose, 100)
-  }
-
-  const toggleMute = () => {
-    const newMuted = !isMicMuted
-    setIsMicMuted(newMuted)
-
-    if (newMuted) {
-      // mute
+    if (next) {
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop()
         } catch (e) {
-          console.error("Stop recognition (mute) error:", e)
+          console.error(e)
         }
       }
       setIsListening(false)
     } else if (isCallActive) {
-      // unmute
       startRecognition()
     }
   }
 
-  // ======== cleanup on unmount / close ========
-
-  useEffect(() => {
-    if (!isOpen) {
-      // если модалку закрыли – на всякий случай всё чистим
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.onend = null
-          recognitionRef.current.stop()
-        } catch {}
-        recognitionRef.current = null
-      }
-      if (currentUtteranceRef.current && window.speechSynthesis) {
-        window.speechSynthesis.cancel()
-        currentUtteranceRef.current = null
-      }
-      setIsCallActive(false)
-      setIsListening(false)
-      setIsAiSpeaking(false)
-      setIsConnecting(false)
-    }
-  }, [isOpen])
-
   if (!isOpen) return null
+
+  const userEmailDisplay = effectiveEmail
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -305,21 +278,31 @@ export default function VoiceCallDialog({
         {/* Header */}
         <div className="p-4 border-b flex justify-between items-center bg-primary-600 text-white rounded-t-xl">
           <div className="flex flex-col">
-            <h3 className="font-bold text-lg">{t("Voice Call with AI Psychologist")}</h3>
-            <div className="text-xs text-lavender-200">
+            <h3 className="font-bold text-lg">
+              {voiceGender === "female" ? t("Female Voice Call") : t("Male Voice Call")}
+            </h3>
+            <div className="text-xs text-slate-200">
               {t("User")}: {userEmailDisplay}
             </div>
-            <div className="text-xs text-lavender-200 mt-1">
+            <div className="text-xs text-slate-200 mt-1">
               {t("Language")}: {currentLanguage.name} {currentLanguage.flag}
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            {connectionOk ? (
-              <Wifi className="h-4 w-4 text-green-200" />
+          <div className="flex items-center space-x-1">
+            {connectionStatus === "connected" ? (
+              <Wifi className="h-4 w-4 text-green-300" />
             ) : (
-              <WifiOff className="h-4 w-4 text-red-200" />
+              <WifiOff className="h-4 w-4 text-red-300" />
             )}
-            <Button variant="ghost" size="icon" onClick={endCall} className="text-white">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                endCall()
+                onClose()
+              }}
+              className="text-white"
+            >
               <X className="h-5 w-5" />
             </Button>
           </div>
@@ -336,35 +319,38 @@ export default function VoiceCallDialog({
                 {t("Ready to start your voice session?")}
               </h3>
               <p className="text-gray-600 text-center mb-6">
-                {t("Speak with AI psychologist for immediate, gentle support.")}
+                {t("Speak directly with our AI psychologist for immediate support.")}
               </p>
 
-              <div className="mb-6 bg-blue-50 p-4 rounded-lg w-full max-w-xs text-center">
-                <p className="text-sm font-medium text-blue-700 mb-1">
-                  {t("Voice communication language")}:
-                </p>
-                <div className="text-lg font-semibold text-blue-800 flex items-center justify-center">
-                  <span className="mr-2">{currentLanguage.flag}</span>
-                  {currentLanguage.name}
-                </div>
-                <p className="text-xs text-blue-600 mt-2">
-                  {t("AI will understand and respond in this language.")}
-                </p>
+              <div className="flex flex-col space-y-3 w-full max-w-xs">
+                <Button
+                  className="bg-pink-500 hover:bg-pink-600 text-white px-8 py-3 flex items-center justify-center"
+                  onClick={() => startCall("female")}
+                  disabled={isConnecting}
+                >
+                  <span className="mr-2">👩</span>
+                  {isConnecting && voiceGender === "female"
+                    ? t("Connecting...")
+                    : t("Start with Female Voice")}
+                </Button>
+
+                <Button
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 flex items-center justify-center"
+                  onClick={() => startCall("male")}
+                  disabled={isConnecting}
+                >
+                  <span className="mr-2">👨</span>
+                  {isConnecting && voiceGender === "male"
+                    ? t("Connecting...")
+                    : t("Start with Male Voice")}
+                </Button>
+
+                {networkError && (
+                  <p className="text-xs text-center text-red-500 mt-2">
+                    {networkError}
+                  </p>
+                )}
               </div>
-
-              <Button
-                className="bg-primary-600 hover:bg-primary-700 text-white px-8 py-3 flex items-center justify-center"
-                onClick={startCall}
-                disabled={isConnecting}
-              >
-                {isConnecting ? t("Connecting...") : t("Start Voice Session")}
-              </Button>
-
-              {errorMsg && (
-                <p className="text-xs text-red-500 mt-4 text-center max-w-xs">
-                  {errorMsg}
-                </p>
-              )}
             </div>
           ) : (
             <>
@@ -381,24 +367,6 @@ export default function VoiceCallDialog({
                       }`}
                     />
                   </div>
-                </div>
-
-                <div className="text-center mb-4">
-                  <p className="text-sm text-gray-600">
-                    {isAiSpeaking
-                      ? t("AI is speaking in {{language}}...", {
-                          language: currentLanguage.name,
-                        })
-                      : isListening
-                        ? t("Listening in {{language}}...", {
-                            language: currentLanguage.name,
-                          })
-                        : isMicMuted
-                          ? t("Microphone muted")
-                          : t("Ready to listen in {{language}}", {
-                              language: currentLanguage.name,
-                            })}
-                  </p>
                 </div>
 
                 {transcript && (
@@ -423,8 +391,10 @@ export default function VoiceCallDialog({
                   </div>
                 )}
 
-                {errorMsg && (
-                  <p className="text-xs text-red-500 mt-1 text-center">{errorMsg}</p>
+                {networkError && (
+                  <p className="text-xs text-center text-red-500 mt-2">
+                    {networkError}
+                  </p>
                 )}
               </div>
 
@@ -432,9 +402,11 @@ export default function VoiceCallDialog({
                 <Button
                   variant={isMicMuted ? "default" : "outline"}
                   size="icon"
-                  onClick={toggleMute}
+                  onClick={toggleMic}
                   className={`h-12 w-12 rounded-full ${
-                    isMicMuted ? "bg-red-500 hover:bg-red-600 text-white" : "border-gray-300 hover:bg-gray-50"
+                    isMicMuted
+                      ? "bg-red-500 hover:bg-red-600 text-white"
+                      : "border-gray-300 hover:bg-gray-50"
                   }`}
                 >
                   {isMicMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
