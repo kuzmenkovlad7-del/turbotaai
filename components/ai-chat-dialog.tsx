@@ -1,354 +1,132 @@
-"use client"
+// app/api/chat/route.ts
+import { NextResponse } from "next/server"
 
-import type React from "react"
-import { useState, useRef, useEffect, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { X, Send, Bot, User, Loader2, Globe } from "lucide-react"
-import { useLanguage } from "@/lib/i18n/language-context"
-import { useAuth } from "@/lib/auth/auth-context"
-
-interface Message {
-  id: string
-  content: string
-  sender: "user" | "ai"
-  timestamp: Date
-  language: string
+type ChatBody = {
+  query: string
+  language?: string
+  email?: string | null
+  mode?: "chat" | "voice" | "video" | string
 }
 
-interface AIChatDialogProps {
-  isOpen: boolean
-  onClose: () => void
-  onError?: (error: Error) => void
-}
+function buildSystemPrompt(language: string, mode?: string) {
+  const isVoice = mode === "voice" || mode === "voice_call"
+  const lang = language || "en"
 
-export default function AIChatDialog({ isOpen, onClose, onError }: AIChatDialogProps) {
-  const { t, currentLanguage } = useLanguage()
-  const { user } = useAuth()
-
-  const [messages, setMessages] = useState<Message[]>([])
-  const [inputValue, setInputValue] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [isTyping, setIsTyping] = useState(false)
-
-  const inputRef = useRef<HTMLInputElement>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [])
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages, scrollToBottom])
-
-  // Фокус при открытии
-  useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus()
-    }
-  }, [isOpen])
-
-  // Приветствие при первом открытии / смене языка
-  useEffect(() => {
-    if (!isOpen) return
-
-    if (messages.length === 0) {
-      const greetings: Record<string, string> = {
-        en: "Hello! I'm your AI psychologist. How can I help you today?",
-        ru: "Здравствуйте! Я ваш ИИ-психолог. Как я могу помочь вам сегодня?",
-        uk: "Вітаю! Я ваш ШІ-психолог. Як я можу допомогти вам сьогодні?",
-      }
-
-      const code = currentLanguage.code as "en" | "ru" | "uk"
-      const greeting = greetings[code] || greetings.en
-
-      setMessages([
-        {
-          id: "initial",
-          content: greeting,
-          sender: "ai",
-          timestamp: new Date(),
-          language: currentLanguage.code,
-        },
-      ])
-    }
-  }, [isOpen, messages.length, currentLanguage.code])
-
-  // Вызов нашего API `/api/chat`
-  const processMessage = useCallback(
-    async (message: string) => {
-      if (!message.trim()) return
-
-      setIsLoading(true)
-      setIsTyping(true)
-
-      try {
-        console.log(
-          `📤 Sending chat message in ${currentLanguage.name} (${currentLanguage.code}):`,
-          message,
-        )
-
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query: message,
-            language: currentLanguage.code,
-            email: user?.email || null,
-          }),
-        })
-
-        if (!res.ok) {
-          throw new Error(`Chat API error: ${res.status}`)
-        }
-
-        const data = await res.json()
-        const aiText: string =
-          (data && (data.text as string)) ||
-          t("I'm sorry, I couldn't process your message. Please try again.")
-
-        const aiMessage: Message = {
-          id: `${Date.now()}-ai`,
-          content: aiText,
-          sender: "ai",
-          timestamp: new Date(),
-          language: currentLanguage.code,
-        }
-
-        setMessages((prev) => [...prev, aiMessage])
-      } catch (error: any) {
-        console.error("Error processing chat message:", error)
-        const errorMessage = t("I'm sorry, I couldn't process your message. Please try again.")
-
-        const aiMessage: Message = {
-          id: `${Date.now()}-error`,
-          content: errorMessage,
-          sender: "ai",
-          timestamp: new Date(),
-          language: currentLanguage.code,
-        }
-
-        setMessages((prev) => [...prev, aiMessage])
-
-        if (onError) onError(error)
-      } finally {
-        setIsLoading(false)
-        setIsTyping(false)
-      }
-    },
-    [currentLanguage.code, currentLanguage.name, user?.email, t, onError],
-  )
-
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault()
-      if (!inputValue.trim() || isLoading) return
-
-      const trimmed = inputValue.trim()
-
-      const userMessage: Message = {
-        id: `${Date.now()}-user`,
-        content: trimmed,
-        sender: "user",
-        timestamp: new Date(),
-        language: currentLanguage.code,
-      }
-
-      setMessages((prev) => [...prev, userMessage])
-      setInputValue("")
-
-      await processMessage(trimmed)
-    },
-    [inputValue, isLoading, currentLanguage.code, processMessage],
-  )
-
-  const handleKeyPress = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault()
-        handleSubmit(e as any)
-      }
-    },
-    [handleSubmit],
-  )
-
-  const formatTime = useCallback(
-    (date: Date) =>
-      date.toLocaleTimeString(currentLanguage.code, {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    [currentLanguage.code],
-  )
-
-  if (!isOpen) return null
-
-  const guestLabels: Record<string, string> = {
-    en: "Guest (not signed in)",
-    ru: "Гость (без входа)",
-    uk: "Гість (без входу)",
+  if (lang.startsWith("ru")) {
+    return (
+      "Ты эмпатичный, спокойный ИИ-психолог сервиса MyITRA. " +
+      "Разговаривай с человеком как с живым клиентом: мягко, без осуждения, " +
+      "помогай прояснить чувства и следующие шаги. " +
+      "Никогда не ставь диагнозы и не давай медицинских рекомендаций. " +
+      "В опасных ситуациях говори, что нужно срочно обратиться к живому специалисту или в экстренные службы. " +
+      (isVoice
+        ? "Отвечай так, как будто говоришь голосом: 1–3 коротких предложения, простым языком."
+        : "Отвечай структурировано, но коротко: до 4–6 предложений, без лишней воды.")
+    )
   }
 
-  const userEmailDisplay = user?.email || guestLabels[currentLanguage.code] || guestLabels.en
+  if (lang.startsWith("uk")) {
+    return (
+      "Ти емпатичний, спокійний ШІ-психолог сервісу MyITRA. " +
+      "Спілкуйся з людиною як з живим клієнтом: мʼяко, без осуду, " +
+      "допомагай прояснити почуття та наступні кроки. " +
+      "Ніколи не став діагнози і не давай медичних рекомендацій. " +
+      "У небезпечних ситуаціях кажи, що потрібно негайно звернутися до живого спеціаліста або в екстрені служби. " +
+      (isVoice
+        ? "Відповідай так, ніби говориш голосом: 1–3 короткі речення, простою мовою."
+        : "Відповідай структуровано, але коротко: до 4–6 речень, без зайвої води.")
+    )
+  }
 
+  // EN default
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col h-[80vh] max-h-[600px] overflow-hidden">
-        {/* Header */}
-        <div className="p-4 border-b flex justify-between items-center bg-primary-600 text-white rounded-t-xl">
-          <div className="flex flex-col">
-            <h3 className="font-bold text-lg">{t("AI Psychologist Chat")}</h3>
-            <div className="text-xs text-slate-200">
-              {t("User")}: {userEmailDisplay}
-            </div>
-            <div className="text-xs text-slate-200 mt-1 flex items-center">
-              <Globe className="h-3 w-3 mr-1" />
-              {t("Language")}: {currentLanguage.name} {currentLanguage.flag}
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="text-white hover:bg-primary-700"
-          >
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-
-        {/* Subtitle */}
-        <div className="px-4 py-2 bg-slate-50 border-b">
-          <p className="text-sm text-slate-700 text-center">
-            {t("Chat communication in {{language}}", { language: currentLanguage.name })} •{" "}
-            {t("AI will understand and respond in this language")}
-          </p>
-        </div>
-
-        {/* Messages */}
-        <ScrollArea className="flex-1 p-4">
-          <div className="space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${
-                  message.sender === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`flex max-w-[80%] ${
-                    message.sender === "user" ? "flex-row-reverse" : "flex-row"
-                  } items-start space-x-2`}
-                >
-                  <div
-                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                      message.sender === "user"
-                        ? "bg-primary-600 text-white ml-2"
-                        : "bg-slate-200 text-slate-600 mr-2"
-                    }`}
-                  >
-                    {message.sender === "user" ? (
-                      <User className="h-4 w-4" />
-                    ) : (
-                      <Bot className="h-4 w-4" />
-                    )}
-                  </div>
-                  <div
-                    className={`rounded-lg px-4 py-2 ${
-                      message.sender === "user"
-                        ? "bg-primary-600 text-white"
-                        : "bg-slate-100 text-slate-900"
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                    <div className="flex items-center justify-between mt-1">
-                      <p
-                        className={`text-xs ${
-                          message.sender === "user"
-                            ? "text-primary-200"
-                            : "text-slate-500"
-                        }`}
-                      >
-                        {formatTime(message.timestamp)}
-                      </p>
-                      {message.language && (
-                        <span
-                          className={`text-xs ml-2 px-1 py-0.5 rounded ${
-                            message.sender === "user"
-                              ? "bg-primary-700 text-primary-200"
-                              : "bg-slate-200 text-slate-600"
-                          }`}
-                        >
-                          {message.language.toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {isTyping && (
-              <div className="flex justify-start">
-                <div className="flex items-start space-x-2">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center mr-2">
-                    <Bot className="h-4 w-4" />
-                  </div>
-                  <div className="bg-slate-100 rounded-lg px-4 py-2">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-pulse" />
-                      <div
-                        className="w-2 h-2 bg-slate-400 rounded-full animate-pulse"
-                        style={{ animationDelay: "0.2s" }}
-                      />
-                      <div
-                        className="w-2 h-2 bg-slate-400 rounded-full animate-pulse"
-                        style={{ animationDelay: "0.4s" }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-        </ScrollArea>
-
-        {/* Input */}
-        <div className="p-4 border-t bg-slate-50">
-          <form onSubmit={handleSubmit} className="flex space-x-2">
-            <Input
-              ref={inputRef}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder={t("Type your message in {{language}}...", {
-                language: currentLanguage.name,
-              })}
-              disabled={isLoading}
-              className="flex-1"
-            />
-            <Button
-              type="submit"
-              disabled={!inputValue.trim() || isLoading}
-              className="bg-primary-600 hover:bg-primary-700"
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
-          </form>
-          <p className="text-xs text-slate-500 mt-2 text-center">
-            {t("Press Enter to send • AI responds in {{language}}", {
-              language: currentLanguage.name,
-            })}
-          </p>
-        </div>
-      </div>
-    </div>
+    "You are an empathetic, calm AI-psychologist for the MyITRA service. " +
+    "Talk to the user like a real therapist: gently, without judgement, " +
+    "help them clarify feelings and next steps. " +
+    "Never give medical diagnoses or strict medical advice. " +
+    "If there is any risk of self-harm or danger, always tell them to immediately contact local emergency services or a real professional. " +
+    (isVoice
+      ? "Answer as if you are speaking out loud: 1–3 short sentences, simple language."
+      : "Answer in a compact, structured way: up to 4–6 sentences, no unnecessary fluff.")
   )
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = (await req.json()) as ChatBody
+    const { query, language = "en", email, mode = "chat" } = body
+
+    if (!query || typeof query !== "string") {
+      return NextResponse.json({ text: "" }, { status: 400 })
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) {
+      console.error("OPENAI_API_KEY is missing")
+      return NextResponse.json(
+        {
+          text:
+            "AI assistant is temporarily unavailable. Please try again a bit later.",
+        },
+        { status: 500 },
+      )
+    }
+
+    const systemPrompt = buildSystemPrompt(language, mode)
+
+    const payload = {
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...(email
+          ? [
+              {
+                role: "system" as const,
+                content: `User email (if provided): ${email}`,
+              },
+            ]
+          : []),
+        { role: "user", content: query },
+      ],
+      temperature: 0.8,
+      max_tokens: 600,
+    }
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "")
+      console.error("OpenAI error:", response.status, errText)
+      return NextResponse.json(
+        {
+          text:
+            "AI assistant is temporarily unavailable. Please try again later.",
+        },
+        { status: 500 },
+      )
+    }
+
+    const data = (await response.json()) as any
+    const text =
+      data?.choices?.[0]?.message?.content?.trim() ||
+      "I'm sorry, I couldn't process your message. Please try again."
+
+    return NextResponse.json({ text })
+  } catch (error) {
+    console.error("API /api/chat error:", error)
+    return NextResponse.json(
+      {
+        text:
+          "AI assistant is temporarily unavailable. Please try again later.",
+      },
+      { status: 500 },
+    )
+  }
 }
