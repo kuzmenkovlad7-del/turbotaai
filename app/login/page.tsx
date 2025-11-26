@@ -12,18 +12,17 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [message, setMessage] = useState<string | null>(null)
-  const { signInDemo, loading } = useAuth()
+  const { signInDemo, isLoading } = useAuth()
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Демо-логика: просто "логиним" по email в локальном сторе
     await signInDemo(email || "guest@demo.turbotaai.com")
     setMessage(
       "Зараз платформа працює в демо-режимі. Ви вже можете тестувати чат, дзвінки та відео без оплати."
     )
-    // Можно сразу вернуть на главную:
+
     setTimeout(() => router.push("/"), 800)
   }
 
@@ -89,7 +88,7 @@ export default function LoginPage() {
             </p>
           )}
 
-          <Button type="submit" disabled={loading} className="w-full bg-primary-600 hover:bg-primary-700">
+          <Button type="submit" disabled={isLoading} className="w-full bg-primary-600 hover:bg-primary-700">
             {mode === "signin" ? "Увійти (демо)" : "Зареєструватися (демо)"}
           </Button>
         </form>
