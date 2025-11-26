@@ -1,130 +1,149 @@
 "use client"
 
 import { useState } from "react"
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
-import { useToast } from "@/components/ui/use-toast"
 
-type ContactFormState = {
-  name: string
-  email: string
-  company: string
-  message: string
-}
-
-const initialState: ContactFormState = {
-  name: "",
-  email: "",
-  company: "",
-  message: "",
-}
+const CONTACT_WEBHOOK =
+  process.env.NEXT_PUBLIC_N8N_CONTACT_WEBHOOK_URL || ""
 
 export default function ContactForm() {
   const { t } = useLanguage()
-  const { toast } = useToast()
-  const [form, setForm] = useState<ContactFormState>(initialState)
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleChange =
-    (field: keyof ContactFormState) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const value = e.target.value
-      setForm((prev) => ({ ...prev, [field]: value }))
-    }
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
+  const [message, setMessage] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitting(true)
+    setError(null)
+    setSuccess(null)
+
+    if (!CONTACT_WEBHOOK) {
+      setError(
+        t(
+          "Contact form is temporarily unavailable. Webhook is not configured yet.",
+        ),
+      )
+      return
+    }
+
+    if (!email || !message) {
+      setError(t("Please fill in your email and message."))
+      return
+    }
+
+    setIsLoading(true)
 
     try {
-      const res = await fetch("/api/contact", {
+      const res = await fetch(CONTACT_WEBHOOK, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          message,
+        }),
       })
 
       if (!res.ok) {
-        throw new Error(await res.text())
+        throw new Error("Failed to send")
       }
 
-      toast({
-        title: t("Message sent"),
-        description: t("We will get back to you as soon as possible."),
-      })
-
-      setForm(initialState)
-    } catch (error) {
-      console.error(error)
-      toast({
-        variant: "destructive",
-        title: t("Failed to send message"),
-        description: t("Please try again in a few minutes."),
-      })
+      setSuccess(
+        t(
+          "Your message has been sent. We will reply to you as soon as possible.",
+        ),
+      )
+      setName("")
+      setEmail("")
+      setMessage("")
+    } catch (err) {
+      console.error("Contact form error:", err)
+      setError(
+        t(
+          "Something went wrong while sending the message. Please try again a bit later.",
+        ),
+      )
     } finally {
-      setIsSubmitting(false)
+      setIsLoading(false)
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            {t("Your name")}
-          </label>
-          <Input
-            value={form.name}
-            onChange={handleChange("name")}
-            placeholder={t("How can we address you?")}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            {t("Company (optional)")}
-          </label>
-          <Input
-            value={form.company}
-            onChange={handleChange("company")}
-            placeholder={t("Clinic, practice or project name")}
-          />
-        </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-slate-800">
+          {t("Your name")}
+        </label>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={t("How can we address you?")}
+        />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium mb-1">
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-slate-800">
           {t("Your email")}
         </label>
         <Input
           type="email"
           required
-          value={form.email}
-          onChange={handleChange("email")}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium mb-1">
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-slate-800">
           {t("Your message")}
         </label>
         <Textarea
           required
-          rows={4}
-          value={form.message}
-          onChange={handleChange("message")}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
           placeholder={t("Briefly describe your request or idea.")}
+          rows={5}
         />
       </div>
 
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <p>{error}</p>
+        </div>
+      )}
+
+      {success && (
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <p>{success}</p>
+        </div>
+      )}
+
       <Button
         type="submit"
-        disabled={isSubmitting}
-        className="w-full md:w-auto bg-primary-600 hover:bg-primary-700"
+        disabled={isLoading}
+        className="mt-2 w-full h-11 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 shadow-md shadow-primary-500/30 disabled:opacity-70 disabled:cursor-not-allowed"
       >
-        {isSubmitting ? t("Sending...") : t("Send message")}
+        {isLoading ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {t("Sending...")}
+          </span>
+        ) : (
+          t("Send message")
+        )}
       </Button>
     </form>
   )
