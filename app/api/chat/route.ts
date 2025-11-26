@@ -1,91 +1,72 @@
 // app/api/chat/route.ts
 import { NextResponse } from "next/server"
+import OpenAI from "openai"
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+})
+
+const BASE_SYSTEM_PROMPT = `
+You are TurbotaAI, an empathetic AI-psychologist assistant for an online mental health platform.
+
+Your goals:
+- Provide short, clear, supportive responses.
+- Always first clarify the situation with questions, then give recommendations.
+- Never give 20 советов сразу. 2–3 конкретных шага максимум.
+- If the user is in crisis (suicidal, self-harm, acute psychosis) — gently recommend обратиться к живому специалисту/службам помощи.
+- Adapt your style for women 30–50 with stress, anxiety, emotional burnout, loneliness; also teens 12–18 (soft, careful tone).
+
+Language rules:
+- Always answer in the language specified by the "language" field (uk, ru, en, etc.).
+- For Ukrainian and Russian — обращайся на "Вы".
+- Keep phrases short, without water, but emotionally warm.
+
+Conversation format:
+- 1–3 уточняющих вопроса в начале ("Что сейчас беспокоит больше всего?", "Что вы чувствуете в теле?" и т.п.)
+- затем короткое упражнение или практика (дыхание, grounding, дневник эмоций)
+- затем мягкая рекомендация, что делать дальше (например, вести дневник, повторить упражнение, обсудить с близким/специалистом)
+`
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}))
+    const { query, language, email } = await req.json()
 
-    const {
-      query,
-      language = "en",
-      email = null,
-      channel = "chat", // "chat" или "voice"
-    } = body as {
-      query?: string
-      language?: string
-      email?: string | null
-      channel?: "chat" | "voice"
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { text: "Сервіс тимчасово недоступний: не налаштовано ключ OpenAI." },
+        { status: 500 }
+      )
     }
 
     if (!query || typeof query !== "string") {
-      return NextResponse.json(
-        { ok: false, error: "No query provided" },
-        { status: 400 },
-      )
+      return NextResponse.json({ text: "Будь ласка, напишіть повідомлення." }, { status: 400 })
     }
 
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      console.error("OPENAI_API_KEY is not set")
-      return NextResponse.json(
-        { ok: false, error: "Server config error" },
-        { status: 500 },
-      )
-    }
+    const langCode = typeof language === "string" && language.length <= 5 ? language : "uk"
 
-    const lang = (language || "en").toLowerCase()
+    const system = `${BASE_SYSTEM_PROMPT}\nCurrent UI language code: ${langCode}.\nUser email (may be null): ${
+      email ?? "guest"
+    }`
 
-    const systemPrompt = `
-You are a gentle, trauma-informed AI psychologist called TurbotaAI.
-
-Your task:
-- Speak in the user's language: ${lang}.
-- Be calm, supportive and non-judgemental.
-- Give short, clear answers (3–6 sentences), without lists and markdown.
-- Do NOT give medical diagnoses or medications. 
-- If user is in danger or talks about suicide, gently recommend contacting local emergency services or crisis hotline.
-
-User e-mail (if known): ${email ?? "unknown"}.
-Channel: ${channel}.
-`
-
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: query },
-        ],
-        temperature: 0.8,
-        max_tokens: 600,
-      }),
+    const completion = await client.chat.completions.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: query },
+      ],
     })
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => "")
-      console.error("OpenAI error:", response.status, text)
-      return NextResponse.json(
-        { ok: false, error: "OpenAI request failed" },
-        { status: 500 },
-      )
-    }
+    const text =
+      completion.choices[0]?.message?.content ||
+      "Вибачте, зараз не вдалося обробити запит. Спробуйте, будь ласка, ще раз."
 
-    const data = await response.json()
-    const text: string =
-      data?.choices?.[0]?.message?.content?.trim() ||
-      "I'm sorry, I couldn't generate a response. Please try again."
-
-    return NextResponse.json({ ok: true, text })
+    return NextResponse.json({ text })
   } catch (error) {
     console.error("Chat API error:", error)
     return NextResponse.json(
-      { ok: false, error: "Internal server error" },
-      { status: 500 },
+      { text: "Вибачте, трапилась помилка. Будь ласка, спробуйте ще раз пізніше." },
+      { status: 500 }
     )
   }
 }
