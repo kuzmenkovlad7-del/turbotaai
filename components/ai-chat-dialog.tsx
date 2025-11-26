@@ -99,3 +99,134 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
       const assistantMessage: ChatMessage = {
         id: `${Date.now()}-assistant`,
         role: "assistant",
+        text: answer,
+      }
+
+      setMessages((prev) => [...prev, assistantMessage])
+    } catch (err) {
+      console.error("Chat error:", err)
+      setError(
+        t(
+          "AI assistant is temporarily unavailable. Please try again a bit later.",
+        ),
+      )
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    void sendMessage()
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-xl border-none bg-transparent p-0">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-b from-indigo-600/10 via-white to-slate-50 shadow-2xl">
+          <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
+                    <Sparkles className="h-4 w-4" />
+                  </span>
+                  {t("Chat with AI-psychologist")}
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs text-indigo-100">
+                  {t(
+                    "Describe what is happening in your own words. The assistant will answer in a few short, structured messages.",
+                  )}
+                </DialogDescription>
+              </div>
+
+              <div className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium text-indigo-50">
+                {APP_NAME} · {t("Assistant online")}
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="flex h-[430px] flex-col">
+            <ScrollArea className="flex-1 px-5 pt-4 pb-2">
+              <div ref={scrollRef} className="max-h-full space-y-3 pr-1">
+                {messages.length === 0 && (
+                  <div className="rounded-2xl bg-indigo-50/60 px-3 py-3 text-xs text-slate-700">
+                    <p className="font-medium text-slate-900">
+                      {t("How to start")}
+                    </p>
+                    <p className="mt-1">
+                      {t(
+                        "You can start with one sentence: for example, 'I feel anxious and can't sleep', 'I can't concentrate', or 'I don't know what to do in a relationship'.",
+                      )}
+                    </p>
+                  </div>
+                )}
+
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${
+                      msg.role === "user" ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs md:text-sm ${
+                        msg.role === "user"
+                          ? "rounded-br-sm bg-slate-900 text-white shadow-sm"
+                          : "rounded-bl-sm bg-white/90 text-slate-900 shadow-sm ring-1 ring-slate-100"
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+
+            {error && (
+              <div className="px-5 pb-1 text-xs text-red-600">{error}</div>
+            )}
+
+            <form onSubmit={handleSubmit} className="border-t border-slate-100">
+              <div className="space-y-2 px-5 py-3">
+                <Textarea
+                  rows={2}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={t("Write here what is happening to you...")}
+                  className="resize-none text-sm"
+                />
+
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] text-slate-400">
+                    {t(
+                      "In crisis situations, please contact local emergency services immediately.",
+                    )}
+                  </p>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={isSending || !input.trim()}
+                    className="h-8 rounded-full bg-indigo-600 px-4 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-70"
+                  >
+                    {isSending ? (
+                      <>
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        {t("Sending")}
+                      </>
+                    ) : (
+                      <>
+                        {t("Send")}
+                        <Send className="ml-1 h-3 w-3" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
