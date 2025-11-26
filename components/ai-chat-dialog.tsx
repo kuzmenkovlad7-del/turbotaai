@@ -123,7 +123,7 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-xl border-none bg-transparent p-0">
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-b from-indigo-600/10 via-white to-slate-50 shadow-2xl">
+        <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/10">
           <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -146,11 +146,11 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
             </div>
           </DialogHeader>
 
-          <div className="flex h-[430px] flex-col">
+          <div className="flex h-[500px] flex-col md:h-[540px]">
             <ScrollArea className="flex-1 px-5 pt-4 pb-2">
               <div ref={scrollRef} className="max-h-full space-y-3 pr-1">
                 {messages.length === 0 && (
-                  <div className="rounded-2xl bg-indigo-50/60 px-3 py-3 text-xs text-slate-700">
+                  <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-xs text-slate-700">
                     <p className="font-medium text-slate-900">
                       {t("How to start")}
                     </p>
@@ -173,7 +173,7 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
                       className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs md:text-sm ${
                         msg.role === "user"
                           ? "rounded-br-sm bg-slate-900 text-white shadow-sm"
-                          : "rounded-bl-sm bg-white/90 text-slate-900 shadow-sm ring-1 ring-slate-100"
+                          : "rounded-bl-sm bg-slate-50 text-slate-900 shadow-sm"
                       }`}
                     >
                       {msg.text}
