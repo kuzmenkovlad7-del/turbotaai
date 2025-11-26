@@ -1,22 +1,11 @@
-// myitra-assistant-core/lib/app-config.ts
+// lib/app-config.ts
+export const APP_NAME = "TurbotaAI"
 
-export const SITE_NAME = 'TurbotaAI'
+export const APP_SUPPORT_EMAIL = "support@turbotaai.com"
 
-// основной e-mail проекта
-export const SUPPORT_EMAIL = 'support@turbotaai.com'
-
-// язык по умолчанию
-export const DEFAULT_LOCALE = 'uk' as const
-
-export const CONTACT_EMAIL_TO =
-  process.env.MAIL_TO || SUPPORT_EMAIL
-
-export const CONTACT_EMAIL_FROM =
-  process.env.MAIL_FROM || `TurbotaAI <${SUPPORT_EMAIL}>`
-
-// сюда можно будет добавлять настройки тарифов, ссылок и т.п.
-export const APP_LINKS = {
-  privacy: '/privacy-policy',
-  terms: '/terms-of-use',
-  contacts: '/contacts',
+// если захочешь централизовать соцсети:
+export const APP_SOCIAL = {
+  instagram: "https://instagram.com/turbotaai",
+  facebook: "https://facebook.com/turbotaai",
+  github: "https://github.com/turbotaai",
 }
