@@ -1,10 +1,10 @@
-# Myitra Platform (Assistant Core)
+# TurbotaAI Platform (Assistant Core)
 
-Next.js + Tailwind + shadcn-based frontend for Myitra AI assistant with multilingual support.
+Next.js + Tailwind + shadcn-based frontend for TurbotaAI assistant with multilingual support.
 
 ## Overview
 
-This is the core frontend application for the Myitra AI assistant platform. It provides voice, video, and text-based interaction capabilities with AI psychologists, featuring comprehensive multilingual support across Ukrainian, English, and Russian languages.
+This is the core frontend application for the TurbotaAI assistant platform. It provides voice, video, and text-based interaction capabilities with AI psychologists, featuring comprehensive multilingual support across Ukrainian, English, and Russian languages.
 
 ## Tech Stack
 
