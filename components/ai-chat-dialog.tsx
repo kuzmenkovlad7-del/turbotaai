@@ -79,7 +79,7 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: text,
-          language: currentLanguage || "uk",
+          language: currentLanguage?.code || "uk",
           email: user?.email ?? null,
           mode: "chat",
         }),
