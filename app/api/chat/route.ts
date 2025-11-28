@@ -6,6 +6,7 @@ type ChatBody = {
   language?: string
   email?: string | null
   mode?: "chat" | "voice" | "video" | string
+  characterId?: string | null // добавили
 }
 
 function buildSystemPrompt(language: string, mode?: string) {
