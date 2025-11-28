@@ -19,7 +19,7 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // Myitra brand colors - psychological blue + soft purple (no green)
+        // TurbotaAI brand colors - psychological blue + soft purple (no green)
         primary: {
           50: "#eff6ff",
           100: "#dbeafe",
