@@ -4,9 +4,9 @@ import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
 export const metadata: Metadata = {
-  title: "About MyITRA",
+  title: "About TurbotaAI",
   description:
-    "Why MyITRA exists, who it helps and how the AI-psychologist works behind the scenes.",
+    "Why TurbotaAI exists, who it helps and how the AI-psychologist works behind the scenes.",
 }
 
 export default function AboutPage() {
@@ -19,10 +19,10 @@ export default function AboutPage() {
             About the product
           </p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
-            MyITRA — AI-psychologist that stays nearby when it feels hard
+            TurbotaAI — AI-psychologist that stays nearby when it feels hard
           </h1>
           <p className="mt-4 max-w-2xl text-sm text-slate-600 md:text-base">
-            MyITRA is a digital assistant built on psychological literature and
+            TurbotaAI is a digital assistant built on psychological literature and
             modern AI. It does not replace a live therapist, but gives gentle,
             structured support when it is difficult to reach someone or when you
             need to talk right now — in chat, voice or video.
