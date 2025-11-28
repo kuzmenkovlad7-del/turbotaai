@@ -15,13 +15,6 @@ import { useLanguage } from "@/lib/i18n/language-context"
 import { ShineBorder } from "@/components/ui/shine-border"
 import { RainbowButton } from "@/components/ui/rainbow-button"
 
-const CHAT_WEBHOOK =
-  process.env.NEXT_PUBLIC_N8N_CHAT_WEBHOOK_URL || ""
-const VOICE_WEBHOOK =
-  process.env.NEXT_PUBLIC_N8N_VOICE_WEBHOOK_URL || ""
-const VIDEO_WEBHOOK =
-  process.env.NEXT_PUBLIC_N8N_VIDEO_WEBHOOK_URL || ""
-
 export default function Home() {
   const { t } = useLanguage()
 
@@ -29,28 +22,13 @@ export default function Home() {
   const [isVoiceCallOpen, setIsVoiceCallOpen] = useState(false)
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false)
 
+  // ❌ Больше НЕ проверяем никакие webhook'и — открываем модалки сразу
   const openChat = () => {
-    if (!CHAT_WEBHOOK) {
-      alert(
-        t(
-          "Chat assistant is temporarily unavailable. Webhook is not configured yet.",
-        ),
-      )
-      return
-    }
     setIsChatOpen(true)
   }
 
   const openVoice = () => {
-    if (!VOICE_WEBHOOK) {
-      alert(
-        t(
-          "Voice assistant is temporarily unavailable. Webhook is not configured yet.",
-        ),
-      )
-      return
-    }
-
+    // Оставляем только предупреждение про поддержку браузера
     if (
       typeof window !== "undefined" &&
       // @ts-ignore
@@ -70,15 +48,6 @@ export default function Home() {
   }
 
   const openVideo = () => {
-    if (!VIDEO_WEBHOOK) {
-      alert(
-        t(
-          "Video assistant is temporarily unavailable. Webhook is not configured yet.",
-        ),
-      )
-      return
-    }
-
     if (typeof window !== "undefined" && !navigator.mediaDevices) {
       alert(
         t(
@@ -201,20 +170,15 @@ export default function Home() {
       <AIChatDialog
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
-        webhookUrl={CHAT_WEBHOOK}
       />
 
       <VoiceCallDialog
         isOpen={isVoiceCallOpen}
         onClose={() => setIsVoiceCallOpen(false)}
-        webhookUrl={VOICE_WEBHOOK}
-        openAiApiKey="" // OpenAI в n8n
         onError={(error) => {
           console.error("Voice call error:", error)
           alert(
-            t(
-              "There was an issue with the voice call. Please try again.",
-            ),
+            t("There was an issue with the voice call. Please try again."),
           )
           setIsVoiceCallOpen(false)
         }}
@@ -223,14 +187,10 @@ export default function Home() {
       <VideoCallDialog
         isOpen={isVideoCallOpen}
         onClose={() => setIsVideoCallOpen(false)}
-        webhookUrl={VIDEO_WEBHOOK}
-        openAiApiKey="" // OpenAI в n8n
         onError={(error) => {
           console.error("Video call error:", error)
           alert(
-            t(
-              "There was an issue with the video call. Please try again.",
-            ),
+            t("There was an issue with the video call. Please try again."),
           )
           setIsVideoCallOpen(false)
         }}
