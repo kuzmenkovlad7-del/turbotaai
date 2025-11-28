@@ -14,7 +14,7 @@ body {
 
 @layer base {
   :root {
-    /* Myitra production design system - indigo-violet */
+    /* TurbotaAI production design system - indigo-violet */
     --background: 0 0% 100%; /* Pure white #FFFFFF */
     --foreground: 222 47% 11%; /* Near-black text #0F172A */
     --card: 0 0% 100%; /* White cards */
