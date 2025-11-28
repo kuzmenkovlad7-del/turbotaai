@@ -71,7 +71,7 @@ export default function PrivacyPolicyPage() {
                 <li><strong>Objection:</strong> Object to certain types of data processing</li>
                 <li><strong>Restriction:</strong> Request restriction of processing in specific circumstances</li>
               </ul>
-              <p className="mt-4">To exercise any of these rights, please contact us at privacy@myitra.com. We will respond to your request within 30 days.</p>
+              <p className="mt-4">To exercise any of these rights, please contact us at support@turbotaai.com. We will respond to your request within 30 days.</p>
             </div>
           </section>
 
