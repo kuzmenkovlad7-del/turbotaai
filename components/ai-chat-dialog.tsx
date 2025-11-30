@@ -20,7 +20,7 @@ import { APP_NAME } from "@/lib/app-config"
 type Props = {
   isOpen: boolean
   onClose: () => void
-  /** URL вебхука Workflow-агента; если не передан – используем /api/chat как резерв */
+  /** URL вебхука Workflow-агента; если не передан – используем ENV или /api/chat */
   webhookUrl?: string
 }
 
@@ -41,7 +41,6 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
-  // Сброс при закрытии
   useEffect(() => {
     if (!isOpen) {
       setMessages([])
@@ -51,59 +50,27 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
     }
   }, [isOpen])
 
-  // Автоскролл вниз
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages])
 
-  const extractAnswerText = (raw: any): string => {
-    if (!raw) return ""
-
-    // 1) Строка напрямую
-    if (typeof raw === "string") return raw
-
-    // 2) Массив (часто так возвращает n8n)
-    if (Array.isArray(raw) && raw.length > 0) {
-      const first = raw[0]
-      if (typeof first === "string") return first
-
-      if (first && typeof first === "object") {
-        return (
-          first.text ||
-          first.response ||
-          first.message ||
-          first.output ||
-          first.content ||
-          first.result ||
-          JSON.stringify(first)
-        )
-      }
-    }
-
-    // 3) Объект
-    if (raw && typeof raw === "object") {
-      return (
-        raw.text ||
-        raw.response ||
-        raw.message ||
-        raw.output ||
-        raw.content ||
-        raw.result ||
-        JSON.stringify(raw)
-      )
-    }
-
-    return ""
-  }
-
   const sendMessage = async () => {
     const text = input.trim()
     if (!text || isSending) return
 
-    // основной источник – вебхук агента, запасной – /api/chat
-    const url = (webhookUrl && webhookUrl.trim()) || "/api/chat"
+    // 1) пробуем взять URL из ENV (главный источник)
+    const envWebhookUrl =
+      process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL ||
+      process.env.NEXT_PUBLIC_NBN_CONTACT_WEBHOOK_URL ||
+      ""
+
+    // 2) если ENV есть – используем его, потом проп, потом уже /api/chat
+    const url =
+      (envWebhookUrl && envWebhookUrl.trim()) ||
+      (webhookUrl && webhookUrl.trim()) ||
+      "/api/chat"
 
     setError(null)
     setIsSending(true)
@@ -123,47 +90,28 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
     setMessages((prev) => [...prev, userMessage])
 
     try {
-      const payload = {
-        query: text,
-        language: langCode,
-        email: user?.email ?? null,
-        mode: "chat", // просто метка, backend может игнорировать
-      }
-
       const res = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: text,
+          language: langCode,
+          email: user?.email ?? null,
+          mode: "chat",
+          source: "turbota_site_chat",
+        }),
       })
 
       if (!res.ok) {
         throw new Error(`Request failed with status ${res.status}`)
       }
 
-      const contentType = res.headers.get("content-type") || ""
-      let rawData: any
-
-      if (contentType.includes("application/json")) {
-        rawData = await res.json()
-      } else {
-        const rawText = await res.text()
-        try {
-          rawData = JSON.parse(rawText)
-        } catch {
-          rawData = { response: rawText }
-        }
-      }
-
-      let answer = extractAnswerText(rawData)
-
-      if (!answer || !answer.trim()) {
-        answer = t(
+      const data = (await res.json()) as { text?: string }
+      const answer =
+        data?.text ||
+        t(
           "I'm sorry, I couldn't process your message. Please try again.",
         )
-      }
 
       const assistantMessage: ChatMessage = {
         id: `${Date.now()}-assistant`,
