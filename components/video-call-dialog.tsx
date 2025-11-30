@@ -108,8 +108,7 @@ const defaultCharacter: AICharacter = {
 export default function VideoCallDialog({
   isOpen,
   onClose,
-  webhookUrl = "",
-  openAiApiKey, // пока не используем, но пусть лежит
+  openAiApiKey,
 }: VideoCallDialogProps) {
   const { t, currentLanguage } = useLanguage()
   const { user } = useAuth()
