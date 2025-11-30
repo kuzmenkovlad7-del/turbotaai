@@ -28,6 +28,7 @@ import { APP_NAME } from "@/lib/app-config"
 
 const VIDEO_CALL_GOOGLE_TTS_CREDENTIALS: any = {}
 
+// можно расширять под другие языки позже
 const VIDEO_CALL_VOICE_CONFIGS = {
   uk: {
     female: {
@@ -102,11 +103,29 @@ const defaultCharacter: AICharacter = {
 export default function VideoCallDialog({
   isOpen,
   onClose,
-  webhookUrl,
-  openAiApiKey, // пока не используем
+  webhookUrl = "",
+  openAiApiKey, // пока не используем, но пусть лежит
 }: VideoCallDialogProps) {
   const { t, currentLanguage } = useLanguage()
   const { user } = useAuth()
+
+  // безопасный язык, чтобы не было "undefined"
+  const activeLanguage =
+    currentLanguage || ({ code: "en", name: "English", flag: "🇺🇸" } as any)
+
+  const languageDisplayName =
+    activeLanguage.name ||
+    (activeLanguage.code === "uk"
+      ? "Ukrainian"
+      : activeLanguage.code === "ru"
+      ? "Russian"
+      : "English")
+
+  const resolvedWebhookUrl =
+    webhookUrl ||
+    process.env.NEXT_PUBLIC_TURBOTA_AI_VIDEO_ASSISTANT_WEBHOOK_URL ||
+    process.env.NEXT_PUBLIC_TURBOTA_AI_WORKFLOW_ASSISTANT_WEBHOOK_URL ||
+    ""
 
   const [selectedCharacter] = useState<AICharacter>(defaultCharacter)
   const [isCallActive, setIsCallActive] = useState(false)
@@ -134,7 +153,7 @@ export default function VideoCallDialog({
   const [currentVideoState, setCurrentVideoState] =
     useState<"idle" | "speaking">("idle")
 
-  const recognitionRef = useRef<any | null>(null)
+  const recognitionRef = useRef<any>(null)
   const userVideoRef = useRef<HTMLVideoElement | null>(null)
   const idleVideoRef = useRef<HTMLVideoElement | null>(null)
   const speakingVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -149,158 +168,19 @@ export default function VideoCallDialog({
 
   const isMicMutedRef = useRef(isMicMuted)
   const isCallActiveRef = useRef(isCallActive)
+  const suppressRecognitionRef = useRef(false)
   const isProcessingRef = useRef(false)
-  const isRecognitionActiveRef = useRef(false)
-  const isAiSpeakingRef = useRef(false)
 
   const [audioInitialized, setAudioInitialized] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
 
-  const currentLocale = getLocaleForLanguage(currentLanguage.code)
+  const startSpeechRecognitionRef = useRef<() => void | null>(null)
+
+  const currentLocale = getLocaleForLanguage(activeLanguage.code)
   const nativeVoicePreferences = getNativeVoicePreferences()
 
   const hasEnhancedVideo =
     !!selectedCharacter?.idleVideo && !!selectedCharacter?.speakingVideoNew
-
-  // ---------- управление распознаванием речи (как в voice-диалоге) ----------
-
-  function hardStopRecognition() {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop()
-      } catch (e) {
-        console.error(e)
-      }
-    }
-    isRecognitionActiveRef.current = false
-    setIsListening(false)
-    setInterimTranscript("")
-  }
-
-  function ensureRecognitionRunning() {
-    if (typeof window === "undefined") return
-
-    const shouldListen =
-      isCallActiveRef.current &&
-      !isMicMutedRef.current &&
-      !isAiSpeakingRef.current
-
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-
-    if (!shouldListen) {
-      if (recognitionRef.current && isRecognitionActiveRef.current) {
-        try {
-          recognitionRef.current.stop()
-        } catch (e) {
-          console.error(e)
-        }
-      }
-      isRecognitionActiveRef.current = false
-      setIsListening(false)
-      return
-    }
-
-    if (!SR) {
-      setSpeechError(
-        t(
-          "Your browser does not support voice recognition. Please use Chrome or another modern browser.",
-        ),
-      )
-      return
-    }
-
-    let recognition = recognitionRef.current
-
-    if (!recognition) {
-      recognition = new SR()
-      recognition.continuous = true
-      recognition.interimResults = true
-      recognition.maxAlternatives = 3
-      recognitionRef.current = recognition
-
-      recognition.onstart = () => {
-        isRecognitionActiveRef.current = true
-        setIsListening(true)
-        setActivityStatus("listening")
-        setSpeechError(null)
-      }
-
-      recognition.onerror = (event: any) => {
-        console.error("Video speech recognition error", event)
-        if (event?.error === "no-speech") return
-        if (event?.error === "not-allowed") {
-          setSpeechError(
-            t(
-              "Microphone access was blocked. Please allow access in your browser settings.",
-            ),
-          )
-          return
-        }
-        setSpeechError(
-          t(
-            "Error while listening. Please check your microphone and try again.",
-          ),
-        )
-      }
-
-      recognition.onend = () => {
-        isRecognitionActiveRef.current = false
-        setIsListening(false)
-        setInterimTranscript("")
-
-        const stillShouldListen =
-          isCallActiveRef.current &&
-          !isMicMutedRef.current &&
-          !isAiSpeakingRef.current
-
-        if (stillShouldListen) {
-          setTimeout(() => {
-            ensureRecognitionRunning()
-          }, 300)
-        }
-      }
-
-      recognition.onresult = (event: any) => {
-        if (!isCallActiveRef.current || isMicMutedRef.current) return
-        if (isAiSpeakingRef.current || isVoicingRef.current) return
-
-        const lastResult = event.results[event.results.length - 1]
-        if (!lastResult) return
-
-        const transcriptText = lastResult[0]?.transcript?.trim()
-        if (!transcriptText) return
-
-        if (lastResult.isFinal) {
-          setInterimTranscript("")
-          setTranscript((prev) =>
-            prev ? `${prev} ${transcriptText}` : transcriptText,
-          )
-          processTranscriptionRef.current?.(transcriptText)
-        } else {
-          setInterimTranscript(transcriptText)
-        }
-      }
-    }
-
-    recognition.lang = currentLocale
-
-    if (!isRecognitionActiveRef.current) {
-      try {
-        recognition.start()
-      } catch (e: any) {
-        if (e?.name !== "InvalidStateError") {
-          console.error("Cannot start video recognition", e)
-          setSpeechError(
-            t(
-              "Could not start microphone. Please check permissions and try again.",
-            ),
-          )
-        }
-      }
-    }
-  }
-
-  // ----- утилиты TTS / текста -----
 
   const cleanResponseText = useCallback((text: string) => {
     if (!text) return ""
@@ -384,6 +264,194 @@ export default function VideoCallDialog({
     [nativeVoicePreferences],
   )
 
+  const startSpeechRecognition = useCallback(() => {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) return
+
+    const recognitionInstance = new SpeechRecognition()
+    recognitionInstance.continuous = true
+    recognitionInstance.interimResults = true
+    recognitionInstance.maxAlternatives = 3
+    recognitionInstance.lang = currentLocale
+
+    let finalTranscriptBuffer = ""
+    let silenceTimeout: NodeJS.Timeout | null = null
+
+    recognitionInstance.onstart = () => {
+      setIsListening(true)
+      setActivityStatus("listening")
+    }
+
+    recognitionInstance.onresult = async (event: any) => {
+      let currentInterimTranscript = ""
+      let hasNewFinalResult = false
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i]
+        const transcriptChunk = result[0].transcript.trim()
+        const confidence = result[0].confidence || 0.5
+
+        if (result.isFinal && transcriptChunk && confidence > 0.3) {
+          finalTranscriptBuffer += transcriptChunk + " "
+          hasNewFinalResult = true
+        } else if (transcriptChunk) {
+          currentInterimTranscript += transcriptChunk
+        }
+      }
+
+      if (currentInterimTranscript) {
+        setInterimTranscript(currentInterimTranscript)
+      }
+
+      if (silenceTimeout) clearTimeout(silenceTimeout)
+
+      silenceTimeout = setTimeout(() => {
+        if (finalTranscriptBuffer.trim().length > 2) {
+          const textToProcess = finalTranscriptBuffer.trim()
+
+          if (
+            textToProcess !== lastProcessedText &&
+            !isProcessingRef.current &&
+            !isAiSpeaking &&
+            !isVoicingRef.current
+          ) {
+            finalTranscriptBuffer = ""
+            setInterimTranscript("")
+            setIsWaitingForUser(false)
+
+            setTranscript((prev) =>
+              prev ? `${prev} ${textToProcess}` : textToProcess,
+            )
+
+            processTranscriptionRef.current?.(textToProcess)
+          } else {
+            finalTranscriptBuffer = ""
+          }
+        }
+      }, 1500)
+
+      if (hasNewFinalResult && finalTranscriptBuffer.trim().length > 2) {
+        const textToProcess = finalTranscriptBuffer.trim()
+
+        if (
+          textToProcess !== lastProcessedText &&
+          !isProcessingRef.current &&
+          !isAiSpeaking &&
+          !isVoicingRef.current
+        ) {
+          finalTranscriptBuffer = ""
+          setInterimTranscript("")
+          setIsWaitingForUser(false)
+
+          setTranscript((prev) =>
+            prev ? `${prev} ${textToProcess}` : textToProcess,
+          )
+
+          processTranscriptionRef.current?.(textToProcess)
+        } else {
+          finalTranscriptBuffer = ""
+        }
+      }
+    }
+
+    recognitionInstance.onerror = (event: any) => {
+      if (
+        event.error === "no-speech" ||
+        event.error === "aborted" ||
+        event.error === "audio-capture" ||
+        event.error === "not-allowed"
+      ) {
+        return
+      }
+
+      if (event.error === "language-not-supported") {
+        recognitionInstance.lang = "en-US"
+        setTimeout(() => {
+          try {
+            recognitionInstance.start()
+          } catch {}
+        }, 1000)
+        return
+      }
+
+      if (
+        event.error === "network" &&
+        isCallActiveRef.current &&
+        !isMicMutedRef.current
+      ) {
+        setTimeout(() => {
+          try {
+            recognitionInstance.start()
+          } catch {}
+        }, 2000)
+      }
+    }
+
+    recognitionInstance.onend = () => {
+      if (silenceTimeout) clearTimeout(silenceTimeout)
+
+      if (
+        isCallActiveRef.current &&
+        !isMicMutedRef.current &&
+        !suppressRecognitionRef.current
+      ) {
+        try {
+          recognitionInstance.start()
+          setIsListening(true)
+        } catch {
+          setTimeout(() => {
+            if (
+              isCallActiveRef.current &&
+              !isMicMutedRef.current &&
+              !suppressRecognitionRef.current
+            ) {
+              try {
+                recognitionInstance.start()
+                setIsListening(true)
+              } catch {}
+            }
+          }, 100)
+        }
+      } else {
+        setIsListening(false)
+      }
+    }
+
+    try {
+      recognitionInstance.start()
+
+      recognitionRef.current = {
+        stop: () => {
+          try {
+            if (silenceTimeout) clearTimeout(silenceTimeout)
+            recognitionInstance.stop()
+          } catch {}
+        },
+        start: () => {
+          try {
+            recognitionInstance.start()
+          } catch {}
+        },
+      }
+      startSpeechRecognitionRef.current = recognitionRef.current.start
+    } catch (error) {
+      console.log("Error starting recognition:", error)
+    }
+  }, [currentLocale, lastProcessedText, isAiSpeaking])
+
+  useEffect(() => {
+    startSpeechRecognitionRef.current = startSpeechRecognition
+  }, [startSpeechRecognition])
+
+  useEffect(() => {
+    isMicMutedRef.current = isMicMuted
+  }, [isMicMuted])
+
+  useEffect(() => {
+    isCallActiveRef.current = isCallActive
+  }, [isCallActive])
+
   const fallbackToBrowserTTS = useCallback(
     (cleanText: string, gender: "male" | "female", cleanup: () => void) => {
       if (!window.speechSynthesis) {
@@ -413,13 +481,13 @@ export default function VideoCallDialog({
           utterance.lang = currentLocale
 
           const selectedVoice = getRefinedVoiceForLanguage(
-            currentLanguage.code,
+            activeLanguage.code,
             gender,
           )
           if (selectedVoice) utterance.voice = selectedVoice
 
           const speechParameters = getNativeSpeechParameters(
-            currentLanguage.code,
+            activeLanguage.code,
             gender,
           )
           utterance.rate = speechParameters.rate
@@ -439,7 +507,7 @@ export default function VideoCallDialog({
     },
     [
       currentLocale,
-      currentLanguage.code,
+      activeLanguage.code,
       hasEnhancedVideo,
       selectedCharacter,
       getRefinedVoiceForLanguage,
@@ -452,12 +520,16 @@ export default function VideoCallDialog({
       if (!isSoundEnabled) return
       if (!text || !text.trim()) return
 
-      // пока говорим — микрофон полностью выключен
-      isAiSpeakingRef.current = true
-      setIsAiSpeaking(true)
-      hardStopRecognition()
+      suppressRecognitionRef.current = true
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop()
+        } catch (e) {
+          console.log("Error stopping recognition before TTS:", e)
+        }
+      }
+      setIsListening(false)
 
-      // если уже что-то говорит — обнуляем
       if (isVoicingRef.current || isAiSpeaking) {
         if (currentAudioRef.current) {
           currentAudioRef.current.pause()
@@ -470,22 +542,21 @@ export default function VideoCallDialog({
         }
         currentUtteranceRef.current = null
         setIsAiSpeaking(false)
-        isAiSpeakingRef.current = false
         isVoicingRef.current = false
       }
 
       const cleanedText = cleanResponseText(text)
       if (!cleanedText) {
-        isAiSpeakingRef.current = false
-        setIsAiSpeaking(false)
+        suppressRecognitionRef.current = false
         if (!isMicMutedRef.current && isCallActiveRef.current) {
-          ensureRecognitionRunning()
+          startSpeechRecognitionRef.current?.()
         }
         return
       }
 
-      setActivityStatus("speaking")
+      setIsAiSpeaking(true)
       isVoicingRef.current = true
+      setActivityStatus("speaking")
       setIsWaitingForUser(true)
       setSpeechStartTime(Date.now())
 
@@ -494,6 +565,8 @@ export default function VideoCallDialog({
 
       const cleanup = () => {
         try {
+          suppressRecognitionRef.current = false
+
           if (currentAudioRef.current) {
             currentAudioRef.current.pause()
             currentAudioRef.current.currentTime = 0
@@ -506,7 +579,6 @@ export default function VideoCallDialog({
           }
 
           setIsAiSpeaking(false)
-          isAiSpeakingRef.current = false
           isVoicingRef.current = false
           setCurrentVideoState("idle")
 
@@ -525,12 +597,11 @@ export default function VideoCallDialog({
             }
           }
 
-          setIsWaitingForUser(false)
-
           if (!isMicMutedRef.current && isCallActiveRef.current) {
             setActivityStatus("listening")
-            ensureRecognitionRunning()
+            startSpeechRecognitionRef.current?.()
           }
+          setIsWaitingForUser(false)
 
           if (cleanupTimeoutRef.current) {
             clearTimeout(cleanupTimeoutRef.current)
@@ -541,11 +612,11 @@ export default function VideoCallDialog({
       }
 
       try {
-        if (shouldUseGoogleTTS(currentLanguage.code)) {
+        if (shouldUseGoogleTTS(activeLanguage.code)) {
           try {
             const audioDataUrl = await generateGoogleTTS(
               cleanedText,
-              currentLanguage.code,
+              activeLanguage.code,
               characterGender,
               VIDEO_CALL_GOOGLE_TTS_CREDENTIALS,
               VIDEO_CALL_VOICE_CONFIGS,
@@ -627,7 +698,7 @@ export default function VideoCallDialog({
     [
       isSoundEnabled,
       cleanResponseText,
-      currentLanguage.code,
+      activeLanguage.code,
       selectedCharacter,
       isAiSpeaking,
       hasEnhancedVideo,
@@ -640,8 +711,8 @@ export default function VideoCallDialog({
       const loadVoices = () => {
         const voices = window.speechSynthesis!.getVoices()
         if (voices.length) {
-          getRefinedVoiceForLanguage(currentLanguage.code, "female")
-          getRefinedVoiceForLanguage(currentLanguage.code, "male")
+          getRefinedVoiceForLanguage(activeLanguage.code, "female")
+          getRefinedVoiceForLanguage(activeLanguage.code, "male")
         }
       }
       loadVoices()
@@ -653,7 +724,7 @@ export default function VideoCallDialog({
         )
       }
     }
-  }, [currentLanguage.code, getRefinedVoiceForLanguage])
+  }, [activeLanguage.code, getRefinedVoiceForLanguage])
 
   const processTranscription = useCallback(
     async (text: string) => {
@@ -661,6 +732,19 @@ export default function VideoCallDialog({
       if (!text.trim()) return
       if (text === lastProcessedText) return
       if (isProcessingRef.current) return
+
+      if (!resolvedWebhookUrl) {
+        console.error("VideoCallDialog: webhookUrl is not configured")
+        const errorMessage = t(
+          "The video assistant is temporarily unavailable. Please contact support.",
+        )
+        setAiResponse(errorMessage)
+        setMessages((prev) => [
+          ...prev,
+          { id: prev.length + 1, role: "assistant", text: errorMessage },
+        ])
+        return
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -679,7 +763,6 @@ export default function VideoCallDialog({
         }
         currentUtteranceRef.current = null
         setIsAiSpeaking(false)
-        isAiSpeakingRef.current = false
         isVoicingRef.current = false
         setCurrentVideoState("idle")
 
@@ -704,8 +787,8 @@ export default function VideoCallDialog({
 
         const params = new URLSearchParams({
           text,
-          language: currentLanguage.code,
-          languageName: currentLanguage.name,
+          language: activeLanguage.code,
+          languageName: languageDisplayName,
           locale: currentLocale,
           user: user?.email || "guest@example.com",
           requestType: "video_call",
@@ -714,13 +797,13 @@ export default function VideoCallDialog({
         })
 
         const webhookResponse = await fetch(
-          `${webhookUrl}?${params.toString()}`,
+          `${resolvedWebhookUrl}?${params.toString()}`,
           {
             method: "GET",
             headers: {
               Accept: "application/json",
-              "Accept-Language": currentLanguage.code,
-              "Content-Language": currentLanguage.code,
+              "Accept-Language": activeLanguage.code,
+              "Content-Language": activeLanguage.code,
             },
             signal: controller.signal,
           },
@@ -828,8 +911,8 @@ export default function VideoCallDialog({
       }
     },
     [
-      currentLanguage.code,
-      currentLanguage.name,
+      activeLanguage.code,
+      languageDisplayName,
       currentLocale,
       t,
       user?.email,
@@ -839,7 +922,7 @@ export default function VideoCallDialog({
       lastProcessedText,
       isAiSpeaking,
       hasEnhancedVideo,
-      webhookUrl,
+      resolvedWebhookUrl,
     ],
   )
 
@@ -847,15 +930,7 @@ export default function VideoCallDialog({
     processTranscriptionRef.current = processTranscription
   }, [processTranscription])
 
-  useEffect(() => {
-    isMicMutedRef.current = isMicMuted
-  }, [isMicMuted])
-
-  useEffect(() => {
-    isCallActiveRef.current = isCallActive
-  }, [isCallActive])
-
-  // Камера
+  // Камера — отдельно, без влияния на старт звонка
   useEffect(() => {
     if (isCallActive && !isCameraOff && userVideoRef.current) {
       navigator.mediaDevices
@@ -924,14 +999,16 @@ export default function VideoCallDialog({
   const toggleMicrophone = useCallback(() => {
     if (isMicMuted) {
       setIsMicMuted(false)
-      isMicMutedRef.current = false
+      setIsListening(true)
       setActivityStatus("listening")
-      ensureRecognitionRunning()
+      startSpeechRecognitionRef.current?.()
     } else {
-      setIsMicMuted(true)
-      isMicMutedRef.current = true
-      hardStopRecognition()
+      if (recognitionRef.current?.stop) {
+        recognitionRef.current.stop()
+      }
+      setIsListening(false)
       setInterimTranscript("")
+      setIsMicMuted(true)
     }
   }, [isMicMuted])
 
@@ -977,10 +1054,9 @@ export default function VideoCallDialog({
       await initializeMobileAudio()
 
       setIsCallActive(true)
-      isCallActiveRef.current = true
       setCurrentVideoState("idle")
       setIsMicMuted(false)
-      isMicMutedRef.current = false
+      setIsListening(true)
       setActivityStatus("listening")
       setMessages([])
       setTranscript("")
@@ -989,7 +1065,7 @@ export default function VideoCallDialog({
       setLastProcessedText("")
       setIsWaitingForUser(false)
 
-      ensureRecognitionRunning()
+      startSpeechRecognitionRef.current?.()
 
       if (hasEnhancedVideo && selectedCharacter.idleVideo) {
         setTimeout(() => {
@@ -1008,7 +1084,6 @@ export default function VideoCallDialog({
           ),
       )
       setIsCallActive(false)
-      isCallActiveRef.current = false
     } finally {
       setIsConnecting(false)
     }
@@ -1021,13 +1096,8 @@ export default function VideoCallDialog({
     setCurrentVideoState("idle")
     setActivityStatus("listening")
     setIsMicMuted(true)
-
-    isCallActiveRef.current = false
-    isMicMutedRef.current = true
-    isAiSpeakingRef.current = false
     isProcessingRef.current = false
-
-    hardStopRecognition()
+    suppressRecognitionRef.current = false
 
     if (cleanupTimeoutRef.current) {
       clearTimeout(cleanupTimeoutRef.current)
@@ -1041,6 +1111,13 @@ export default function VideoCallDialog({
 
     currentUtteranceRef.current = null
     if (window.speechSynthesis) window.speechSynthesis.cancel()
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop()
+      } catch {}
+      recognitionRef.current = null
+    }
 
     if (idleVideoRef.current) {
       idleVideoRef.current.pause()
@@ -1079,7 +1156,7 @@ export default function VideoCallDialog({
       if (cleanupTimeoutRef.current) {
         clearTimeout(cleanupTimeoutRef.current)
       }
-      hardStopRecognition()
+      if (recognitionRef.current) recognitionRef.current.stop()
       if (currentAudioRef.current) {
         currentAudioRef.current.pause()
         currentAudioRef.current = null
@@ -1125,15 +1202,15 @@ export default function VideoCallDialog({
           <div className="flex flex-col flex-1 min-w-0 pr-2">
             <h3 className="font-semibold text-base sm:text-lg truncate flex items-center gap-2">
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
-                <Phone className="h-4 w-4 rotate-[135deg]" />
+                <Phone className="h-4 w-4" />
               </span>
               {t("AI Psychologist Video Call")}
             </h3>
             <div className="text-xs text-indigo-100 mt-1 truncate">
               {t("Video session in {{language}}", {
-                language: currentLanguage.name,
+                language: languageDisplayName,
               })}{" "}
-              · {currentLanguage.flag}
+              · {activeLanguage.flag}
             </div>
           </div>
 
@@ -1172,11 +1249,11 @@ export default function VideoCallDialog({
                   {t("Video call language")}:
                 </p>
                 <div className="text-lg font-semibold text-blue-800 flex items-center justify-center">
-                  <span className="mr-2">{currentLanguage.flag}</span>
-                  {currentLanguage.name}
+                  <span className="mr-2">{activeLanguage.flag}</span>
+                  {languageDisplayName}
                 </div>
                 <p className="text-xs text-blue-600 mt-2">
-                  {shouldUseGoogleTTS(currentLanguage.code)
+                  {shouldUseGoogleTTS(activeLanguage.code)
                     ? t(
                         "All characters use Google TTS for authentic native Ukrainian accent",
                       )
@@ -1323,7 +1400,7 @@ export default function VideoCallDialog({
                     ? t("Listening...")
                     : activityStatus === "thinking"
                     ? t("Thinking...")
-                    : shouldUseGoogleTTS(currentLanguage.code)
+                    : shouldUseGoogleTTS(activeLanguage.code)
                     ? t("Speaking with Google TTS...")
                     : t("Speaking...")}
                 </div>
@@ -1456,7 +1533,8 @@ export default function VideoCallDialog({
                 className="rounded-full h-14 w-14 sm:h-12 sm:w-12 bg-red-600 hover:bg-red-700 text-white touch-manipulation"
                 onClick={endCall}
               >
-                <Phone className="h-6 w-6 sm:h-5 sm:w-5 transform rotate-180" />
+                {/* убрал rotate-180, чтобы иконка не была перевёрнута */}
+                <Phone className="h-6 w-6 sm:h-5 sm:w-5" />
               </Button>
             </div>
           </div>
