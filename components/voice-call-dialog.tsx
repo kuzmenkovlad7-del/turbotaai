@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import Image from "next/image"
 import {
   Dialog,
   DialogContent,
@@ -13,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Phone,
+  X,
   Wifi,
   WifiOff,
   Brain,
@@ -20,7 +20,6 @@ import {
   MicOff,
   Loader2,
   Sparkles,
-  User,
 } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
@@ -33,64 +32,48 @@ declare global {
   }
 }
 
-interface VideoCallDialogProps {
+interface VoiceCallDialogProps {
   isOpen: boolean
   onClose: () => void
   onError?: (error: Error) => void
   userEmail?: string
 }
 
-type ChatMessage = {
-  id: number
-  role: "user" | "assistant"
-  text: string
-}
-
-// язык для распознавания/озвучки
-function getSpeechLang(code?: string): string {
-  if (!code) return "en-US"
-  if (code.startsWith("uk")) return "uk-UA"
-  if (code.startsWith("ru")) return "ru-RU"
-  if (code.startsWith("en")) return "en-US"
-  return "en-US"
-}
-
-export default function VideoCallDialog({
+export default function VoiceCallDialog({
   isOpen,
   onClose,
   onError,
   userEmail,
-}: VideoCallDialogProps) {
+}: VoiceCallDialogProps) {
   const { t, currentLanguage } = useLanguage()
   const { user } = useAuth()
 
   const [isCallActive, setIsCallActive] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isListening, setIsListening] = useState(false)
-  const [isMicMuted, setIsMicMuted] = useState(false) // пользователь сознательно вырубил мик
+  const [isMicMuted, setIsMicMuted] = useState(false)
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
+  const [transcript, setTranscript] = useState("")
+  const [aiResponse, setAiResponse] = useState("")
   const [networkError, setNetworkError] = useState<string | null>(null)
-  const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected">("disconnected")
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connected" | "disconnected"
+  >("disconnected")
 
   const recognitionRef = useRef<any | null>(null)
-  const autoRestartRecognitionRef = useRef<boolean>(true)
-  const isAiSpeakingRef = useRef<boolean>(false)
 
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
-  const speechLang = getSpeechLang(currentLanguage?.code)
 
-  // полный сброс всего состояния и Web APIs
+  // Полный сброс состояния и стека браузера
   const stopEverything = useCallback(() => {
     setIsCallActive(false)
     setIsListening(false)
     setIsAiSpeaking(false)
-    setIsMicMuted(false)
-    setMessages([])
+    setTranscript("")
+    setAiResponse("")
     setConnectionStatus("disconnected")
     setNetworkError(null)
-
-    autoRestartRecognitionRef.current = false
+    setIsMicMuted(false)
 
     if (recognitionRef.current) {
       try {
@@ -106,24 +89,22 @@ export default function VideoCallDialog({
     }
   }, [])
 
-  // при закрытии модалки всё гасим
   useEffect(() => {
     if (!isOpen) {
       stopEverything()
     }
   }, [isOpen, stopEverything])
 
-  // логическое состояние микрофона
-  const micOn = isCallActive && isListening && !isMicMuted
-
-  // запуск распознавания речи
+  // Запуск SpeechRecognition
   const startRecognition = useCallback(() => {
     if (typeof window === "undefined") return
 
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SR) {
       setNetworkError(
-        t("Your browser does not support voice recognition. Please use Chrome or another modern browser."),
+        t(
+          "Your browser does not support voice recognition. Please use Chrome or another modern browser.",
+        ),
       )
       return
     }
@@ -131,7 +112,11 @@ export default function VideoCallDialog({
     const recognition = new SR()
     recognition.continuous = true
     recognition.interimResults = false
-    recognition.lang = speechLang
+    recognition.lang = currentLanguage.code.startsWith("uk")
+      ? "uk-UA"
+      : currentLanguage.code.startsWith("ru")
+        ? "ru-RU"
+        : "en-US"
 
     recognition.onstart = () => {
       setIsListening(true)
@@ -140,17 +125,7 @@ export default function VideoCallDialog({
     }
 
     recognition.onerror = (event: any) => {
-      console.error("[VIDEO] Speech recognition error", event)
-
-      // долгое молчание → no-speech → уходим в «паузу» и глушим мик
-      if (event?.error === "no-speech") {
-        autoRestartRecognitionRef.current = false
-        setIsListening(false)
-        setIsMicMuted(true) // и логически, и визуально микрофон выключен
-        setNetworkError(null)
-        return
-      }
-
+      console.error("Speech recognition error", event)
       if (event?.error !== "no-speech") {
         setNetworkError(t("Error while listening. Please try again."))
       }
@@ -159,20 +134,13 @@ export default function VideoCallDialog({
 
     recognition.onend = () => {
       setIsListening(false)
-
-      // если мы сами отключили рестарт — ничего не перезапускаем
-      if (!autoRestartRecognitionRef.current) {
-        autoRestartRecognitionRef.current = true
-        return
-      }
-
-      // авто-перезапуск, пока звонок активен и мик не выключен
-      if (isCallActive && !isMicMuted && !isAiSpeakingRef.current) {
+      // мягкий автоперезапуск, пока звонок активен и микрофон не выключен
+      if (isCallActive && !isMicMuted) {
         setTimeout(() => {
           try {
             recognition.start()
           } catch (e) {
-              console.error("[VIDEO] restart error", e)
+            console.error(e)
           }
         }, 400)
       }
@@ -185,6 +153,7 @@ export default function VideoCallDialog({
       const text = last[0]?.transcript?.trim()
       if (!text) return
 
+      setTranscript((prev) => (prev ? `${prev} ${text}` : text))
       void handleUserText(text)
     }
 
@@ -192,80 +161,50 @@ export default function VideoCallDialog({
       recognition.start()
       recognitionRef.current = recognition
     } catch (e) {
-      console.error("[VIDEO] Cannot start recognition", e)
-      setNetworkError(t("Could not start microphone. Check permissions and try again."))
-      setIsListening(false)
-      setIsMicMuted(true)
+      console.error("Cannot start recognition", e)
+      setNetworkError(
+        t("Could not start microphone. Check permissions and try again."),
+      )
     }
-  }, [isCallActive, isMicMuted, speechLang, t])
+  }, [currentLanguage.code, isCallActive, isMicMuted, t])
 
-  // озвучка ответа (один браузерный голос)
+  // Озвучка ответа через browser TTS
   const speakText = useCallback(
     (text: string) => {
       if (typeof window === "undefined" || !window.speechSynthesis) return
-
-      // перед озвучкой стопаем распознавание, чтобы не слушал сам себя
-      if (recognitionRef.current) {
-        try {
-          autoRestartRecognitionRef.current = false
-          recognitionRef.current.stop()
-        } catch (e) {
-          console.error("[VIDEO] stop recognition before TTS", e)
-        }
-      }
-      setIsListening(false)
-
-      window.speechSynthesis.cancel()
-
       const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = speechLang
+
+      utterance.lang = currentLanguage.code.startsWith("uk")
+        ? "uk-UA"
+        : currentLanguage.code.startsWith("ru")
+          ? "ru-RU"
+          : "en-US"
+
       utterance.rate = 1
       utterance.pitch = 1
-      utterance.volume = 1
 
-      utterance.onstart = () => {
-        isAiSpeakingRef.current = true
-        setIsAiSpeaking(true)
-      }
+      utterance.onstart = () => setIsAiSpeaking(true)
+      utterance.onend = () => setIsAiSpeaking(false)
+      utterance.onerror = () => setIsAiSpeaking(false)
 
-      utterance.onend = () => {
-        isAiSpeakingRef.current = false
-        setIsAiSpeaking(false)
-
-        if (isCallActive && !isMicMuted) {
-          autoRestartRecognitionRef.current = true
-          startRecognition()
-        }
-      }
-
-      utterance.onerror = () => {
-        isAiSpeakingRef.current = false
-        setIsAiSpeaking(false)
-        if (isCallActive && !isMicMuted) {
-          autoRestartRecognitionRef.current = true
-          startRecognition()
-        }
-      }
-
+      window.speechSynthesis.cancel()
       window.speechSynthesis.speak(utterance)
     },
-    [isCallActive, isMicMuted, speechLang, startRecognition],
+    [currentLanguage.code],
   )
 
-  // отправка реплики в /api/chat и добавление в чат
+  // Отправка текста в наш API
   const handleUserText = useCallback(
     async (text: string) => {
-      setMessages((prev) => [...prev, { id: prev.length + 1, role: "user", text }])
-
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             query: text,
-            language: currentLanguage?.code,
+            language: currentLanguage.code,
             email: effectiveEmail,
-            mode: "video",
+            mode: "voice",
           }),
         })
 
@@ -278,33 +217,24 @@ export default function VideoCallDialog({
           (data && (data.text as string)) ||
           t("I'm sorry, I couldn't process your message. Please try again.")
 
-        setMessages((prev) => [...prev, { id: prev.length + 1, role: "assistant", text: answer }])
-
+        setAiResponse(answer)
         speakText(answer)
       } catch (error: any) {
-        console.error("Video call error:", error)
+        console.error("Voice call error:", error)
         setNetworkError(t("Connection error. Please try again."))
-
-        const fallback = t("I'm sorry, I couldn't process your message. Please try again.")
-
-        setMessages((prev) => [...prev, { id: prev.length + 1, role: "assistant", text: fallback }])
-
         if (onError && error instanceof Error) onError(error)
       }
     },
-    [currentLanguage?.code, effectiveEmail, onError, speakText, t],
+    [currentLanguage.code, effectiveEmail, onError, speakText, t],
   )
 
-  // старт «видеосессии» (по сути — тот же voice, только с аватаром)
   const startCall = useCallback(() => {
     setIsConnecting(true)
     setNetworkError(null)
-    setMessages([])
 
     setTimeout(() => {
       setIsCallActive(true)
       setIsConnecting(false)
-      setIsMicMuted(false)
       startRecognition()
     }, 200)
   }, [startRecognition])
@@ -313,12 +243,11 @@ export default function VideoCallDialog({
     stopEverything()
   }, [stopEverything])
 
-  // переключение микрофона
   const toggleMic = () => {
-    if (micOn) {
-      // выключаем мик
-      setIsMicMuted(true)
-      autoRestartRecognitionRef.current = false
+    const next = !isMicMuted
+    setIsMicMuted(next)
+
+    if (next) {
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop()
@@ -327,26 +256,12 @@ export default function VideoCallDialog({
         }
       }
       setIsListening(false)
-    } else {
-      // включаем мик
-      setIsMicMuted(false)
-      setNetworkError(null)
-      autoRestartRecognitionRef.current = true
-      if (isCallActive) {
-        startRecognition()
-      }
+    } else if (isCallActive) {
+      startRecognition()
     }
   }
 
-  const statusText = (() => {
-    if (isAiSpeaking) return t("Assistant is speaking. Please wait a moment.")
-    if (micOn) return t("Listening… you can speak.")
-    if (isCallActive) return t("Paused. Turn on microphone to continue.")
-    return t("In crisis situations, please contact local emergency services immediately.")
-  })()
-
-  // какую картинку берём как «девушка-психолог»
-  const avatarSrc = "/dr-sophia-new.jpg" // одна из трёх из public, можно потом сделать выбор
+  const userEmailDisplay = effectiveEmail
 
   return (
     <Dialog
@@ -358,19 +273,21 @@ export default function VideoCallDialog({
         }
       }}
     >
-      <DialogContent className="max-w-3xl border-none bg-transparent p-0">
+      <DialogContent className="max-w-xl border-none bg-transparent p-0">
         <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/10">
           <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
                   <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
-                    <Sparkles className="h-4 w-4" />
+                    <Phone className="h-4 w-4" />
                   </span>
-                  {t("Video session with AI-psychologist")}
+                  {t("Voice session with AI-psychologist")}
                 </DialogTitle>
                 <DialogDescription className="mt-1 text-xs text-indigo-100">
-                  {t("You see the avatar of a psychologist, speak out loud, and the assistant will answer in your language.")}
+                  {t(
+                    "You can talk out loud, the assistant will listen, answer and voice the reply.",
+                  )}
                 </DialogDescription>
               </div>
 
@@ -381,11 +298,13 @@ export default function VideoCallDialog({
                 <div className="flex items-center gap-1 text-[11px] text-indigo-100">
                   {connectionStatus === "connected" ? (
                     <>
-                      <Wifi className="h-3 w-3 text-emerald-200" /> {t("Connected")}
+                      <Wifi className="h-3 w-3 text-emerald-200" />{" "}
+                      {t("Connected")}
                     </>
                   ) : (
                     <>
-                      <WifiOff className="h-3 w-3 text-rose-200" /> {t("Disconnected")}
+                      <WifiOff className="h-3 w-3 text-rose-200" />{" "}
+                      {t("Disconnected")}
                     </>
                   )}
                 </div>
@@ -393,118 +312,70 @@ export default function VideoCallDialog({
             </div>
           </DialogHeader>
 
-          <div className="flex h-[520px] flex-col md:h-[560px]">
-            {/* Блок «видео» — аватар психолога */}
-            <div className="flex items-center justify-center border-b border-slate-100 bg-slate-950 px-5 py-4">
-              <div className="flex w-full max-w-md items-center gap-4">
-                <div className="relative">
-                  <div
-                    className={`relative h-24 w-24 overflow-hidden rounded-3xl border bg-slate-900 md:h-28 md:w-28 ${
-                      isAiSpeaking
-                        ? "border-emerald-400 shadow-[0_0_0_3px_rgba(16,185,129,0.35)] animate-[pulse_1.6s_ease-in-out_infinite]"
-                        : "border-slate-600 shadow-inner"
-                    }`}
-                  >
-                    <Image
-                      src={avatarSrc}
-                      alt={t("AI psychologist avatar")}
-                      fill
-                      sizes="112px"
-                      className="object-cover"
-                    />
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-slate-900/10" />
-                  </div>
-                  <div className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-slate-900/90 px-2.5 py-0.5 text-[10px] text-slate-100 shadow-md">
-                    {isAiSpeaking ? (
-                      <>
-                        <Brain className="h-3 w-3 text-emerald-300" />
-                        {t("Speaking")}
-                      </>
-                    ) : micOn ? (
-                      <>
-                        <Mic className="h-3 w-3 text-emerald-300" />
-                        {t("Listening")}
-                      </>
-                    ) : (
-                      <>
-                        <Phone className="h-3 w-3 text-sky-300" />
-                        {isCallActive ? t("Paused") : t("Waiting")}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-1 text-xs text-slate-100">
-                  <p className="flex items-center gap-2 text-sm font-medium">
-                    <Brain className="h-4 w-4 text-emerald-300" />
-                    {t("AI Psychologist")}
-                  </p>
-                  <p className="text-[11px] text-slate-300">
-                    {t("Talk as in a video session, the avatar reacts when the assistant answers you.")}
-                  </p>
-                  <p className="text-[11px] text-slate-400">
-                    {t("Language")}: {currentLanguage?.name}{" "}
-                    {currentLanguage && "flag" in currentLanguage ? (currentLanguage as any).flag : ""}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Чат с репликами */}
+          <div className="flex h-[500px] flex-col md:h-[540px]">
             <ScrollArea className="flex-1 px-5 pt-4 pb-2">
               <div className="space-y-3">
                 {!isCallActive && (
                   <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-xs text-slate-700">
-                    <p className="mb-1 font-medium text-slate-900">{t("How it works")}</p>
+                    <p className="font-medium text-slate-900 mb-1">
+                      {t("How it works")}
+                    </p>
                     <p>
                       {t(
-                        "Press the button to start the session, allow microphone access and speak as with a real psychologist.",
+                        "Press the button to start the call. Allow microphone access, then speak as if with a real psychologist.",
                       )}
                     </p>
                     <p className="mt-1 text-[11px] text-slate-500">
-                      {t("Your data is processed securely and not shared with third parties.")}
+                      {t(
+                        "Your e-mail will be used only to personalize the session.",
+                      )}{" "}
+                      ({userEmailDisplay})
                     </p>
                   </div>
                 )}
 
-                {messages.map((msg) =>
-                  msg.role === "user" ? (
-                    <div
-                      key={msg.id}
-                      className="ml-auto max-w-[85%] rounded-2xl bg-blue-50 px-3 py-3 text-xs text-slate-900 md:text-sm"
-                    >
-                      <p className="mb-1 flex items-center gap-1 text-[11px] font-medium text-blue-800">
-                        <User className="h-3.5 w-3.5" />
-                        {t("You said")}
-                      </p>
-                      <p>{msg.text}</p>
-                    </div>
-                  ) : (
-                    <div
-                      key={msg.id}
-                      className="max-w-[85%] rounded-2xl bg-emerald-50 px-3 py-3 text-xs text-slate-900 md:text-sm"
-                    >
-                      <p className="mb-1 flex items-center gap-1 text-[11px] font-medium text-emerald-800">
-                        <Brain className="h-3.5 w-3.5" />
-                        {t("AI Psychologist")}
-                      </p>
-                      <p>{msg.text}</p>
-                    </div>
-                  ),
+                {transcript && (
+                  <div className="rounded-2xl bg-blue-50 px-3 py-3 text-xs md:text-sm text-slate-900">
+                    <p className="font-medium text-blue-800 mb-1">
+                      {t("You said in {{language}}:", {
+                        language: currentLanguage.name,
+                      })}
+                    </p>
+                    <p>{transcript}</p>
+                  </div>
+                )}
+
+                {aiResponse && (
+                  <div className="rounded-2xl bg-emerald-50 px-3 py-3 text-xs md:text-sm text-slate-900">
+                    <p className="mb-1 flex items-center gap-1 font-medium text-emerald-800">
+                      <Brain className="h-3.5 w-3.5" />
+                      {t("AI Psychologist in {{language}}:", {
+                        language: currentLanguage.name,
+                      })}
+                    </p>
+                    <p>{aiResponse}</p>
+                  </div>
                 )}
 
                 {networkError && (
-                  <div className="rounded-2xl bg-rose-50 px-3 py-3 text-xs text-rose-700">{networkError}</div>
+                  <div className="rounded-2xl bg-rose-50 px-3 py-3 text-xs text-rose-700">
+                    {networkError}
+                  </div>
                 )}
               </div>
             </ScrollArea>
 
-            {/* Статус + кнопки управления */}
-            <div className="flex flex-col gap-2 border-t border-slate-100 px-5 py-3">
+            <div className="border-t border-slate-100 px-5 py-3 flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-[11px] text-slate-500">
                   <Sparkles className="h-3 w-3" />
-                  {statusText}
+                  {isListening
+                    ? t("Listening… you can speak.")
+                    : isCallActive
+                      ? t("Paused. Turn on microphone to continue.")
+                      : t(
+                          "In crisis situations, please contact local emergency services immediately.",
+                        )}
                 </div>
 
                 {isCallActive && (
@@ -514,12 +385,16 @@ export default function VideoCallDialog({
                       size="icon"
                       onClick={toggleMic}
                       className={`h-8 w-8 rounded-full border ${
-                        micOn
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-rose-200 bg-rose-50 text-rose-600"
+                        isMicMuted
+                          ? "border-rose-200 bg-rose-50 text-rose-600"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
                       }`}
                     >
-                      {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                      {isMicMuted ? (
+                        <MicOff className="h-4 w-4" />
+                      ) : (
+                        <Mic className="h-4 w-4" />
+                      )}
                     </Button>
                     <Button
                       type="button"
@@ -549,7 +424,7 @@ export default function VideoCallDialog({
                     ) : (
                       <>
                         <Phone className="mr-1 h-3 w-3" />
-                        {t("Start video session")}
+                        {t("Start voice session")}
                       </>
                     )}
                   </Button>
