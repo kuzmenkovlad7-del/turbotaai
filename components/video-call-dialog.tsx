@@ -1,7 +1,6 @@
-// components/video-call-dialog.tsx
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import {
   X,
@@ -19,24 +18,24 @@ import {
 import Image from "next/image"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
+import {
+  getLocaleForLanguage,
+  getNativeSpeechParameters,
+  getNativeVoicePreferences,
+} from "@/lib/i18n/translation-utils"
 import { shouldUseGoogleTTS, generateGoogleTTS } from "@/lib/google-tts"
 import { APP_NAME } from "@/lib/app-config"
 
-// URL вебхука для видео-ассистента.
-// Приоритет:
-// 1) NEXT_PUBLIC_TURBOTA_AI_VIDEO_ASSISTANT_WEBHOOK_URL
-// 2) NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL
-// 3) /api/turbotaai-agent (дефолт, как в .env у тебя сейчас)
+// URL вебхука для видео-ассистента
 const VIDEO_ASSISTANT_WEBHOOK_URL =
   process.env.NEXT_PUBLIC_TURBOTA_AI_VIDEO_ASSISTANT_WEBHOOK_URL ||
   process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL ||
   "/api/turbotaai-agent"
 
-// Креды для Google TTS — в твоём проекте реальные подставляются на сервере.
-// Здесь оставляем заглушку, чтобы фронт не ломался.
+// Заглушка для кредов Google TTS (внутри generateGoogleTTS используется свой бэкенд)
 const VIDEO_CALL_GOOGLE_TTS_CREDENTIALS: any = {}
 
-// Конфиги под разные языки (сейчас кастом под uk-UA, можно расширять)
+// Конфиги голосов под разные языки (можно расширять)
 const VIDEO_CALL_VOICE_CONFIGS = {
   uk: {
     female: {
@@ -47,6 +46,18 @@ const VIDEO_CALL_VOICE_CONFIGS = {
     male: {
       languageCode: "uk-UA",
       name: "uk-UA-Chirp3-HD-Schedar",
+      ssmlGender: "MALE",
+    },
+  },
+  ru: {
+    female: {
+      languageCode: "ru-RU",
+      name: "ru-RU-Standard-A",
+      ssmlGender: "FEMALE",
+    },
+    male: {
+      languageCode: "ru-RU",
+      name: "ru-RU-Standard-B",
       ssmlGender: "MALE",
     },
   },
@@ -62,13 +73,14 @@ interface AICharacter {
   animated?: boolean
   speakingVideo?: string
   idleVideo?: string
-  speakingVideoNew?: string
 }
 
 declare global {
   interface Window {
     SpeechRecognition?: any
     webkitSpeechRecognition?: any
+    AudioContext?: any
+    webkitAudioContext?: any
     speechSynthesis?: SpeechSynthesis
   }
 }
@@ -76,7 +88,7 @@ declare global {
 interface VideoCallDialogProps {
   isOpen: boolean
   onClose: () => void
-  openAiApiKey: string // оставляем для совместимости, не используем
+  openAiApiKey: string
   onError?: (error: Error) => void
 }
 
@@ -86,7 +98,7 @@ type ChatMessage = {
   text: string
 }
 
-// Одна базовая София
+// Базовый персонаж
 const defaultCharacter: AICharacter = {
   id: "dr-sophia",
   name: "Dr. Sophia",
@@ -99,19 +111,15 @@ const defaultCharacter: AICharacter = {
   animated: true,
   idleVideo:
     "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/IMG_9962-fVXHRSVmzv64cpPJf4FddeCDXqxdGE.MP4",
-  speakingVideoNew:
-    "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/IMG_9950-XyDJMndgIHEWrKcLj25FUlV4c18GLp.MP4",
   speakingVideo:
     "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/IMG111211_6034-6fD2w1l0V94iXV7x4VeGW74NHbtZrk.MP4",
 }
 
-// Универсальный парсер ответа от n8n (как в voice-call-dialog)
+// Универсальный парсер ответа от n8n
 function extractAnswer(data: any): string {
   if (!data) return ""
 
-  if (typeof data === "string") {
-    return data.trim()
-  }
+  if (typeof data === "string") return data.trim()
 
   if (Array.isArray(data) && data.length > 0) {
     const first = data[0] ?? {}
@@ -148,7 +156,7 @@ function extractAnswer(data: any): string {
 export default function VideoCallDialog({
   isOpen,
   onClose,
-  openAiApiKey,
+  openAiApiKey, // пока не используем, но оставляем
   onError,
 }: VideoCallDialogProps) {
   const { t, currentLanguage } = useLanguage()
@@ -165,9 +173,11 @@ export default function VideoCallDialog({
       ? "Russian"
       : "English")
 
-  const effectiveEmail = user?.email || "guest@example.com"
+  const currentLocale = getLocaleForLanguage(activeLanguage.code)
+  const nativeVoicePreferences = getNativeVoicePreferences()
 
   const [selectedCharacter] = useState<AICharacter>(defaultCharacter)
+
   const [isCallActive, setIsCallActive] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
 
@@ -176,427 +186,672 @@ export default function VideoCallDialog({
   const [isSoundEnabled, setIsSoundEnabled] = useState(true)
 
   const [isListening, setIsListening] = useState(false)
+  const [activityStatus, setActivityStatus] = useState<
+    "listening" | "thinking" | "speaking"
+  >("listening")
+  const [speechError, setSpeechError] = useState<string | null>(null)
+
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [interimTranscript, setInterimTranscript] = useState("")
-  const [networkError, setNetworkError] = useState<string | null>(null)
-  const [speechError, setSpeechError] = useState<string | null>(null)
-  const [activityStatus, setActivityStatus] =
-    useState<"listening" | "thinking" | "speaking">("listening")
 
   const [currentVideoState, setCurrentVideoState] =
     useState<"idle" | "speaking">("idle")
 
-  const recognitionRef = useRef<any | null>(null)
+  // --- refs ---
+
+  const recognitionRef = useRef<any>(null)
   const isRecognitionActiveRef = useRef(false)
+
   const isCallActiveRef = useRef(false)
   const isMicMutedRef = useRef(false)
   const isAiSpeakingRef = useRef(false)
 
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-
-  const scrollRef = useRef<HTMLDivElement | null>(null)
   const userVideoRef = useRef<HTMLVideoElement | null>(null)
   const idleVideoRef = useRef<HTMLVideoElement | null>(null)
   const speakingVideoRef = useRef<HTMLVideoElement | null>(null)
 
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null)
+  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
+
+  const isProcessingRef = useRef(false)
+  const lastProcessedTextRef = useRef("")
+
+  const suppressRecognitionRef = useRef(false)
+
+  const voiceCacheRef = useRef<Map<string, SpeechSynthesisVoice>>(new Map())
+  const startSpeechRecognitionRef = useRef<() => void | null>(null)
+
+  const [audioInitialized, setAudioInitialized] = useState(false)
+  const audioContextRef = useRef<AudioContext | null>(null)
+
   const hasEnhancedVideo =
-    !!selectedCharacter?.idleVideo && !!selectedCharacter?.speakingVideoNew
+    !!selectedCharacter?.idleVideo && !!selectedCharacter?.speakingVideo
 
-  // автоскролл диалога
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [messages])
+    isCallActiveRef.current = isCallActive
+  }, [isCallActive])
 
-  // язык для SpeechRecognition / TTS
-  function computeLangCode(): string {
-    const lang =
-      typeof (currentLanguage as any) === "string"
-        ? ((currentLanguage as any) as string)
-        : (currentLanguage as any)?.code || "uk"
+  useEffect(() => {
+    isMicMutedRef.current = isMicMuted
+  }, [isMicMuted])
 
-    if (lang.startsWith("uk")) return "uk-UA"
-    if (lang.startsWith("ru")) return "ru-RU"
-    return "en-US"
-  }
+  // --- utils ---
 
-  // ---------- управление SpeechRecognition (ровно как в voice-call-dialog) ----------
+  const cleanResponseText = useCallback((text: string) => {
+    if (!text) return ""
 
-  function ensureRecognitionRunning() {
-    if (typeof window === "undefined") return
-
-    const shouldListen =
-      isCallActiveRef.current &&
-      !isMicMutedRef.current &&
-      !isAiSpeakingRef.current
-
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-
-    if (!shouldListen) {
-      if (recognitionRef.current && isRecognitionActiveRef.current) {
-        try {
-          recognitionRef.current.stop()
-        } catch (e) {
-          console.error(e)
-        }
-      }
-      isRecognitionActiveRef.current = false
-      setIsListening(false)
-      return
-    }
-
-    if (!SR) {
-      setSpeechError(
-        t(
-          "Your browser does not support voice recognition. Please use Chrome or another modern browser.",
-        ),
-      )
-      return
-    }
-
-    let recognition = recognitionRef.current
-
-    if (!recognition) {
-      recognition = new SR()
-      recognition.continuous = true
-      recognition.interimResults = true
-      recognitionRef.current = recognition
-
-      recognition.onstart = () => {
-        isRecognitionActiveRef.current = true
-        setIsListening(true)
-        setActivityStatus("listening")
-        setNetworkError(null)
-      }
-
-      recognition.onerror = (event: any) => {
-        console.error("Speech recognition error", event)
-        if (event?.error !== "no-speech") {
-          setNetworkError(t("Error while listening. Please try again."))
-        }
-      }
-
-      recognition.onend = () => {
-        isRecognitionActiveRef.current = false
-        setIsListening(false)
-
-        // если всё ещё нужно слушать — перезапускаем
-        setTimeout(() => {
-          const stillShouldListen =
-            isCallActiveRef.current &&
-            !isMicMutedRef.current &&
-            !isAiSpeakingRef.current
-
-          if (stillShouldListen) {
-            ensureRecognitionRunning()
-          }
-        }, 300)
-      }
-
-      recognition.onresult = (event: any) => {
-        // если ассистент говорит — игнорируем, чтобы не слушать его озвучку
-        if (isAiSpeakingRef.current) return
-
-        let finalText = ""
-        let interim = ""
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const res = event.results[i]
-          const transcript = res[0]?.transcript ?? ""
-          if (!transcript) continue
-
-          if (res.isFinal) finalText += transcript
-          else interim += transcript
-        }
-
-        if (interim) {
-          setInterimTranscript(interim)
-        } else {
-          setInterimTranscript("")
-        }
-
-        const text = finalText.trim()
-        if (!text) return
-
-        const userMsg: ChatMessage = {
-          id: Date.now(),
-          role: "user",
-          text,
-        }
-
-        setMessages((prev) => [...prev, userMsg])
-        void handleUserText(text)
-      }
-    }
-
-    recognition.lang = computeLangCode()
-
-    if (!isRecognitionActiveRef.current) {
+    if (text.startsWith('[{"output":')) {
       try {
-        recognition.start()
-      } catch (e: any) {
-        if (e?.name !== "InvalidStateError") {
-          console.error("Cannot start recognition", e)
-          setNetworkError(
-            t("Could not start microphone. Check permissions and try again."),
-          )
+        const parsed = JSON.parse(text)
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].output) {
+          return parsed[0].output.trim()
         }
+      } catch {
+        // ignore
       }
     }
-  }
 
-  function hardStopRecognition() {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.onend = null
-        recognitionRef.current.stop()
-      } catch (e) {
-        console.error(e)
-      }
-    }
-    isRecognitionActiveRef.current = false
-    setIsListening(false)
-  }
-
-  function stopEverything() {
-    isCallActiveRef.current = false
-    isMicMutedRef.current = false
-    isAiSpeakingRef.current = false
-
-    setIsCallActive(false)
-    setIsMicMuted(false)
-    setIsAiSpeaking(false)
-    setIsListening(false)
-    setIsCameraOff(false)
-    setIsSoundEnabled(true)
-    setActivityStatus("listening")
-    setCurrentVideoState("idle")
-    setNetworkError(null)
-    setSpeechError(null)
-    setMessages([])
-    setInterimTranscript("")
-
-    hardStopRecognition()
-
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel()
-    }
-
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current = null
-    }
-
-    if (idleVideoRef.current) {
-      idleVideoRef.current.pause()
-      idleVideoRef.current.currentTime = 0
-    }
-    if (speakingVideoRef.current) {
-      speakingVideoRef.current.pause()
-      speakingVideoRef.current.currentTime = 0
-    }
-
-    if (userVideoRef.current && userVideoRef.current.srcObject) {
-      const stream = userVideoRef.current.srcObject as MediaStream
-      stream.getTracks().forEach((track) => {
-        try {
-          track.stop()
-        } catch {}
-      })
-      userVideoRef.current.srcObject = null
-    }
-  }
-
-  useEffect(() => {
-    if (!isOpen) {
-      stopEverything()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen])
-
-  useEffect(() => {
-    return () => {
-      stopEverything()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return text
+      .replace(/\n\n/g, " ")
+      .replace(/\*\*/g, "")
+      .replace(/[\n\r]/g, " ")
+      .trim()
   }, [])
 
-  // ---------- озвучка ответа (Google TTS → браузерный TTS) ----------
+  const getRefinedVoiceForLanguage = useCallback(
+    (langCode: string, preferredGender: "female" | "male" = "female") => {
+      if (!window.speechSynthesis) return null
 
-  async function speakText(text: string) {
-    if (!isCallActiveRef.current) return
-    if (!isSoundEnabled) return
+      const cacheKey = `${langCode}-${preferredGender}`
+      if (voiceCacheRef.current.has(cacheKey)) {
+        return voiceCacheRef.current.get(cacheKey)!
+      }
 
-    const cleanText = text?.toString().trim()
-    if (!cleanText) return
+      const voices = window.speechSynthesis.getVoices()
+      if (!voices.length) return null
 
-    // выключаем распознавание на время озвучки
-    isAiSpeakingRef.current = true
-    setIsAiSpeaking(true)
-    setActivityStatus("speaking")
-    setCurrentVideoState("speaking")
-    ensureRecognitionRunning()
+      const nativeVoices =
+        nativeVoicePreferences[langCode]?.[preferredGender] || []
 
-    // стопаем прошлую озвучку
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current = null
-    }
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel()
-    }
-
-    const finish = () => {
-      isAiSpeakingRef.current = false
-      setIsAiSpeaking(false)
-      setCurrentVideoState("idle")
-      setActivityStatus("listening")
-      ensureRecognitionRunning()
-    }
-
-    try {
-      const langCode =
-        typeof (currentLanguage as any) === "string"
-          ? ((currentLanguage as any) as string)
-          : (currentLanguage as any)?.code || "uk"
-
-      // пробуем Google TTS, если включен для этого языка
-      if (shouldUseGoogleTTS(langCode)) {
-        try {
-          const audioDataUrl = await generateGoogleTTS(
-            cleanText,
-            langCode,
-            selectedCharacter.gender || "female",
-            VIDEO_CALL_GOOGLE_TTS_CREDENTIALS,
-            VIDEO_CALL_VOICE_CONFIGS,
-          )
-
-          if (audioDataUrl) {
-            const audio = new Audio()
-            audioRef.current = audio
-            audio.src = audioDataUrl
-            audio.preload = "auto"
-            audio.volume = 1
-            audio.playsInline = true
-            audio.setAttribute("playsinline", "true")
-
-            audio.onended = () => {
-              finish()
-            }
-            audio.onerror = () => {
-              finish()
-            }
-
-            try {
-              await audio.play()
-              return
-            } catch (e) {
-              console.error("Google TTS play error:", e)
-              // упадём в fallback
-            }
-          }
-        } catch (e) {
-          console.error("Google TTS error:", e)
+      for (const voiceName of nativeVoices) {
+        const exact = voices.find((v) => v.name === voiceName)
+        if (exact) {
+          voiceCacheRef.current.set(cacheKey, exact)
+          return exact
         }
       }
 
-      // fallback — браузерный TTS
-      if (typeof window === "undefined" || !window.speechSynthesis) {
-        finish()
+      for (const voiceName of nativeVoices) {
+        const partial = voices.find(
+          (v) =>
+            v.name.includes(voiceName) ||
+            voiceName.includes(v.name) ||
+            v.name.toLowerCase().includes(voiceName.toLowerCase()) ||
+            voiceName.toLowerCase().includes(v.name.toLowerCase()),
+        )
+        if (partial) {
+          voiceCacheRef.current.set(cacheKey, partial)
+          return partial
+        }
+      }
+
+      const langVoices = voices.filter((v) =>
+        v.lang.toLowerCase().startsWith(langCode.toLowerCase()),
+      )
+      if (langVoices.length) {
+        const best = langVoices[0]
+        voiceCacheRef.current.set(cacheKey, best)
+        return best
+      }
+
+      if (langCode !== "en") {
+        const en = getRefinedVoiceForLanguage("en-US", preferredGender)
+        if (en) {
+          voiceCacheRef.current.set(cacheKey, en)
+          return en
+        }
+      }
+
+      if (voices.length) {
+        const fallback = voices[0]
+        voiceCacheRef.current.set(cacheKey, fallback)
+        return fallback
+      }
+
+      return null
+    },
+    [nativeVoicePreferences],
+  )
+
+  const fallbackToBrowserTTS = useCallback(
+    (
+      cleanText: string,
+      gender: "male" | "female",
+      cleanup: () => void,
+    ): void => {
+      if (!window.speechSynthesis) {
+        cleanup()
         return
       }
 
-      const utterance = new SpeechSynthesisUtterance(cleanText)
-      utterance.lang = computeLangCode()
-      utterance.rate = 1
-      utterance.pitch = 1
+      try {
+        window.speechSynthesis.cancel()
+      } catch {}
 
-      utterance.onend = () => {
-        finish()
-      }
-      utterance.onerror = () => {
-        finish()
-      }
+      setTimeout(() => {
+        try {
+          setCurrentVideoState("speaking")
 
-      window.speechSynthesis.cancel()
-      window.speechSynthesis.speak(utterance)
-    } catch (e) {
-      console.error("speakText error:", e)
-      finish()
+          if (hasEnhancedVideo) {
+            if (idleVideoRef.current) idleVideoRef.current.pause()
+            if (speakingVideoRef.current && selectedCharacter?.speakingVideo) {
+              speakingVideoRef.current.currentTime = 0
+              speakingVideoRef.current.play().catch(() => {})
+            }
+          }
+
+          const utterance = new SpeechSynthesisUtterance()
+          utterance.text = cleanText
+          utterance.lang = currentLocale
+
+          const selectedVoice = getRefinedVoiceForLanguage(
+            currentLocale,
+            gender,
+          )
+          if (selectedVoice) utterance.voice = selectedVoice
+
+          const speechParameters = getNativeSpeechParameters(
+            activeLanguage.code,
+            gender,
+          )
+          utterance.rate = speechParameters.rate
+          utterance.pitch = speechParameters.pitch
+          utterance.volume = speechParameters.volume
+
+          currentUtteranceRef.current = utterance
+
+          utterance.onend = () => cleanup()
+          utterance.onerror = () => cleanup()
+
+          window.speechSynthesis!.speak(utterance)
+        } catch {
+          cleanup()
+        }
+      }, 200)
+    },
+    [
+      activeLanguage.code,
+      currentLocale,
+      getRefinedVoiceForLanguage,
+      hasEnhancedVideo,
+      selectedCharacter,
+    ],
+  )
+
+  // --- speech recognition ---
+
+  const startSpeechRecognition = useCallback(() => {
+    const SpeechRecognition =
+      typeof window !== "undefined"
+        ? window.SpeechRecognition || window.webkitSpeechRecognition
+        : null
+
+    if (!SpeechRecognition) return
+
+    const recognitionInstance = new SpeechRecognition()
+    recognitionInstance.continuous = true
+    recognitionInstance.interimResults = true
+    recognitionInstance.maxAlternatives = 3
+    recognitionInstance.lang = currentLocale
+
+    let finalTranscriptBuffer = ""
+    let silenceTimeout: NodeJS.Timeout | null = null
+
+    recognitionInstance.onstart = () => {
+      setIsListening(true)
+      setActivityStatus("listening")
     }
-  }
 
-  // ---------- отправка текста в n8n / OpenAI (как в voice-call-dialog, но mode: "video") ----------
+    recognitionInstance.onresult = async (event: any) => {
+      // ключевой фикс: если ассистент говорит – просто игнорируем
+      if (isAiSpeakingRef.current) return
 
-  async function handleUserText(text: string) {
-    if (!isCallActiveRef.current) return
+      let currentInterimTranscript = ""
+      let hasNewFinalResult = false
 
-    const lang =
-      typeof (currentLanguage as any) === "string"
-        ? ((currentLanguage as any) as string)
-        : (currentLanguage as any)?.code || "uk"
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i]
+        const transcriptChunk = result[0].transcript.trim()
+        const confidence = result[0].confidence || 0.5
 
-    const resolvedWebhook =
-      VIDEO_ASSISTANT_WEBHOOK_URL.trim() || "/api/turbotaai-agent"
+        if (result.isFinal && transcriptChunk && confidence > 0.3) {
+          finalTranscriptBuffer += transcriptChunk + " "
+          hasNewFinalResult = true
+        } else if (transcriptChunk) {
+          currentInterimTranscript += transcriptChunk
+        }
+      }
+
+      if (currentInterimTranscript) {
+        setInterimTranscript(currentInterimTranscript)
+      }
+
+      if (silenceTimeout) clearTimeout(silenceTimeout)
+
+      // отсечка по тишине – через 1.5 сек отправляем
+      silenceTimeout = setTimeout(() => {
+        const buf = finalTranscriptBuffer.trim()
+        if (
+          buf.length > 2 &&
+          !isProcessingRef.current &&
+          !isAiSpeakingRef.current
+        ) {
+          finalTranscriptBuffer = ""
+          setInterimTranscript("")
+
+          const textToProcess = buf
+          if (textToProcess === lastProcessedTextRef.current) return
+
+          lastProcessedTextRef.current = textToProcess
+
+          setMessages((prev) => [
+            ...prev,
+            { id: prev.length + 1, role: "user", text: textToProcess },
+          ])
+
+          void processTranscriptionRef.current?.(textToProcess)
+        }
+      }, 1500)
+
+      if (hasNewFinalResult) {
+        const buf = finalTranscriptBuffer.trim()
+        if (
+          buf.length > 2 &&
+          !isProcessingRef.current &&
+          !isAiSpeakingRef.current
+        ) {
+          finalTranscriptBuffer = ""
+          setInterimTranscript("")
+
+          const textToProcess = buf
+          if (textToProcess === lastProcessedTextRef.current) return
+
+          lastProcessedTextRef.current = textToProcess
+
+          setMessages((prev) => [
+            ...prev,
+            { id: prev.length + 1, role: "user", text: textToProcess },
+          ])
+
+          void processTranscriptionRef.current?.(textToProcess)
+        }
+      }
+    }
+
+    recognitionInstance.onerror = (event: any) => {
+      if (
+        event.error === "no-speech" ||
+        event.error === "aborted" ||
+        event.error === "audio-capture" ||
+        event.error === "not-allowed"
+      ) {
+        return
+      }
+
+      if (event.error === "language-not-supported") {
+        recognitionInstance.lang = "en-US"
+        setTimeout(() => {
+          try {
+            recognitionInstance.start()
+          } catch {}
+        }, 1000)
+        return
+      }
+    }
+
+    recognitionInstance.onend = () => {
+      if (silenceTimeout) clearTimeout(silenceTimeout)
+
+      if (
+        isCallActiveRef.current &&
+        !isMicMutedRef.current &&
+        !suppressRecognitionRef.current
+      ) {
+        try {
+          recognitionInstance.start()
+          setIsListening(true)
+        } catch {
+          setTimeout(() => {
+            if (
+              isCallActiveRef.current &&
+              !isMicMutedRef.current &&
+              !suppressRecognitionRef.current
+            ) {
+              try {
+                recognitionInstance.start()
+                setIsListening(true)
+              } catch {}
+            }
+          }, 100)
+        }
+      } else {
+        setIsListening(false)
+      }
+    }
 
     try {
-      setActivityStatus("thinking")
-      setNetworkError(null)
+      recognitionInstance.start()
 
-      const res = await fetch(resolvedWebhook, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: text,
-          language: lang,
-          email: effectiveEmail,
-          mode: "video",
-        }),
-      })
+      recognitionRef.current = {
+        stop: () => {
+          try {
+            if (silenceTimeout) clearTimeout(silenceTimeout)
+            recognitionInstance.stop()
+          } catch {}
+        },
+        start: () => {
+          try {
+            recognitionInstance.start()
+          } catch {}
+        },
+      }
+      startSpeechRecognitionRef.current = recognitionRef.current.start
+    } catch (error) {
+      console.log("Error starting recognition:", error)
+    }
+  }, [currentLocale])
 
-      if (!res.ok) {
-        throw new Error(`Chat API error: ${res.status}`)
+  useEffect(() => {
+    startSpeechRecognitionRef.current = startSpeechRecognition
+  }, [startSpeechRecognition])
+
+  // --- TTS ---
+
+  const speakText = useCallback(
+    async (text: string) => {
+      if (!isCallActiveRef.current) return
+      if (!isSoundEnabled) return
+      if (!text || !text.trim()) return
+
+      suppressRecognitionRef.current = true
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop()
+        } catch (e) {
+          console.log("Error stopping recognition before TTS:", e)
+        }
+      }
+      setIsListening(false)
+
+      if (currentAudioRef.current) {
+        try {
+          currentAudioRef.current.pause()
+          currentAudioRef.current.currentTime = 0
+        } catch {}
+        currentAudioRef.current = null
+      }
+      if (window.speechSynthesis?.speaking) {
+        try {
+          window.speechSynthesis.cancel()
+        } catch {}
+      }
+      currentUtteranceRef.current = null
+
+      const cleanedText = cleanResponseText(text)
+      if (!cleanedText) {
+        suppressRecognitionRef.current = false
+        if (!isMicMutedRef.current && isCallActiveRef.current) {
+          startSpeechRecognitionRef.current?.()
+        }
+        return
       }
 
-      const raw = await res.text()
-      let data: any = raw
+      isAiSpeakingRef.current = true
+      setIsAiSpeaking(true)
+      setActivityStatus("speaking")
+
+      const characterGender = selectedCharacter?.gender || "female"
+
+      const cleanup = () => {
+        try {
+          suppressRecognitionRef.current = false
+
+          if (currentAudioRef.current) {
+            currentAudioRef.current.pause()
+            currentAudioRef.current.currentTime = 0
+            currentAudioRef.current = null
+          }
+          currentUtteranceRef.current = null
+          if (window.speechSynthesis) window.speechSynthesis.cancel()
+
+          isAiSpeakingRef.current = false
+          setIsAiSpeaking(false)
+
+          setCurrentVideoState("idle")
+
+          if (hasEnhancedVideo) {
+            if (speakingVideoRef.current) {
+              speakingVideoRef.current.pause()
+              speakingVideoRef.current.currentTime = 0
+            }
+            if (
+              idleVideoRef.current &&
+              selectedCharacter?.idleVideo &&
+              isCallActiveRef.current
+            ) {
+              idleVideoRef.current.currentTime = 0
+              idleVideoRef.current.play().catch(() => {})
+            }
+          }
+
+          if (!isMicMutedRef.current && isCallActiveRef.current) {
+            setActivityStatus("listening")
+            startSpeechRecognitionRef.current?.()
+          }
+        } catch (e) {
+          console.error("Cleanup error:", e)
+        }
+      }
 
       try {
-        data = JSON.parse(raw)
-      } catch {
-        // не JSON — строка
+        if (shouldUseGoogleTTS(activeLanguage.code)) {
+          try {
+            const audioDataUrl = await generateGoogleTTS(
+              cleanedText,
+              currentLocale, // ВАЖНО: передаём локаль (uk-UA/ru-RU), а не просто "uk"/"ru"
+              characterGender,
+              VIDEO_CALL_GOOGLE_TTS_CREDENTIALS,
+              VIDEO_CALL_VOICE_CONFIGS,
+            )
+
+            if (!audioDataUrl) throw new Error("No audio from Google TTS")
+
+            setCurrentVideoState("speaking")
+
+            if (hasEnhancedVideo) {
+              if (idleVideoRef.current) idleVideoRef.current.pause()
+              if (speakingVideoRef.current && selectedCharacter?.speakingVideo) {
+                speakingVideoRef.current.currentTime = 0
+                await speakingVideoRef.current.play().catch(() => {})
+              }
+            }
+
+            const audio = new Audio()
+            currentAudioRef.current = audio
+            audio.preload = "auto"
+            audio.volume = 1
+            audio.playsInline = true
+            audio.crossOrigin = "anonymous"
+            audio.setAttribute("playsinline", "true")
+            audio.setAttribute("webkit-playsinline", "true")
+
+            audio.onended = cleanup
+            audio.onerror = cleanup
+
+            audio.src = audioDataUrl
+            audio.load()
+            await audio.play()
+          } catch (e) {
+            console.error("Google TTS error:", e)
+            fallbackToBrowserTTS(cleanedText, characterGender, cleanup)
+          }
+        } else {
+          fallbackToBrowserTTS(cleanedText, characterGender, cleanup)
+        }
+      } catch (e) {
+        console.error("Speech error:", e)
+        cleanup()
       }
+    },
+    [
+      isSoundEnabled,
+      cleanResponseText,
+      activeLanguage.code,
+      currentLocale,
+      selectedCharacter,
+      hasEnhancedVideo,
+      fallbackToBrowserTTS,
+    ],
+  )
 
-      console.log("Video raw response:", data)
+  // заранее поднимаем голоса
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return
 
-      let answer = extractAnswer(data)
-
-      if (!answer) {
-        answer = t(
-          "I'm sorry, I couldn't process your message. Please try again.",
-        )
+    const loadVoices = () => {
+      const voices = window.speechSynthesis!.getVoices()
+      if (voices.length) {
+        getRefinedVoiceForLanguage(currentLocale, "female")
+        getRefinedVoiceForLanguage(currentLocale, "male")
       }
-
-      const assistantMsg: ChatMessage = {
-        id: Date.now() + 1,
-        role: "assistant",
-        text: answer,
-      }
-
-      setMessages((prev) => [...prev, assistantMsg])
-      setActivityStatus("listening")
-      speakText(answer)
-    } catch (error: any) {
-      console.error("Video call error:", error)
-      setNetworkError(t("Connection error. Please try again."))
-      setActivityStatus("listening")
-      if (onError && error instanceof Error) onError(error)
     }
-  }
 
-  // ---------- камера ----------
+    loadVoices()
+    window.speechSynthesis.addEventListener("voiceschanged", loadVoices)
+    return () => {
+      window.speechSynthesis?.removeEventListener("voiceschanged", loadVoices)
+    }
+  }, [currentLocale, getRefinedVoiceForLanguage])
+
+  // --- запрос к n8n / API ---
+
+  const processTranscription = useCallback(
+    async (text: string) => {
+      if (!isCallActiveRef.current) return
+      if (!text.trim()) return
+      if (isProcessingRef.current) return
+
+      if (!VIDEO_ASSISTANT_WEBHOOK_URL) {
+        const errorMessage = t(
+          "The video assistant is temporarily unavailable. Please contact support.",
+        )
+        setMessages((prev) => [
+          ...prev,
+          { id: prev.length + 1, role: "assistant", text: errorMessage },
+        ])
+        return
+      }
+
+      if (isAiSpeakingRef.current) return
+
+      isProcessingRef.current = true
+      setActivityStatus("thinking")
+
+      try {
+        const langForBackend =
+          activeLanguage.code?.startsWith("uk") ||
+          activeLanguage.code?.startsWith("ru") ||
+          activeLanguage.code?.startsWith("en")
+            ? activeLanguage.code
+            : activeLanguage.code || "uk"
+
+        const res = await fetch(VIDEO_ASSISTANT_WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: text,
+            language: langForBackend,
+            email: user?.email || "guest@example.com",
+            mode: "video",
+          }),
+        })
+
+        if (!res.ok) {
+          throw new Error(`Webhook error: ${res.status}`)
+        }
+
+        const raw = await res.text()
+        let data: any = raw
+        try {
+          data = JSON.parse(raw)
+        } catch {
+          // строка
+        }
+
+        let aiResponseText = extractAnswer(data)
+        const cleanedResponse = cleanResponseText(aiResponseText)
+
+        if (!cleanedResponse) {
+          throw new Error("Empty response received")
+        }
+
+        lastProcessedTextRef.current = text
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: prev.length + 1,
+            role: "assistant",
+            text: cleanedResponse,
+          },
+        ])
+
+        setActivityStatus("listening")
+        void speakText(cleanedResponse)
+      } catch (error: any) {
+        console.error("Processing error:", error)
+
+        if (!isCallActiveRef.current) return
+
+        let errorMessage = ""
+        if (error.name === "AbortError") {
+          errorMessage = t("Connection timeout. Please try again.")
+        } else if (error.message === "Empty response received") {
+          errorMessage = t(
+            "I received your message but couldn't generate a response. Could you try rephrasing?",
+          )
+        } else {
+          errorMessage = t(
+            "I couldn't process your message. Could you try again?",
+          )
+        }
+
+        setMessages((prev) => [
+          ...prev,
+          { id: prev.length + 1, role: "assistant", text: errorMessage },
+        ])
+
+        if (onError && error instanceof Error) onError(error)
+      } finally {
+        isProcessingRef.current = false
+        if (isCallActiveRef.current) {
+          setActivityStatus("listening")
+        }
+      }
+    },
+    [activeLanguage.code, cleanResponseText, speakText, t, user?.email, onError],
+  )
+
+  const processTranscriptionRef = useRef<
+    ((text: string) => Promise<void>) | null
+  >(null)
+
+  useEffect(() => {
+    processTranscriptionRef.current = processTranscription
+  }, [processTranscription])
+
+  // --- камера ---
 
   useEffect(() => {
     if (isCallActive && !isCameraOff && userVideoRef.current) {
@@ -621,7 +876,7 @@ export default function VideoCallDialog({
     }
   }, [isCallActive, isCameraOff])
 
-  function toggleCamera() {
+  const toggleCamera = useCallback(() => {
     if (isCameraOff) {
       navigator.mediaDevices
         .getUserMedia({ video: true })
@@ -646,59 +901,97 @@ export default function VideoCallDialog({
       }
       setIsCameraOff(true)
     }
-  }
+  }, [isCameraOff, t])
 
-  function toggleSound() {
+  const toggleSound = useCallback(() => {
     setIsSoundEnabled((prev) => {
       const next = !prev
-
-      if (!next) {
-        // выключили звук — обрубаем текущую озвучку
-        if (audioRef.current) {
-          audioRef.current.pause()
-          audioRef.current = null
+      if (!next && isAiSpeakingRef.current) {
+        if (currentAudioRef.current) {
+          currentAudioRef.current.pause()
+          currentAudioRef.current = null
         }
-        if (typeof window !== "undefined" && window.speechSynthesis) {
-          window.speechSynthesis.cancel()
-        }
-        isAiSpeakingRef.current = false
-        setIsAiSpeaking(false)
-        setCurrentVideoState("idle")
-        ensureRecognitionRunning()
+        if (window.speechSynthesis) window.speechSynthesis.cancel()
       }
-
       return next
     })
-  }
+  }, [])
 
-  function toggleMicrophone() {
-    const next = !isMicMuted
-    setIsMicMuted(next)
-    isMicMutedRef.current = next
-    ensureRecognitionRunning()
-  }
+  const toggleMicrophone = useCallback(() => {
+    if (isMicMuted) {
+      setIsMicMuted(false)
+      setIsListening(true)
+      setActivityStatus("listening")
+      startSpeechRecognitionRef.current?.()
+    } else {
+      if (recognitionRef.current?.stop) {
+        recognitionRef.current.stop()
+      }
+      setIsListening(false)
+      setInterimTranscript("")
+      setIsMicMuted(true)
+    }
+  }, [isMicMuted])
 
-  // ---------- управление звонком ----------
+  // --- инициализация аудио для мобилок ---
 
-  async function startCall() {
-    setIsConnecting(true)
-    setSpeechError(null)
-    setNetworkError(null)
+  const initializeMobileAudio = useCallback(async () => {
+    if (audioInitialized) return
 
     try {
-      isCallActiveRef.current = true
-      isMicMutedRef.current = false
-      isAiSpeakingRef.current = false
+      if (typeof window !== "undefined" && "AudioContext" in window) {
+        const AudioContextClass =
+          window.AudioContext || (window as any).webkitAudioContext
+        if (!audioContextRef.current) {
+          audioContextRef.current = new AudioContextClass()
+        }
+
+        if (audioContextRef.current.state === "suspended") {
+          await audioContextRef.current.resume()
+        }
+      }
+
+      const silentAudio = new Audio(
+        "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAADhAC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAA4T/jQwAAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQZDwP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV",
+      )
+      silentAudio.playsInline = true
+      silentAudio.volume = 0.01
+
+      try {
+        await silentAudio.play()
+        silentAudio.pause()
+        silentAudio.currentTime = 0
+      } catch {}
+
+      setAudioInitialized(true)
+    } catch (error) {
+      console.error("Audio initialization error:", error)
+    }
+  }, [audioInitialized])
+
+  // --- управление звонком ---
+
+  const startCall = useCallback(async () => {
+    setIsConnecting(true)
+    setSpeechError(null)
+
+    try {
+      await initializeMobileAudio()
 
       setIsCallActive(true)
+      isCallActiveRef.current = true
+
+      setCurrentVideoState("idle")
       setIsMicMuted(false)
-      setIsAiSpeaking(false)
+      setIsListening(true)
       setActivityStatus("listening")
       setMessages([])
       setInterimTranscript("")
-      setCurrentVideoState("idle")
+      lastProcessedTextRef.current = ""
+      isAiSpeakingRef.current = false
+      setIsAiSpeaking(false)
 
-      ensureRecognitionRunning()
+      startSpeechRecognitionRef.current?.()
 
       if (hasEnhancedVideo && selectedCharacter.idleVideo) {
         setTimeout(() => {
@@ -721,11 +1014,98 @@ export default function VideoCallDialog({
     } finally {
       setIsConnecting(false)
     }
-  }
+  }, [initializeMobileAudio, hasEnhancedVideo, selectedCharacter, t])
 
-  function endCall() {
-    stopEverything()
-  }
+  const endCall = useCallback(() => {
+    setIsCallActive(false)
+    isCallActiveRef.current = false
+
+    setIsListening(false)
+    setCurrentVideoState("idle")
+    setActivityStatus("listening")
+    setIsMicMuted(true)
+    isProcessingRef.current = false
+    suppressRecognitionRef.current = false
+    isAiSpeakingRef.current = false
+    setIsAiSpeaking(false)
+
+    if (currentAudioRef.current) {
+      try {
+        currentAudioRef.current.pause()
+      } catch {}
+      currentAudioRef.current = null
+    }
+
+    currentUtteranceRef.current = null
+    if (window.speechSynthesis) window.speechSynthesis.cancel()
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop()
+      } catch {}
+      recognitionRef.current = null
+    }
+
+    if (idleVideoRef.current) {
+      idleVideoRef.current.pause()
+      idleVideoRef.current.currentTime = 0
+    }
+    if (speakingVideoRef.current) {
+      speakingVideoRef.current.pause()
+      speakingVideoRef.current.currentTime = 0
+    }
+
+    if (userVideoRef.current?.srcObject) {
+      const stream = userVideoRef.current.srcObject as MediaStream
+      stream.getTracks().forEach((track) => {
+        try {
+          track.stop()
+        } catch {}
+      })
+      userVideoRef.current.srcObject = null
+    }
+
+    setInterimTranscript("")
+    setMessages([])
+    setSpeechError(null)
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen && isCallActive) {
+      endCall()
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop()
+        } catch {}
+      }
+      if (currentAudioRef.current) {
+        try {
+          currentAudioRef.current.pause()
+        } catch {}
+        currentAudioRef.current = null
+      }
+      currentUtteranceRef.current = null
+      if (window.speechSynthesis) window.speechSynthesis.cancel()
+
+      if (idleVideoRef.current) {
+        idleVideoRef.current.pause()
+        idleVideoRef.current.currentTime = 0
+      }
+      if (speakingVideoRef.current) {
+        speakingVideoRef.current.pause()
+        speakingVideoRef.current.currentTime = 0
+      }
+
+      if (userVideoRef.current?.srcObject) {
+        const stream = userVideoRef.current.srcObject as MediaStream
+        stream.getTracks().forEach((track) => track.stop())
+        userVideoRef.current.srcObject = null
+      }
+    }
+  }, [isOpen, isCallActive, endCall])
 
   if (!isOpen) return null
 
@@ -770,10 +1150,7 @@ export default function VideoCallDialog({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => {
-              endCall()
-              onClose()
-            }}
+            onClick={onClose}
             className="text-white hover:bg-indigo-500/60 min-w-[44px] min-h-[44px] flex-shrink-0"
           >
             <X className="h-5 w-5" />
@@ -807,7 +1184,7 @@ export default function VideoCallDialog({
                 <p className="text-xs text-blue-600 mt-2">
                   {shouldUseGoogleTTS(activeLanguage.code)
                     ? t(
-                        "All characters use Google TTS for authentic native Ukrainian accent",
+                        "All characters use Google TTS for authentic native accent.",
                       )
                     : t(
                         "AI will understand and respond in this language with native accent",
@@ -882,7 +1259,7 @@ export default function VideoCallDialog({
                         </video>
                       )}
 
-                      {selectedCharacter?.speakingVideoNew && (
+                      {selectedCharacter?.speakingVideo && (
                         <video
                           ref={speakingVideoRef}
                           className={`absolute inset-0 w-full h-full object-cover scale-[1.06] ${
@@ -896,7 +1273,7 @@ export default function VideoCallDialog({
                           preload="auto"
                         >
                           <source
-                            src={selectedCharacter.speakingVideoNew}
+                            src={selectedCharacter.speakingVideo}
                             type="video/mp4"
                           />
                         </video>
@@ -973,13 +1350,10 @@ export default function VideoCallDialog({
               </div>
 
               {/* Чат */}
-              <div
-                ref={scrollRef}
-                className="flex-1 flex flex-col space-y-3 sm:space-y-4 overflow-y-auto touch-pan-y"
-              >
+              <div className="flex-1 flex flex-col space-y-3 sm:space-y-4 overflow-y-auto touch-pan-y">
                 <div className="space-y-3 sm:space-y-4">
                   {messages.length === 0 && (
-                    <div className="bg-primary-50 rounded-2xl p-3 sm:p-4 text-xs sm:text-sm text-slate-800">
+                    <div className="bg-primary-50 rounded-2xl p-3 sm:4 text-xs sm:text-sm text-slate-800">
                       {t(
                         "You can start speaking when you're ready. The assistant will answer with voice and text here.",
                       )}
@@ -1021,12 +1395,6 @@ export default function VideoCallDialog({
                   {speechError && (
                     <div className="bg-rose-50 rounded-lg p-3 text-xs sm:text-sm text-rose-700 break-words">
                       {speechError}
-                    </div>
-                  )}
-
-                  {networkError && (
-                    <div className="bg-rose-50 rounded-lg p-3 text-xs sm:text-sm text-rose-700 break-words">
-                      {networkError}
                     </div>
                   )}
                 </div>
