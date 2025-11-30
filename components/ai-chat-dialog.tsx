@@ -20,7 +20,7 @@ import { APP_NAME } from "@/lib/app-config"
 type Props = {
   isOpen: boolean
   onClose: () => void
-  /** URL вебхука Workflow-агента; если не передан – используем /api/chat */
+  /** URL вебхука Workflow-агента; если не передан – используем NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL, а затем /api/chat */
   webhookUrl?: string
 }
 
@@ -28,6 +28,43 @@ type ChatMessage = {
   id: string
   role: "user" | "assistant"
   text: string
+}
+
+/** Основной фронтовый вебхук (агент) */
+const FRONT_AGENT_WEBHOOK = process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL
+
+/** Унифицированный разбор ответа от агента/n8n/backend */
+function extractAssistantText(raw: any): string | null {
+  if (!raw) return null
+
+  if (typeof raw === "string") return raw
+
+  if (typeof raw.text === "string") return raw.text
+  if (typeof raw.response === "string") return raw.response
+  if (typeof raw.answer === "string") return raw.answer
+  if (typeof raw.message === "string") return raw.message
+  if (typeof raw.output === "string") return raw.output
+
+  if (Array.isArray(raw) && raw.length > 0) {
+    const first = raw[0]
+    if (typeof first === "string") return first
+    if (first && typeof first === "object") {
+      if (typeof first.text === "string") return first.text
+      if (typeof first.output === "string") return first.output
+      if (typeof first.response === "string") return first.response
+    }
+  }
+
+  return null
+}
+
+/** Лёгкая очистка текста (убираем markdown-артефакты и лишние переносы) */
+function cleanAssistantText(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\*\*/g, "")
+    .trim()
 }
 
 export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
@@ -60,13 +97,11 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
     const text = input.trim()
     if (!text || isSending) return
 
-    // основной источник – вебхук агента, запасной – /api/chat
-    const url = (webhookUrl && webhookUrl.trim()) || "/api/chat"
-
     setError(null)
     setIsSending(true)
     setInput("")
 
+    // Аккуратно достаём код языка (на всякий случай учитываем разные типы)
     const langCode =
       typeof (currentLanguage as any) === "string"
         ? (currentLanguage as any as string)
@@ -80,28 +115,66 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
 
     setMessages((prev) => [...prev, userMessage])
 
-    try {
+    // 1) основной URL — проп → 2) NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL → 3) /api/chat
+    const primaryUrl =
+      (webhookUrl && webhookUrl.trim()) ||
+      (FRONT_AGENT_WEBHOOK && FRONT_AGENT_WEBHOOK.trim()) ||
+      null
+    const fallbackUrl = "/api/chat"
+
+    const payload = {
+      query: text,
+      language: langCode,
+      email: user?.email ?? null,
+      mode: "chat" as const,
+    }
+
+    const callEndpoint = async (url: string) => {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: text,
-          language: langCode,
-          email: user?.email ?? null,
-          mode: "chat",
-        }),
+        body: JSON.stringify(payload),
       })
 
       if (!res.ok) {
         throw new Error(`Request failed with status ${res.status}`)
       }
 
-      const data = (await res.json()) as { text?: string }
+      try {
+        return await res.json()
+      } catch {
+        throw new Error("Failed to parse response JSON")
+      }
+    }
+
+    try {
+      let data: any
+
+      if (primaryUrl) {
+        // сначала бьём в основного агента
+        try {
+          data = await callEndpoint(primaryUrl)
+        } catch (primaryError) {
+          console.error(
+            "Primary chat webhook error, falling back to /api/chat:",
+            primaryError,
+          )
+          // если основной и так /api/chat – не дёргаем его второй раз
+          if (primaryUrl !== fallbackUrl) {
+            data = await callEndpoint(fallbackUrl)
+          } else {
+            throw primaryError
+          }
+        }
+      } else {
+        // если нет переменной – сразу идём в резервный /api/chat
+        data = await callEndpoint(fallbackUrl)
+      }
+
+      const extracted = extractAssistantText(data)
       const answer =
-        data?.text ||
-        t(
-          "I'm sorry, I couldn't process your message. Please try again.",
-        )
+        (extracted && cleanAssistantText(extracted)) ||
+        t("I'm sorry, I couldn't process your message. Please try again.")
 
       const assistantMessage: ChatMessage = {
         id: `${Date.now()}-assistant`,
