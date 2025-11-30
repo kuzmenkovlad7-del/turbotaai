@@ -1,3 +1,4 @@
+// components/voice-call-dialog.tsx
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
@@ -12,7 +13,6 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Phone,
-  X,
   Wifi,
   WifiOff,
   Brain,
@@ -39,6 +39,12 @@ interface VoiceCallDialogProps {
   userEmail?: string
 }
 
+type VoiceMessage = {
+  id: string
+  role: "user" | "assistant"
+  text: string
+}
+
 export default function VoiceCallDialog({
   isOpen,
   onClose,
@@ -53,24 +59,30 @@ export default function VoiceCallDialog({
   const [isListening, setIsListening] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
-  const [transcript, setTranscript] = useState("")
-  const [aiResponse, setAiResponse] = useState("")
+  const [messages, setMessages] = useState<VoiceMessage[]>([])
   const [networkError, setNetworkError] = useState<string | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<
     "connected" | "disconnected"
   >("disconnected")
 
   const recognitionRef = useRef<any | null>(null)
+  const ignoreOnEndRef = useRef(false) // чтобы не автоперезапускать, когда сами стопаем
+  const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
-  // Полный сброс состояния и стека браузера
+  // Скролл вниз при новых сообщениях
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages])
+
   const stopEverything = useCallback(() => {
     setIsCallActive(false)
     setIsListening(false)
     setIsAiSpeaking(false)
-    setTranscript("")
-    setAiResponse("")
+    setMessages([])
     setConnectionStatus("disconnected")
     setNetworkError(null)
     setIsMicMuted(false)
@@ -95,7 +107,8 @@ export default function VoiceCallDialog({
     }
   }, [isOpen, stopEverything])
 
-  // Запуск SpeechRecognition
+  // --- SpeechRecognition ---
+
   const startRecognition = useCallback(() => {
     if (typeof window === "undefined") return
 
@@ -134,6 +147,13 @@ export default function VoiceCallDialog({
 
     recognition.onend = () => {
       setIsListening(false)
+
+      // если мы сами стопнули, автоперезапуск не нужен
+      if (ignoreOnEndRef.current) {
+        ignoreOnEndRef.current = false
+        return
+      }
+
       // мягкий автоперезапуск, пока звонок активен и микрофон не выключен
       if (isCallActive && !isMicMuted) {
         setTimeout(() => {
@@ -153,7 +173,13 @@ export default function VoiceCallDialog({
       const text = last[0]?.transcript?.trim()
       if (!text) return
 
-      setTranscript((prev) => (prev ? `${prev} ${text}` : text))
+      const userMsg: VoiceMessage = {
+        id: `${Date.now()}-user`,
+        role: "user",
+        text,
+      }
+
+      setMessages((prev) => [...prev, userMsg])
       void handleUserText(text)
     }
 
@@ -168,10 +194,22 @@ export default function VoiceCallDialog({
     }
   }, [currentLanguage.code, isCallActive, isMicMuted, t])
 
-  // Озвучка ответа через browser TTS
+  // --- Озвучка через browser TTS, без самопрослушивания ---
+
   const speakText = useCallback(
     (text: string) => {
       if (typeof window === "undefined" || !window.speechSynthesis) return
+
+      // на время озвучки выключаем распознавание, чтобы не слушал сам себя
+      if (recognitionRef.current) {
+        ignoreOnEndRef.current = true
+        try {
+          recognitionRef.current.stop()
+        } catch (e) {
+          console.error(e)
+        }
+      }
+
       const utterance = new SpeechSynthesisUtterance(text)
 
       utterance.lang = currentLanguage.code.startsWith("uk")
@@ -183,17 +221,33 @@ export default function VoiceCallDialog({
       utterance.rate = 1
       utterance.pitch = 1
 
-      utterance.onstart = () => setIsAiSpeaking(true)
-      utterance.onend = () => setIsAiSpeaking(false)
-      utterance.onerror = () => setIsAiSpeaking(false)
+      const shouldResumeListening = isCallActive && !isMicMuted
+
+      utterance.onstart = () => {
+        setIsAiSpeaking(true)
+      }
+
+      utterance.onend = () => {
+        setIsAiSpeaking(false)
+
+        // после окончания озвучки снова начинаем слушать пользователя
+        if (shouldResumeListening) {
+          startRecognition()
+        }
+      }
+
+      utterance.onerror = () => {
+        setIsAiSpeaking(false)
+      }
 
       window.speechSynthesis.cancel()
       window.speechSynthesis.speak(utterance)
     },
-    [currentLanguage.code],
+    [currentLanguage.code, isCallActive, isMicMuted, startRecognition],
   )
 
-  // Отправка текста в наш API
+  // --- Отправка текста в /api/chat ---
+
   const handleUserText = useCallback(
     async (text: string) => {
       try {
@@ -217,7 +271,13 @@ export default function VoiceCallDialog({
           (data && (data.text as string)) ||
           t("I'm sorry, I couldn't process your message. Please try again.")
 
-        setAiResponse(answer)
+        const assistantMsg: VoiceMessage = {
+          id: `${Date.now()}-assistant`,
+          role: "assistant",
+          text: answer,
+        }
+
+        setMessages((prev) => [...prev, assistantMsg])
         speakText(answer)
       } catch (error: any) {
         console.error("Voice call error:", error)
@@ -314,10 +374,13 @@ export default function VoiceCallDialog({
 
           <div className="flex h-[500px] flex-col md:h-[540px]">
             <ScrollArea className="flex-1 px-5 pt-4 pb-2">
-              <div className="space-y-3">
-                {!isCallActive && (
-                  <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-xs text-slate-700">
-                    <p className="font-medium text-slate-900 mb-1">
+              <div
+                ref={scrollRef}
+                className="max-h-full space-y-3 pr-1 text-xs md:text-sm"
+              >
+                {!isCallActive && messages.length === 0 && (
+                  <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-slate-700">
+                    <p className="mb-1 font-medium text-slate-900">
                       {t("How it works")}
                     </p>
                     <p>
@@ -334,28 +397,30 @@ export default function VoiceCallDialog({
                   </div>
                 )}
 
-                {transcript && (
-                  <div className="rounded-2xl bg-blue-50 px-3 py-3 text-xs md:text-sm text-slate-900">
-                    <p className="font-medium text-blue-800 mb-1">
-                      {t("You said in {{language}}:", {
-                        language: currentLanguage.name,
-                      })}
-                    </p>
-                    <p>{transcript}</p>
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${
+                      msg.role === "user" ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 shadow-sm ${
+                        msg.role === "user"
+                          ? "rounded-br-sm bg-slate-900 text-white"
+                          : "rounded-bl-sm bg-emerald-50 text-slate-900"
+                      }`}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className="mb-1 flex items-center gap-1 text-[10px] font-medium text-emerald-700">
+                          <Brain className="h-3 w-3" />
+                          {t("AI Psychologist")}
+                        </div>
+                      )}
+                      <p className="text-xs md:text-sm">{msg.text}</p>
+                    </div>
                   </div>
-                )}
-
-                {aiResponse && (
-                  <div className="rounded-2xl bg-emerald-50 px-3 py-3 text-xs md:text-sm text-slate-900">
-                    <p className="mb-1 flex items-center gap-1 font-medium text-emerald-800">
-                      <Brain className="h-3.5 w-3.5" />
-                      {t("AI Psychologist in {{language}}:", {
-                        language: currentLanguage.name,
-                      })}
-                    </p>
-                    <p>{aiResponse}</p>
-                  </div>
-                )}
+                ))}
 
                 {networkError && (
                   <div className="rounded-2xl bg-rose-50 px-3 py-3 text-xs text-rose-700">
@@ -369,13 +434,15 @@ export default function VoiceCallDialog({
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-[11px] text-slate-500">
                   <Sparkles className="h-3 w-3" />
-                  {isListening
-                    ? t("Listening… you can speak.")
-                    : isCallActive
-                      ? t("Paused. Turn on microphone to continue.")
-                      : t(
-                          "In crisis situations, please contact local emergency services immediately.",
-                        )}
+                  {isAiSpeaking
+                    ? t("Assistant is speaking…")
+                    : isListening
+                      ? t("Listening… you can speak.")
+                      : isCallActive
+                        ? t("Paused. Turn on microphone to continue.")
+                        : t(
+                            "In crisis situations, please contact local emergency services immediately.",
+                          )}
                 </div>
 
                 {isCallActive && (
