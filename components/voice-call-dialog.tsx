@@ -116,12 +116,13 @@ export default function VoiceCallDialog({
   >("disconnected")
 
   const recognitionRef = useRef<any | null>(null)
-  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const isRecognitionActiveRef = useRef(false)
 
-  // свежие значения флагов для коллбеков SpeechRecognition / TTS
   const isCallActiveRef = useRef(false)
   const isMicMutedRef = useRef(false)
   const isAiSpeakingRef = useRef(false)
+
+  const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
@@ -131,8 +132,6 @@ export default function VoiceCallDialog({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages])
-
-  // ---------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ----------
 
   function computeLangCode(): string {
     const lang =
@@ -145,58 +144,32 @@ export default function VoiceCallDialog({
     return "en-US"
   }
 
-  function stopEverything() {
-    isCallActiveRef.current = false
-    isMicMutedRef.current = false
-    isAiSpeakingRef.current = false
+  // ---------- управление SpeechRecognition (единая точка) ----------
 
-    setIsCallActive(false)
-    setIsListening(false)
-    setIsAiSpeaking(false)
-    setMessages([])
-    setConnectionStatus("disconnected")
-    setNetworkError(null)
-    setIsMicMuted(false)
-
-    if (recognitionRef.current) {
-      try {
-        // отключаем автоперезапуск
-        recognitionRef.current.onend = null
-        recognitionRef.current.stop()
-      } catch (e) {
-        console.error(e)
-      }
-      recognitionRef.current = null
-    }
-
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel()
-    }
-  }
-
-  useEffect(() => {
-    if (!isOpen) {
-      stopEverything()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen])
-
-  useEffect(() => {
-    return () => {
-      // очистка при размонтировании компонента
-      stopEverything()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // ---------- РАСПОЗНАВАНИЕ РЕЧИ ----------
-
-  function startRecognition() {
+  function ensureRecognitionRunning() {
     if (typeof window === "undefined") return
-    if (!isCallActiveRef.current) return
-    if (isMicMutedRef.current) return
+
+    const shouldListen =
+      isCallActiveRef.current &&
+      !isMicMutedRef.current &&
+      !isAiSpeakingRef.current
 
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+
+    // если слушать НЕ нужно — стопаем, если запущено
+    if (!shouldListen) {
+      if (recognitionRef.current && isRecognitionActiveRef.current) {
+        try {
+          recognitionRef.current.stop()
+        } catch (e) {
+          console.error(e)
+        }
+      }
+      isRecognitionActiveRef.current = false
+      setIsListening(false)
+      return
+    }
+
     if (!SR) {
       setNetworkError(
         t(
@@ -210,12 +183,12 @@ export default function VoiceCallDialog({
 
     if (!recognition) {
       recognition = new SR()
-      recognitionRef.current = recognition
-
       recognition.continuous = true
       recognition.interimResults = false
+      recognitionRef.current = recognition
 
       recognition.onstart = () => {
+        isRecognitionActiveRef.current = true
         setIsListening(true)
         setConnectionStatus("connected")
         setNetworkError(null)
@@ -226,31 +199,28 @@ export default function VoiceCallDialog({
         if (event?.error !== "no-speech") {
           setNetworkError(t("Error while listening. Please try again."))
         }
-        setIsListening(false)
       }
 
       recognition.onend = () => {
+        isRecognitionActiveRef.current = false
         setIsListening(false)
 
-        // если звонок ещё активен и микрофон не выключен руками — мягко перезапускаем
-        if (isCallActiveRef.current && !isMicMutedRef.current) {
-          setTimeout(() => {
-            try {
-              recognition.start()
-            } catch (e: any) {
-              if (e?.name !== "InvalidStateError") {
-                console.error("Speech restart error", e)
-              }
-            }
-          }, 500)
-        }
+        // если всё ещё нужно слушать (звонок идёт, мик не мут и ассистент не говорит) — перезапускаем
+        setTimeout(() => {
+          const stillShouldListen =
+            isCallActiveRef.current &&
+            !isMicMutedRef.current &&
+            !isAiSpeakingRef.current
+
+          if (stillShouldListen) {
+            ensureRecognitionRunning()
+          }
+        }, 300)
       }
 
       recognition.onresult = (event: any) => {
-        // пока ассистент говорит — игнорируем всё, чтобы он не слушал сам себя
-        if (isAiSpeakingRef.current) {
-          return
-        }
+        // если ассистент говорит — игнорируем всё, чтобы не слушать его озвучку
+        if (isAiSpeakingRef.current) return
 
         const last = event.results[event.results.length - 1]
         if (!last || !last.isFinal) return
@@ -269,23 +239,71 @@ export default function VoiceCallDialog({
       }
     }
 
-    // всегда обновляем язык перед стартом
     recognition.lang = computeLangCode()
 
-    try {
-      recognition.start()
-    } catch (e: any) {
-      // если уже запущен — просто игнорируем
-      if (e?.name !== "InvalidStateError") {
-        console.error("Cannot start recognition", e)
-        setNetworkError(
-          t("Could not start microphone. Check permissions and try again."),
-        )
+    if (!isRecognitionActiveRef.current) {
+      try {
+        recognition.start()
+        // onstart сам выставит флаги
+      } catch (e: any) {
+        if (e?.name !== "InvalidStateError") {
+          console.error("Cannot start recognition", e)
+          setNetworkError(
+            t("Could not start microphone. Check permissions and try again."),
+          )
+        }
       }
     }
   }
 
-  // ---------- TTS / ОЗВУЧКА ОТВЕТА ----------
+  function hardStopRecognition() {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onend = null
+        recognitionRef.current.stop()
+      } catch (e) {
+        console.error(e)
+      }
+    }
+    isRecognitionActiveRef.current = false
+    setIsListening(false)
+  }
+
+  function stopEverything() {
+    isCallActiveRef.current = false
+    isMicMutedRef.current = false
+    isAiSpeakingRef.current = false
+
+    setIsCallActive(false)
+    setIsMicMuted(false)
+    setIsAiSpeaking(false)
+    setIsListening(false)
+    setConnectionStatus("disconnected")
+    setNetworkError(null)
+    setMessages([])
+
+    hardStopRecognition()
+
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
+  }
+
+  useEffect(() => {
+    if (!isOpen) {
+      stopEverything()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen])
+
+  useEffect(() => {
+    return () => {
+      stopEverything()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ---------- озвучка ответа ----------
 
   function speakText(text: string) {
     if (typeof window === "undefined" || !window.speechSynthesis) return
@@ -299,31 +317,28 @@ export default function VoiceCallDialog({
     utterance.onstart = () => {
       setIsAiSpeaking(true)
       isAiSpeakingRef.current = true
-      setIsListening(false)
+      // пока говорим — слушать не нужно
+      ensureRecognitionRunning()
     }
 
     utterance.onend = () => {
       setIsAiSpeaking(false)
       isAiSpeakingRef.current = false
-
-      // после ответа ассистента снова слушаем пользователя
-      if (isCallActiveRef.current && !isMicMutedRef.current) {
-        setTimeout(() => {
-          startRecognition()
-        }, 400)
-      }
+      // договорили — снова начинаем слушать, если звонок активен и мик не выключен
+      ensureRecognitionRunning()
     }
 
     utterance.onerror = () => {
       setIsAiSpeaking(false)
       isAiSpeakingRef.current = false
+      ensureRecognitionRunning()
     }
 
     window.speechSynthesis.cancel()
     window.speechSynthesis.speak(utterance)
   }
 
-  // ---------- ОТПРАВКА ТЕКСТА В N8N / OPENAI ----------
+  // ---------- отправка текста в n8n / OpenAI ----------
 
   async function handleUserText(text: string) {
     const lang =
@@ -359,7 +374,7 @@ export default function VoiceCallDialog({
       try {
         data = JSON.parse(raw)
       } catch {
-        // не JSON — оставляем строку как есть
+        // не JSON — строка
       }
 
       console.log("Voice raw response:", data)
@@ -387,7 +402,7 @@ export default function VoiceCallDialog({
     }
   }
 
-  // ---------- УПРАВЛЕНИЕ ЗВОНКОМ / МИКРОФОНОМ ----------
+  // ---------- управление звонком / микрофоном ----------
 
   const startCall = () => {
     setIsConnecting(true)
@@ -400,7 +415,7 @@ export default function VoiceCallDialog({
       isCallActiveRef.current = true
       setIsCallActive(true)
       setIsConnecting(false)
-      startRecognition()
+      ensureRecognitionRunning()
     }, 200)
   }
 
@@ -412,21 +427,7 @@ export default function VoiceCallDialog({
     const next = !isMicMuted
     setIsMicMuted(next)
     isMicMutedRef.current = next
-
-    if (next) {
-      // выключили микрофон — стопаем распознавание
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop()
-        } catch (e) {
-          console.error(e)
-        }
-      }
-      setIsListening(false)
-    } else if (isCallActiveRef.current) {
-      // снова включили — продолжаем слушать
-      startRecognition()
-    }
+    ensureRecognitionRunning()
   }
 
   const userEmailDisplay = effectiveEmail
