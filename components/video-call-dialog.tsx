@@ -26,16 +26,19 @@ import {
 import { shouldUseGoogleTTS, generateGoogleTTS } from "@/lib/google-tts"
 import { APP_NAME } from "@/lib/app-config"
 
+// Используем пустые креды, т.к. в твоём проекте они подтягиваются из сервера/конфига
 const VIDEO_CALL_GOOGLE_TTS_CREDENTIALS: any = {}
 
-// Глобальный URL вебхука для видео-ассистента (идёт через наш Next-прокси)
+// Глобальный URL вебхука для видео-ассистента
+// ВАЖНО: по умолчанию идём через наш Next.js API-роут /api/turbotai-agent
+// Если хочешь переопределить — задай один из NEXT_PUBLIC_* env-переменных.
 const VIDEO_ASSISTANT_WEBHOOK_URL =
   process.env.NEXT_PUBLIC_TURBOTA_AI_VIDEO_ASSISTANT_WEBHOOK_URL ||
   process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL ||
   process.env.NEXT_PUBLIC_TURBOTA_AI_WORKFLOW_ASSISTANT_WEBHOOK_URL ||
-  "/api/turbotaai-agent"
+  "/api/turbotai-agent"
 
-// можно расширять под другие языки позже
+// конфиги для Google TTS, если нужен кастом под языки
 const VIDEO_CALL_VOICE_CONFIGS = {
   uk: {
     female: {
@@ -87,7 +90,7 @@ type ChatMessage = {
   text: string
 }
 
-// ОДНА София
+// ОДНА София по умолчанию
 const defaultCharacter: AICharacter = {
   id: "dr-sophia",
   name: "Dr. Sophia",
@@ -798,18 +801,19 @@ export default function VideoCallDialog({
           characterName: selectedCharacter?.name || "AI Psychologist",
         })
 
-        const webhookResponse = await fetch(
-          `${resolvedWebhookUrl}?${params.toString()}`,
-          {
-            method: "GET",
-            headers: {
-              Accept: "application/json",
-              "Accept-Language": activeLanguage.code,
-              "Content-Language": activeLanguage.code,
-            },
-            signal: controller.signal,
+        const baseUrl = resolvedWebhookUrl.trim()
+        const separator = baseUrl.includes("?") ? "&" : "?"
+        const requestUrl = `${baseUrl}${separator}${params.toString()}`
+
+        const webhookResponse = await fetch(requestUrl, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Accept-Language": activeLanguage.code,
+            "Content-Language": activeLanguage.code,
           },
-        )
+          signal: controller.signal,
+        })
 
         clearTimeout(timeoutId)
 
@@ -1535,7 +1539,6 @@ export default function VideoCallDialog({
                 className="rounded-full h-14 w-14 sm:h-12 sm:w-12 bg-red-600 hover:bg-red-700 text-white touch-manipulation"
                 onClick={endCall}
               >
-                {/* без rotate-180, чтобы трубка не была перевёрнута */}
                 <Phone className="h-6 w-6 sm:h-5 sm:w-5" />
               </Button>
             </div>
