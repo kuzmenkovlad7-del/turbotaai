@@ -20,7 +20,7 @@ import { APP_NAME } from "@/lib/app-config"
 type Props = {
   isOpen: boolean
   onClose: () => void
-  /** URL вебхука Workflow-агента; если не передан – используем ENV или /api/chat */
+  /** Можно передать свой вебхук, но по умолчанию берём из env */
   webhookUrl?: string
 }
 
@@ -28,6 +28,49 @@ type ChatMessage = {
   id: string
   role: "user" | "assistant"
   text: string
+}
+
+// PRIMARY: фронт → TurbotaAI агент вебхук из env
+const TURBOTA_AGENT_WEBHOOK_URL =
+  process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL || ""
+
+// запасной бэкенд-проксирующий роут
+const FALLBACK_CHAT_API = "/api/chat"
+
+// аккуратно вытаскиваем текст из любого формата ответа n8n
+function extractAnswer(data: any): string {
+  if (!data) return ""
+
+  if (typeof data === "string") {
+    return data.trim()
+  }
+
+  if (Array.isArray(data) && data.length > 0) {
+    const first = data[0] ?? {}
+    return (
+      first.text ||
+      first.response ||
+      first.output ||
+      first.message ||
+      first.content ||
+      first.result ||
+      JSON.stringify(first)
+    )?.toString().trim()
+  }
+
+  if (typeof data === "object") {
+    return (
+      data.text ||
+      data.response ||
+      data.output ||
+      data.message ||
+      data.content ||
+      data.result ||
+      JSON.stringify(data)
+    )?.toString().trim()
+  }
+
+  return ""
 }
 
 export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
@@ -60,17 +103,11 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
     const text = input.trim()
     if (!text || isSending) return
 
-    // 1) пробуем взять URL из ENV (главный источник)
-    const envWebhookUrl =
-      process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL ||
-      process.env.NEXT_PUBLIC_NBN_CONTACT_WEBHOOK_URL ||
-      ""
-
-    // 2) если ENV есть – используем его, потом проп, потом уже /api/chat
-    const url =
-      (envWebhookUrl && envWebhookUrl.trim()) ||
+    // 1) prop → 2) env → 3) /api/chat
+    const resolvedWebhook =
       (webhookUrl && webhookUrl.trim()) ||
-      "/api/chat"
+      TURBOTA_AGENT_WEBHOOK_URL.trim() ||
+      FALLBACK_CHAT_API
 
     setError(null)
     setIsSending(true)
@@ -78,7 +115,7 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
 
     const langCode =
       typeof (currentLanguage as any) === "string"
-        ? (currentLanguage as any as string)
+        ? ((currentLanguage as any) as string)
         : (currentLanguage as any)?.code || "uk"
 
     const userMessage: ChatMessage = {
@@ -90,15 +127,16 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
     setMessages((prev) => [...prev, userMessage])
 
     try {
-      const res = await fetch(url, {
+      const res = await fetch(resolvedWebhook, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           query: text,
           language: langCode,
           email: user?.email ?? null,
           mode: "chat",
-          source: "turbota_site_chat",
         }),
       })
 
@@ -106,12 +144,25 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
         throw new Error(`Request failed with status ${res.status}`)
       }
 
-      const data = (await res.json()) as { text?: string }
-      const answer =
-        data?.text ||
-        t(
+      // читаем как текст, потом пытаемся JSON-распарсить — на случай, если придёт строка
+      const raw = await res.text()
+      let data: any = raw
+
+      try {
+        data = JSON.parse(raw)
+      } catch {
+        // не JSON — оставляем как есть
+      }
+
+      console.log("Chat raw response:", data)
+
+      let answer = extractAnswer(data)
+
+      if (!answer) {
+        answer = t(
           "I'm sorry, I couldn't process your message. Please try again.",
         )
+      }
 
       const assistantMessage: ChatMessage = {
         id: `${Date.now()}-assistant`,
