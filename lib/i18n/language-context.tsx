@@ -1,14 +1,19 @@
 "use client"
 
-import { useRef } from "react"
-
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-import { type Language, languages } from "./languages"
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from "react"
+import { type Language, languages, defaultLanguage } from "./languages"
 import { getTranslations } from "./translations"
 import {
   translateDocument,
   translateElement,
-  translateWithFallback,
+  translateWithFallback as translateWithFallbackUtil,
   translateWithParams,
   forceCompleteRetranslation,
 } from "./translation-utils"
@@ -26,8 +31,6 @@ interface LanguageContextType {
   forceRetranslate: () => void
 }
 
-const defaultLanguage = languages[0] // Default to English for better compatibility
-
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 export const useLanguage = () => {
@@ -43,48 +46,33 @@ interface LanguageProviderProps {
 }
 
 export const LanguageProvider = ({ children }: LanguageProviderProps) => {
-  // Initialize with default language and translations immediately
   const [currentLanguage, setCurrentLanguage] = useState<Language>(defaultLanguage)
   const [translations, setTranslations] = useState<Record<string, string>>(
     getTranslations(defaultLanguage.code)
   )
   const [isLoading, setIsLoading] = useState(true)
   const [isReady, setIsReady] = useState(false)
-  const [isRTL, setIsRTL] = useState(false)
+  const [isRTL, setIsRTL] = useState(defaultLanguage.direction === "rtl")
   const missingTranslationsRef = useRef<Set<string>>(new Set())
   const observerRef = useRef<MutationObserver | null>(null)
   const isInitialRender = useRef(true)
   const translationCacheRef = useRef<Map<string, Record<string, string>>>(new Map())
-  const previousLanguageRef = useRef<string>("")
+  const previousLanguageRef = useRef<string>(defaultLanguage.code)
 
-  // Function to detect browser language with improved logic
+  // Всегда по умолчанию возвращаем uk, если нет сохранённого языка
   const detectBrowserLanguage = () => {
     if (typeof window !== "undefined") {
       const savedLanguage = localStorage.getItem("preferredLanguage")
       if (savedLanguage) {
-        // Check if the saved language is still supported
         const supportedLang = languages.find((lang) => lang.code === savedLanguage)
-        if (supportedLang) return savedLanguage
+        if (supportedLang) return supportedLang.code
       }
-
-      // Get browser languages in order of preference
-      const browserLanguages = navigator.languages || [navigator.language]
-
-      // Check each browser language against supported languages
-      for (const browserLang of browserLanguages) {
-        const langCode = browserLang.split("-")[0].toLowerCase()
-
-        // Check if we support this language
-        const supportedLang = languages.find((lang) => lang.code === langCode)
-        if (supportedLang) return langCode
-      }
-
-      return "en" // Default to English
+      return defaultLanguage.code
     }
-    return "en" // Default to English
+    return defaultLanguage.code
   }
 
-  // Enhanced translation function with caching and fallbacks
+  // Основная функция перевода по ключу
   const t = (key: string, params?: Record<string, any>): string => {
     try {
       if (!translations || typeof translations !== "object") {
@@ -94,11 +82,10 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
 
       let translatedText = translations[key]
 
-      // If translation doesn't exist, try fallback
+      // Если нет перевода — берём из английского
       if (!translatedText) {
-        translatedText = translateWithFallback(key, translations, getTranslations("en"))
+        translatedText = translateWithFallbackUtil(key, translations, getTranslations("en"))
 
-        // If still no translation, record it as missing and return the key
         if (translatedText === key) {
           if (process.env.NODE_ENV === "development") {
             missingTranslationsRef.current.add(key)
@@ -106,7 +93,7 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
         }
       }
 
-      // Replace parameters if they exist
+      // Подстановка параметров {{param}}
       if (params && translatedText) {
         translatedText = translateWithParams(key, params, translations)
       }
@@ -118,22 +105,24 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
     }
   }
 
-  // Function to get translation with fallback
+  // Публичная функция с выбором fallback-языка (по умолчанию en)
   const translateWithFallbackFunc = (key: string, fallbackLanguage = "en"): string => {
-    return translateWithFallback(key, translations, getTranslations(fallbackLanguage))
+    return translateWithFallbackUtil(key, translations, getTranslations(fallbackLanguage))
   }
 
-  // Function to get translation coverage
+  // Покрытие переводами (для отладки)
   const getTranslationCoverage = (): number => {
     if (!translations) return 0
 
     const totalKeys = Object.keys(translations).length
-    const translatedKeys = Object.values(translations).filter((value) => value && value.trim()).length
+    const translatedKeys = Object.values(translations).filter(
+      (value) => value && value.trim(),
+    ).length
 
     return totalKeys > 0 ? Math.round((translatedKeys / totalKeys) * 100) : 0
   }
 
-  // Function to translate all elements with data-i18n attribute
+  // Перевод элементов с data-i18n
   const translateDataAttributes = () => {
     try {
       if (typeof document === "undefined") return
@@ -153,7 +142,7 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
     }
   }
 
-  // Load saved language preference or detect browser language on initial load
+  // Инициализация языка при первом рендере
   useEffect(() => {
     if (!isInitialRender.current) return
     isInitialRender.current = false
@@ -163,30 +152,26 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
         setIsLoading(true)
 
         const initialLanguageCode = detectBrowserLanguage()
-        const initialLanguage = languages.find((lang) => lang.code === initialLanguageCode)
+        const initialLanguage =
+          languages.find((lang) => lang.code === initialLanguageCode) || defaultLanguage
 
-        // Cache initial translations
-        const initialTranslations = getTranslations(initialLanguageCode)
-        translationCacheRef.current.set(initialLanguageCode, initialTranslations)
+        const initialTranslations = getTranslations(initialLanguage.code)
+        translationCacheRef.current.set(initialLanguage.code, initialTranslations)
 
-        // Update state
-        setCurrentLanguage(initialLanguage || defaultLanguage)
-        setIsRTL((initialLanguage || defaultLanguage).direction === "rtl")
+        setCurrentLanguage(initialLanguage)
+        setIsRTL(initialLanguage.direction === "rtl")
         setTranslations(initialTranslations)
-        previousLanguageRef.current = initialLanguageCode
+        previousLanguageRef.current = initialLanguage.code
 
-        // Set document direction and language only in browser
         if (typeof document !== "undefined") {
-          document.documentElement.dir = (initialLanguage || defaultLanguage).direction
-          document.documentElement.lang = (initialLanguage || defaultLanguage).code
+          document.documentElement.dir = initialLanguage.direction
+          document.documentElement.lang = initialLanguage.code
 
-          // Add language-specific class to body
-          document.body.classList.add(`lang-${initialLanguageCode}`)
-          if ((initialLanguage || defaultLanguage).direction === "rtl") {
-            document.body.classList.add("rtl")
-          }
+          document.body.classList.add(`lang-${initialLanguage.code}`)
+          document.body.classList.add(
+            initialLanguage.direction === "rtl" ? "rtl" : "ltr",
+          )
 
-          // Translate the entire document on initial load
           setTimeout(() => {
             translateDataAttributes()
           }, 0)
@@ -195,44 +180,42 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
         setIsReady(true)
       } catch (error) {
         console.error("Error initializing language:", error)
-        // Ensure we always have a valid state
+
         setCurrentLanguage(defaultLanguage)
-        setIsRTL(false)
-        setTranslations(getTranslations("en"))
+        setIsRTL(defaultLanguage.direction === "rtl")
+        const fallbackTranslations = getTranslations(defaultLanguage.code)
+        setTranslations(fallbackTranslations)
+        previousLanguageRef.current = defaultLanguage.code
         setIsReady(true)
       } finally {
         setIsLoading(false)
       }
     }
 
-    initializeLanguage()
+    void initializeLanguage()
   }, [])
 
-  // Enhanced function to change language with complete cleanup
+  // Смена языка
   const changeLanguage = (code: string) => {
     const newLanguage = languages.find((lang) => lang.code === code)
 
-    // Check if the language is supported
     if (!newLanguage) {
-      console.warn(`Language ${code} is not supported, falling back to English`)
+      console.warn(
+        `Language ${code} is not supported, falling back to ${defaultLanguage.code}`,
+      )
       return
     }
 
-    // Don't change if it's the same language
     if (previousLanguageRef.current === code) {
-      console.log(`Already using language ${code}`)
       return
     }
 
     setIsLoading(true)
 
     try {
-      console.log(`🌐 Changing language from ${previousLanguageRef.current} to ${code}`)
-
       setCurrentLanguage(newLanguage)
       setIsRTL(newLanguage.direction === "rtl")
 
-      // Load translations for the new language (with caching)
       let newTranslations = translationCacheRef.current.get(code)
       if (!newTranslations) {
         newTranslations = getTranslations(code)
@@ -241,37 +224,34 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
 
       setTranslations(newTranslations)
 
-      // Save language preference
       if (typeof window !== "undefined") {
         localStorage.setItem("preferredLanguage", code)
       }
 
-      // Force complete retranslation to remove all traces of previous language
       if (typeof document !== "undefined") {
-        // Remove all previous language classes
+        // Чистим старые классы языка / направления
         document.body.classList.forEach((className) => {
-          if (className.startsWith("lang-") || className === "rtl" || className === "ltr") {
+          if (
+            className.startsWith("lang-") ||
+            className === "rtl" ||
+            className === "ltr"
+          ) {
             document.body.classList.remove(className)
           }
         })
 
-        // Add new language classes
+        // Добавляем новые классы
         document.body.classList.add(`lang-${code}`)
-        if (newLanguage.direction === "rtl") {
-          document.body.classList.add("rtl")
-        } else {
-          document.body.classList.add("ltr")
-        }
+        document.body.classList.add(newLanguage.direction === "rtl" ? "rtl" : "ltr")
 
-        // Update document properties
+        // Обновляем html-атрибуты
         document.documentElement.dir = newLanguage.direction
         document.documentElement.lang = newLanguage.code
 
-        // Force complete retranslation after a short delay
+        // Форсим полную перетрансляцию
         setTimeout(() => {
-          forceCompleteRetranslation(code, newTranslations)
+          forceCompleteRetranslation(code, newTranslations as Record<string, string>)
 
-          // Trigger custom event for components to re-render
           window.dispatchEvent(
             new CustomEvent("languageChanged", {
               detail: {
@@ -284,13 +264,8 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
         }, 100)
       }
 
-      // Update previous language reference
       previousLanguageRef.current = code
-
-      // Clear missing translations for new language
       missingTranslationsRef.current.clear()
-
-      console.log(`✅ Language successfully changed to ${code}`)
     } catch (error) {
       console.error("Error changing language:", error)
     } finally {
@@ -298,20 +273,18 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
     }
   }
 
-  // Function to force complete retranslation of the page
+  // Явный форс-перевод текущей страницы
   const forceRetranslate = () => {
     if (typeof document !== "undefined" && translations && isReady) {
       try {
-        console.log(`🔄 Force retranslating page to ${currentLanguage.code}`)
         forceCompleteRetranslation(currentLanguage.code, translations)
-        console.log(`✅ Force retranslation completed`)
       } catch (error) {
         console.warn("Error in force retranslation:", error)
       }
     }
   }
 
-  // Function to translate a specific element
+  // Перевод конкретного элемента
   const translateElementWithCurrentTranslations = (element: Element): void => {
     try {
       translateElement(element, translations)
@@ -320,7 +293,7 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
     }
   }
 
-  // Set up MutationObserver to watch for dynamically added content
+  // Наблюдатель за динамическим контентом
   useEffect(() => {
     if (typeof window !== "undefined" && !observerRef.current && isReady) {
       observerRef.current = new MutationObserver((mutations) => {
@@ -328,7 +301,6 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
           if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
             mutation.addedNodes.forEach((node) => {
               if (node.nodeType === Node.ELEMENT_NODE) {
-                // Small delay to ensure the element is fully rendered
                 setTimeout(() => {
                   translateElementWithCurrentTranslations(node as Element)
                 }, 50)
@@ -351,7 +323,7 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
     }
   }, [isReady, translations])
 
-  // Translate the entire document when translations change
+  // Перевод всего документа при смене словаря
   useEffect(() => {
     if (typeof document !== "undefined" && !isLoading && translations && isReady) {
       try {
@@ -366,7 +338,7 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
     changeLanguage(language.code)
   }
 
-  const value = {
+  const value: LanguageContextType = {
     currentLanguage,
     setLanguage,
     changeLanguage,
@@ -379,5 +351,7 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
     isReady,
   }
 
-  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>
+  return (
+    <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>
+  )
 }
