@@ -30,13 +30,13 @@ import { APP_NAME } from "@/lib/app-config"
 const VIDEO_CALL_GOOGLE_TTS_CREDENTIALS: any = {}
 
 // Глобальный URL вебхука для видео-ассистента
-// ВАЖНО: по умолчанию идём через наш Next.js API-роут /api/turbotai-agent
+// ВАЖНО: по умолчанию идём через наш Next.js API-роут /api/turbotaai-agent
 // Если хочешь переопределить — задай один из NEXT_PUBLIC_* env-переменных.
 const VIDEO_ASSISTANT_WEBHOOK_URL =
   process.env.NEXT_PUBLIC_TURBOTA_AI_VIDEO_ASSISTANT_WEBHOOK_URL ||
   process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL ||
   process.env.NEXT_PUBLIC_TURBOTA_AI_WORKFLOW_ASSISTANT_WEBHOOK_URL ||
-  "/api/turbotai-agent"
+  "/api/turbotaai-agent"
 
 // конфиги для Google TTS, если нужен кастом под языки
 const VIDEO_CALL_VOICE_CONFIGS = {
