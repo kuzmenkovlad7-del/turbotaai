@@ -28,6 +28,12 @@ import { APP_NAME } from "@/lib/app-config"
 
 const VIDEO_CALL_GOOGLE_TTS_CREDENTIALS: any = {}
 
+// Webhook для видео-ассистента (через наш Next-прокси)
+const VIDEO_ASSISTANT_WEBHOOK_URL =
+  process.env.NEXT_PUBLIC_TURBOTA_AI_VIDEO_ASSISTANT_WEBHOOK_URL ||
+  process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL ||
+  "/api/turbotaai-agent"
+
 // можно расширять под другие языки позже
 const VIDEO_CALL_VOICE_CONFIGS = {
   uk: {
