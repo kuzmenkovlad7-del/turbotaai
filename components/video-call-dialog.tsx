@@ -201,8 +201,6 @@ export default function VideoCallDialog({
   // --- refs ---
 
   const recognitionRef = useRef<any>(null)
-  const isRecognitionActiveRef = useRef(false)
-
   const isCallActiveRef = useRef(false)
   const isMicMutedRef = useRef(false)
   const isAiSpeakingRef = useRef(false)
@@ -414,8 +412,8 @@ export default function VideoCallDialog({
     }
 
     recognitionInstance.onresult = async (event: any) => {
-      // ключевой фикс: если ассистент говорит – просто игнорируем
-      if (isAiSpeakingRef.current) return
+      // Если ассистент говорит – игнорируем вход
+      if (isAiSpeakingRef.current || suppressRecognitionRef.current) return
 
       let currentInterimTranscript = ""
       let hasNewFinalResult = false
@@ -439,13 +437,14 @@ export default function VideoCallDialog({
 
       if (silenceTimeout) clearTimeout(silenceTimeout)
 
-      // отсечка по тишине – через 1.5 сек отправляем
+      // Увеличенный таймаут тишины: 3 секунды
       silenceTimeout = setTimeout(() => {
         const buf = finalTranscriptBuffer.trim()
         if (
           buf.length > 2 &&
           !isProcessingRef.current &&
-          !isAiSpeakingRef.current
+          !isAiSpeakingRef.current &&
+          !suppressRecognitionRef.current
         ) {
           finalTranscriptBuffer = ""
           setInterimTranscript("")
@@ -462,14 +461,15 @@ export default function VideoCallDialog({
 
           void processTranscriptionRef.current?.(textToProcess)
         }
-      }, 1500)
+      }, 3000)
 
       if (hasNewFinalResult) {
         const buf = finalTranscriptBuffer.trim()
         if (
           buf.length > 2 &&
           !isProcessingRef.current &&
-          !isAiSpeakingRef.current
+          !isAiSpeakingRef.current &&
+          !suppressRecognitionRef.current
         ) {
           finalTranscriptBuffer = ""
           setInterimTranscript("")
@@ -513,6 +513,7 @@ export default function VideoCallDialog({
     recognitionInstance.onend = () => {
       if (silenceTimeout) clearTimeout(silenceTimeout)
 
+      // Если звонок ещё идёт, микрофон не замьючен и мы не запрещали распознавание — перезапускаем
       if (
         isCallActiveRef.current &&
         !isMicMutedRef.current &&
@@ -574,6 +575,8 @@ export default function VideoCallDialog({
       if (!isSoundEnabled) return
       if (!text || !text.trim()) return
 
+      // На время речи ассистента останавливаем распознавание,
+      // но НЕ трогаем флаг isMicMuted — визуально микрофон остаётся включённым.
       suppressRecognitionRef.current = true
       if (recognitionRef.current) {
         try {
@@ -602,7 +605,8 @@ export default function VideoCallDialog({
       if (!cleanedText) {
         suppressRecognitionRef.current = false
         if (!isMicMutedRef.current && isCallActiveRef.current) {
-          startSpeechRecognitionRef.current?.()
+          setIsListening(true)
+          startSpeechRecognitionRef.current?.() ?? startSpeechRecognition()
         }
         return
       }
@@ -645,9 +649,11 @@ export default function VideoCallDialog({
             }
           }
 
+          // Как только ассистент договорил — сразу снова начинаем слушать.
           if (!isMicMutedRef.current && isCallActiveRef.current) {
             setActivityStatus("listening")
-            startSpeechRecognitionRef.current?.()
+            setIsListening(true)
+            startSpeechRecognitionRef.current?.() ?? startSpeechRecognition()
           }
         } catch (e) {
           console.error("Cleanup error:", e)
@@ -659,7 +665,7 @@ export default function VideoCallDialog({
           try {
             const audioDataUrl = await generateGoogleTTS(
               cleanedText,
-              currentLocale, // ВАЖНО: передаём локаль (uk-UA/ru-RU), а не просто "uk"/"ru"
+              currentLocale,
               characterGender,
               VIDEO_CALL_GOOGLE_TTS_CREDENTIALS,
               VIDEO_CALL_VOICE_CONFIGS,
@@ -712,6 +718,7 @@ export default function VideoCallDialog({
       selectedCharacter,
       hasEnhancedVideo,
       fallbackToBrowserTTS,
+      startSpeechRecognition,
     ],
   )
 
@@ -918,12 +925,15 @@ export default function VideoCallDialog({
   }, [])
 
   const toggleMicrophone = useCallback(() => {
+    // Здесь мы именно МЬЮТИМ микрофон — и это видно по красной иконке
     if (isMicMuted) {
       setIsMicMuted(false)
       setIsListening(true)
       setActivityStatus("listening")
-      startSpeechRecognitionRef.current?.()
+      suppressRecognitionRef.current = false
+      startSpeechRecognitionRef.current?.() ?? startSpeechRecognition()
     } else {
+      suppressRecognitionRef.current = true
       if (recognitionRef.current?.stop) {
         recognitionRef.current.stop()
       }
@@ -931,7 +941,7 @@ export default function VideoCallDialog({
       setInterimTranscript("")
       setIsMicMuted(true)
     }
-  }, [isMicMuted])
+  }, [isMicMuted, startSpeechRecognition])
 
   // --- инициализация аудио для мобилок ---
 
@@ -983,6 +993,7 @@ export default function VideoCallDialog({
 
       setCurrentVideoState("idle")
       setIsMicMuted(false)
+      isMicMutedRef.current = false
       setIsListening(true)
       setActivityStatus("listening")
       setMessages([])
@@ -990,8 +1001,10 @@ export default function VideoCallDialog({
       lastProcessedTextRef.current = ""
       isAiSpeakingRef.current = false
       setIsAiSpeaking(false)
+      suppressRecognitionRef.current = false
 
-      startSpeechRecognitionRef.current?.()
+      // Гарантированно запускаем распознавание
+      startSpeechRecognitionRef.current?.() ?? startSpeechRecognition()
 
       if (hasEnhancedVideo && selectedCharacter.idleVideo) {
         setTimeout(() => {
@@ -1014,7 +1027,13 @@ export default function VideoCallDialog({
     } finally {
       setIsConnecting(false)
     }
-  }, [initializeMobileAudio, hasEnhancedVideo, selectedCharacter, t])
+  }, [
+    initializeMobileAudio,
+    hasEnhancedVideo,
+    selectedCharacter,
+    startSpeechRecognition,
+    t,
+  ])
 
   const endCall = useCallback(() => {
     setIsCallActive(false)
@@ -1024,6 +1043,7 @@ export default function VideoCallDialog({
     setCurrentVideoState("idle")
     setActivityStatus("listening")
     setIsMicMuted(true)
+    isMicMutedRef.current = true
     isProcessingRef.current = false
     suppressRecognitionRef.current = false
     isAiSpeakingRef.current = false
