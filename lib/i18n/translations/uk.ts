@@ -2,11 +2,11 @@
 import { en } from "./en"
 
 export const uk: Record<string, string> = {
-  // Базово берём все ключи из en, чтобы ничего не ломалось
+  // Базово беремо всі ключі з en, щоб нічого не ламалося
   ...en,
 
   // ─────────────────────
-  // Навигация и меню
+  // Навігація і меню
   // ─────────────────────
   Home: "Головна",
   About: "Про сервіс",
@@ -27,7 +27,7 @@ export const uk: Record<string, string> = {
   "nav.termsOfUse": "Умови користування",
 
   // ─────────────────────
-  // Hero TurbotaAI (верх главной)
+  // Hero TurbotaAI (верх головної)
   // ─────────────────────
   "AI-psychologist nearby 24/7": "AI-психолог поруч 24/7",
   "Psychological support when it feels hard, powered by AI":
@@ -46,7 +46,7 @@ export const uk: Record<string, string> = {
   "Choose how it's more comfortable for you to talk.":
     "Обирайте формат, у якому вам комфортніше говорити.",
 
-  // Старый блок Myitra — оставляем, но адаптированно
+  // Старий блок Myitra — залишаємо, але адаптовано
   "Myitra Platform · AI + Psychology": "Платформа Myitra · ШІ + психологія",
   "Live Psychological Support,": "Жива психологічна підтримка,",
   "AI-Enhanced": "посилена ШІ",
@@ -62,7 +62,7 @@ export const uk: Record<string, string> = {
   "chat · voice · video": "чат · голос · відео",
 
   // ─────────────────────
-  // Home: блок с тремя форматами общения
+  // Home: блок з трьома форматами спілкування
   // ─────────────────────
   "Choose how you want to talk": "Обирайте, як вам зручніше говорити",
   "How would you like to contact us?": "Як вам зручніше вийти на звʼязок?",
@@ -91,7 +91,7 @@ export const uk: Record<string, string> = {
   "Face-to-face session with a 3D-avatar when you want to feel presence and eye contact.":
     "Сесія «обличчям до обличчя» з 3D-аватаром, коли важливо відчути присутність та зоровий контакт.",
   "Gives a stronger feeling that someone is really next to you.":
-    "Дарує сильніше відчуття, що поряд справді є хтось, хто підтримує.",
+    "Дарує відчуття, що поряд справді є хтось, хто підтримує.",
   "Best for deeper work, body reactions and long-term processes.":
     "Найкраще підходить для глибшої роботи, тілесних реакцій і довготривалих процесів.",
   "Start video call": "Почати відеодзвінок",
@@ -100,9 +100,9 @@ export const uk: Record<string, string> = {
     "Якщо сумніваєтеся — почніть із безпечного чату",
 
   "Your browser may not fully support voice features. For the best experience, please use Chrome, Edge, or Safari.":
-    "Ваш браузер може некоректно підтримувати голосові функції. Для найкращої роботи спробуйте Chrome, Edge або Safari.",
+    "Ваш браузер може некоректно підтримувати голосові функції. Для найкращої роботи скористайтеся Chrome, Edge або Safari.",
   "Your browser may not fully support video features. For the best experience, please use Chrome, Edge, or Safari.":
-    "Ваш браузер може некоректно підтримувати відеофункції. Для найкращої роботи спробуйте Chrome, Edge або Safari.",
+    "Ваш браузер може некоректно підтримувати відеофункції. Для найкращої роботи скористайтеся Chrome, Edge або Safari.",
 
   "There was an issue with the voice call. Please try again.":
     "Сталася помилка під час голосового дзвінка. Будь ласка, спробуйте ще раз.",
@@ -110,19 +110,19 @@ export const uk: Record<string, string> = {
     "Сталася помилка під час відеодзвінка. Будь ласка, спробуйте ще раз.",
 
   // ─────────────────────
-  // Блок преимуществ (ServiceFeatures)
+  // Блок переваг (ServiceFeatures)
   // ─────────────────────
   "Support in minutes when it feels really bad":
     "Підтримка за лічені хвилини, коли справді дуже погано",
   "Open chat, voice or video exactly when it feels bad right now — без очередей, анкет и ожидания записи.":
-    "Відкрийте чат, голос або відео саме в той момент, коли погано прямо зараз — без черг, анкет і очікування запису.",
+    "Відкрийте чат, голос або відео саме в той момент, коли погано просто зараз — без черг, анкет і очікування запису.",
   "Feels like a calm, respectful human conversation":
     "Відчувається як спокійна, поважна розмова з людиною",
   "Ассистент сначала слушает и задаёт мягкие уточняющие вопросы, а уже потом предлагает короткие упражнения и шаги.":
-    "Асистент спершу уважно слухає й ставить мʼякі уточнювальні запитання, а вже потім пропонує короткі вправи та наступні кроки.",
+    "Асистент спочатку уважно слухає й ставить мʼякі уточнювальні запитання, а вже потім пропонує короткі вправи та наступні кроки.",
   "Works in 10+ languages": "Працює більш ніж 10 мовами",
   "Украинский, русский, английский и другие популярные языки. Язык можно менять прямо во время диалога.":
-    "Українська, російська, англійська та інші популярні мови. Мову можна переключати прямо під час розмови.",
+    "Українська, російська, англійська та інші популярні мови. Мову можна змінювати прямо під час діалогу.",
   "From quick help to 7–21 day programs":
     "Від швидкої допомоги до програм на 7–21 день",
   "Готовые сценарии: «когда плохо прямо сейчас», работа с тревогой и стрессом, а также мягкие программы на 7–21 день с регулярными чек-инами.":
@@ -140,7 +140,7 @@ export const uk: Record<string, string> = {
     "TurbotaAI створена для моментів, коли немає сил шукати терапевта чи чекати запису, але дуже потрібно з кимось поговорити прямо зараз.",
 
   // ─────────────────────
-  // Контактный блок / страница
+  // Контактний блок / сторінка
   // ─────────────────────
   "Contact Us": "Звʼяжіться з нами",
   "Contact Page Description":
@@ -180,7 +180,7 @@ export const uk: Record<string, string> = {
     "Ми отримали ваше звернення й відповімо найближчим часом.",
 
   // ─────────────────────
-  // Футер и дисклеймер
+  // Футер і дисклеймер
   // ─────────────────────
   "AI Psychological Support": "AI-психологічна підтримка",
   "Professional, scalable, and aesthetically pleasing online service that utilizes AI to deliver quality psychological care.":
@@ -204,7 +204,7 @@ export const uk: Record<string, string> = {
   "All rights reserved": "Усі права захищено",
 
   // ─────────────────────
-  // Программы / истории (из старого файла — адаптировано)
+  // Програми / історії (зі старого файла — адаптовано)
   // ─────────────────────
   "Our Programs": "Наші програми",
   "Programs Page Description":
@@ -259,7 +259,7 @@ export const uk: Record<string, string> = {
   "Max, 35 — team lead in IT":
     "Макс, 35 років — тімлід в IT",
   "Voice calls on the way to work":
-    "Голосові дзвінки по дорозі на роботу",
+    "Голосові дзвінки дорогою на роботу",
   "“Talking to a calm voice for ten minutes before stand-up is easier than pretending that everything is fine.”":
     "«Поговорити десять хвилин зі спокійним голосом перед стендапом легше, ніж робити вигляд, що все добре».",
   "Panic before meetings & fear of mistakes":
@@ -270,7 +270,7 @@ export const uk: Record<string, string> = {
   "Small but visible progress":
     "Невеликий, але помітний прогрес",
   "After a month he noticed that he no longer cancelled calls at the last moment and could say “I need time to think about it” instead of freezing in silence. These are small steps, but they gave him back a feeling of control.":
-    "Через місяць він помітив, що більше не скасовує дзвінки в останню хвилину й може сказати «Мені потрібно час, щоб це обдумати» замість того, щоб завмирати в тиші. Це невеликі кроки, але вони повернули йому відчуття контролю.",
+    "Через місяць він помітив, що більше не скасовує дзвінки в останню хвилину й може сказати «Мені потрібен час, щоб це обдумати» замість того, щоб завмирати в тиші. Це невеликі кроки, але вони повернули йому відчуття контролю.",
 
   "Sofia, 19 — first-year student":
     "Софія, 19 років — студентка першого курсу",
@@ -289,7 +289,7 @@ export const uk: Record<string, string> = {
   "Results after the first month":
     "Результати після першого місяця",
   "Sofia found two people with whom she now goes to classes, and created a small evening routine instead of doomscrolling. She still experiences anxiety, but she no longer feels completely alone with it.":
-    "Софія знайшла двох людей, з якими тепер ходить на заняття, і створила невелику вечірню рутину замість безкінечного скролу. Тривога все ще є, але вона більше не лишається з нею зовсім наодинці.",
+    "Софія знайшла двох людей, з якими тепер ходить на заняття, і створила невелику вечірню рутину замість безкінечного скролу. Тривога все ще є, але вона більше не залишається з нею зовсім наодинці.",
 
   "Read full stories": "Прочитати повні історії",
   "Tap a card to open a detailed story in a calm, full-screen view. You can close it at any time with the button or the Escape key.":
@@ -316,7 +316,7 @@ export const uk: Record<string, string> = {
     "Українська · Російська · Англійська",
 
   // ─────────────────────
-  // Політика конфіденційності
+  // Політика конфіденційності — заголовки
   // ─────────────────────
   "Information We Collect": "Яку інформацію ми збираємо",
   "How We Use Your Information": "Як ми використовуємо вашу інформацію",
@@ -340,6 +340,7 @@ export const uk: Record<string, string> = {
   "You can start with a one-time session and later switch to regular support or a program for your team.":
     "Можна почати з разової сесії, а згодом перейти до регулярної підтримки чи програми для своєї команди.",
   "Good when": "Коли це підходить",
+  "Good when:": "Коли це підходить:",
   "Single support session": "Разова сесія підтримки",
   "One-time session when it feels very bad and you need support right now without waiting.":
     "Разова сесія, коли дуже погано й потрібна підтримка просто зараз, без очікування.",
@@ -379,7 +380,7 @@ export const uk: Record<string, string> = {
     "Інтеграцію оплати ми налаштуємо разом із вами. Зараз ми зосереджуємося на якості підтримки та сценаріях роботи асистента.",
 
   // ─────────────────────
-  // Умови користування (Terms of Use)
+  // Умови користування (Terms of Use) — заголовки
   // ─────────────────────
   "Acceptance of Terms": "Прийняття умов",
   "Use of Services": "Використання сервісу",
@@ -427,7 +428,7 @@ export const uk: Record<string, string> = {
   "• Chat, voice or video — you choose the format.":
     "• Чат, голос або відео — ви обираєте формат.",
   "• Clarifying questions instead of 20 tips at once — the assistant tries to understand your state.":
-    "• Уточнювальні запитання замість 20 порад одночасно — асистент намагається зрозуміти ваш стан.",
+    "• Уточнювальні запитання замість 20 порад одразу — асистент намагається зрозуміти ваш стан.",
   "• Breathing, grounding, short exercises, diary of emotions, small daily steps.":
     "• Дихальні вправи, ґраундинг, короткі практики, щоденник емоцій, маленькі щоденні кроки.",
   "• Short programs for 7–21 days to gently change habits and support you regularly.":
@@ -522,5 +523,5 @@ export const uk: Record<string, string> = {
     "Клінічний психолог, що спеціалізується на тривозі, депресії та управлінні стресом на роботі.",
   Selected: "Обрано",
   "Start Video Call": "Почати відеодзвінок",
-  "Video session in Ukrainian": "Відео сесія українською",
+  "Video session in Ukrainian": "Відеосесія українською",
 }
