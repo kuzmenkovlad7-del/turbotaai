@@ -457,4 +457,45 @@ export const uk: Record<string, string> = {
     "Коротко опишіть свій запит або ідею.",
   "Sending...": "Надсилання...",
   "Send message": "Надіслати повідомлення",
+    // ─────────────────────
+  // Modals: chat / voice / video assistants
+  // ─────────────────────
+  "In crisis situations, please contact local emergency services immediately.":
+    "У кризових ситуаціях негайно зверніться до місцевих служб екстреної допомоги.",
+
+  // Chat modal
+  "Describe what is happening in your own words. The assistant will answer in a few short, structured messages.":
+    "Опишіть, що з вами відбувається своїми словами. Асистент відповість кількома короткими структурованими повідомленнями.",
+  "How to start": "Як почати",
+  "You can start with one sentence: for example, 'I feel anxious and can't sleep', 'I can't concentrate', or 'I don't know what to do in a relationship'.":
+    "Можна почати з одного речення — наприклад: «Я тривожуся й не можу заснути», «Я не можу зосередитися» або «Я не знаю, що робити у стосунках».",
+  "Write here what is happening to you...":
+    "Напишіть тут, що з вами відбувається...",
+
+  // Voice modal
+  "Voice session with AI-psychologist":
+    "Голосова сесія з AI-психологом",
+  "You can talk out loud, the assistant will listen, answer and voice the reply.":
+    "Ви можете говорити вголос — асистент слухатиме, відповідатиме й озвучуватиме відповіді.",
+  "Press the button to start the call. Allow microphone access, then speak as if with a real psychologist.":
+    "Натисніть кнопку, щоб розпочати дзвінок. Дозвольте доступ до мікрофона й говоріть так, ніби спілкуєтеся зі справжнім психологом.",
+  "Your e-mail will be used only to personalize the session. (guest@example.com)":
+    "Ваш e-mail буде використано лише для персоналізації сесії. (guest@example.com)",
+  "Start voice session": "Почати голосову сесію",
+
+  // Video modal
+  "AI Psychologist Video Call": "Відеодзвінок з AI-психологом",
+  "Video session in Ukrainian · ➟": "Відеосесія українською · ➟",
+  "Choose Your AI Psychologist": "Обирайте свого AI-психолога",
+  "Select the AI psychologist you'd like to speak with during your video call.":
+    "Оберіть AI-психолога, з яким хочете поспілкуватися під час відеодзвінка.",
+  "Video call language:": "Мова відеодзвінка:",
+  Ukrainian: "Українська",
+  "All characters use Google TTS for authentic native accent.":
+    "Усі персонажі використовують Google TTS для природного, автентичного акценту.",
+  "Clinical psychologist specializing in anxiety, depression, and workplace stress management":
+    "Клінічний психолог, що спеціалізується на тривозі, депресії та управлінні стресом на роботі.",
+  Selected: "Обрано",
+  "Start Video Call": "Почати відеодзвінок",
+
 }
