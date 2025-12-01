@@ -499,4 +499,29 @@ export const uk: Record<string, string> = {
   Selected: "Обрано",
   "Start Video Call": "Почати відеодзвінок",
   "Video session in Ukrainian": "Відео сесія українською",
+    // Общие сервисные фразы
+  "Last Updated": "Оновлено",
+
+  // Privacy Policy – доп. заголовки
+  "Personal Information": "Персональна інформація",
+  "Session Data": "Дані сесій",
+  "Technical Information": "Технічна інформація",
+  "Data Retention": "Зберігання даних",
+  "Third-Party Services": "Сторонні сервіси",
+  "International Data Transfers": "Міжнародна передача даних",
+  "Children's Privacy": "Конфіденційність дітей",
+  "Changes to This Policy": "Зміни до цієї політики",
+
+  // Terms of Use – доп. заголовки
+  Eligibility: "Право користування сервісом",
+  "Prohibited Activities": "Заборонені дії",
+  "Intellectual Property": "Інтелектуальна власність",
+  "Payment and Billing": "Оплата та білінг",
+  "Cancellation and Refunds": "Скасування та повернення коштів",
+  "Disclaimer of Warranties": "Відмова від гарантій",
+  Indemnification: "Відшкодування збитків",
+  Termination: "Припинення доступу",
+  "Governing Law and Dispute Resolution":
+    "Застосовне право та вирішення спорів",
+  Severability: "Подільність положень",
 }
