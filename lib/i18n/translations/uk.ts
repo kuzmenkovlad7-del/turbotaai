@@ -331,6 +331,7 @@ export const uk: Record<string, string> = {
   Programs: "Програми",
   "You can start with a one-time session and later switch to regular support or a program for your team.":
     "Можна почати з разової сесії, а згодом перейти до регулярної підтримки чи програми для своєї команди.",
+   "Good when": "Коли це підходить",
   "Single support session": "Разова сесія підтримки",
   "One-time session when it feels very bad and you need support right now without waiting.":
     "Разова сесія, коли дуже погано й потрібна підтримка просто зараз, без очікування.",
