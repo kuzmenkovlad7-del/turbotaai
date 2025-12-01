@@ -7,22 +7,22 @@ export default function PrivacyPolicyPage() {
 
   return (
     <div className="container mx-auto px-4 py-16">
-      <div className="mx-auto max-w-4xl rounded-3xl bg-card p-8 shadow-lg md:p-12">
-        <h1 className="mb-8 text-4xl font-bold text-foreground">
+      <div className="max-w-4xl mx-auto bg-card rounded-3xl shadow-lg p-8 md:p-12">
+        <h1 className="text-4xl font-bold mb-8 text-foreground">
           {t("Privacy Policy")}
         </h1>
-        <p className="mb-8 text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground mb-8">
           {t("Last Updated: November 2025")}
         </p>
 
         <div className="space-y-8 text-muted-foreground">
           <section>
-            <h2 className="mb-4 text-2xl font-semibold text-foreground">
+            <h2 className="text-2xl font-semibold mb-4 text-foreground">
               {t("Information We Collect")}
             </h2>
             <div className="space-y-4">
               <div>
-                <h3 className="mb-2 text-lg font-medium text-foreground">
+                <h3 className="text-lg font-medium text-foreground mb-2">
                   {t("Personal Information")}
                 </h3>
                 <p>
@@ -33,7 +33,7 @@ export default function PrivacyPolicyPage() {
                 </p>
               </div>
               <div>
-                <h3 className="mb-2 text-lg font-medium text-foreground">
+                <h3 className="text-lg font-medium text-foreground mb-2">
                   {t("Session Data")}
                 </h3>
                 <p>
@@ -44,7 +44,7 @@ export default function PrivacyPolicyPage() {
                 </p>
               </div>
               <div>
-                <h3 className="mb-2 text-lg font-medium text-foreground">
+                <h3 className="text-lg font-medium text-foreground mb-2">
                   {t("Technical Information")}
                 </h3>
                 <p>
@@ -57,11 +57,11 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section>
-            <h2 className="mb-4 text-2xl font-semibold text-foreground">
+            <h2 className="text-2xl font-semibold mb-4 text-foreground">
               {t("How We Use Your Information")}
             </h2>
             <div className="space-y-4">
-              <ul className="ml-2 list-inside list-disc space-y-2">
+              <ul className="list-disc list-inside space-y-2 ml-2">
                 <li>
                   Providing personalized AI psychology support tailored to your
                   needs
@@ -91,7 +91,7 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section>
-            <h2 className="mb-4 text-2xl font-semibold text-foreground">
+            <h2 className="text-2xl font-semibold mb-4 text-foreground">
               {t("Data Security")}
             </h2>
             <div className="space-y-4">
@@ -99,7 +99,7 @@ export default function PrivacyPolicyPage() {
                 We implement enterprise-grade security measures to protect your
                 information:
               </p>
-              <ul className="ml-2 list-inside list-disc space-y-2">
+              <ul className="list-disc list-inside space-y-2 ml-2">
                 <li>
                   <strong>End-to-End Encryption:</strong> All conversations are
                   encrypted during transmission and at rest
@@ -131,12 +131,12 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section>
-            <h2 className="mb-4 text-2xl font-semibold text-foreground">
+            <h2 className="text-2xl font-semibold mb-4 text-foreground">
               {t("Your Rights")}
             </h2>
             <div className="space-y-4">
               <p>You have comprehensive rights regarding your personal data:</p>
-              <ul className="ml-2 list-inside list-disc space-y-2">
+              <ul className="list-disc list-inside space-y-2 ml-2">
                 <li>
                   <strong>Access:</strong> Request a copy of all personal data
                   we hold about you
@@ -146,8 +146,8 @@ export default function PrivacyPolicyPage() {
                   incomplete information
                 </li>
                 <li>
-                  <strong>Deletion:</strong> Request deletion of your account and
-                  associated data
+                  <strong>Deletion:</strong> Request deletion of your account
+                  and associated data
                 </li>
                 <li>
                   <strong>Portability:</strong> Receive your data in a
@@ -158,8 +158,8 @@ export default function PrivacyPolicyPage() {
                   processing
                 </li>
                 <li>
-                  <strong>Restriction:</strong> Request restriction of processing
-                  in specific circumstances
+                  <strong>Restriction:</strong> Request restriction of
+                  processing in specific circumstances
                 </li>
               </ul>
               <p className="mt-4">
@@ -171,111 +171,69 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section>
-            <h2 className="mb-4 text-2xl font-semibold text-foreground">
+            <h2 className="text-2xl font-semibold mb-4 text-foreground">
               {t("Data Retention")}
             </h2>
             <div className="space-y-4">
-              <p>
-                We retain your data only as long as necessary to provide our
-                services:
-              </p>
-              <ul className="ml-2 list-inside list-disc space-y-2">
-                <li>
-                  Active account data is retained while your account remains
-                  active
-                </li>
-                <li>
-                  Session transcripts are retained for 12 months to enable
-                  continuity of care
-                </li>
-                <li>
-                  Deleted accounts are fully purged within 90 days, except where
-                  retention is required by law
-                </li>
-                <li>
-                  Anonymous usage analytics may be retained indefinitely for
-                  service improvement
-                </li>
+              <p>We retain your data only as long as necessary to provide our services:</p>
+              <ul className="list-disc list-inside space-y-2 ml-2">
+                <li>Active account data is retained while your account remains active</li>
+                <li>Session transcripts are retained for 12 months to enable continuity of care</li>
+                <li>Deleted accounts are fully purged within 90 days, except where retention is required by law</li>
+                <li>Anonymous usage analytics may be retained indefinitely for service improvement</li>
               </ul>
             </div>
           </section>
 
           <section>
-            <h2 className="mb-4 text-2xl font-semibold text-foreground">
+            <h2 className="text-2xl font-semibold mb-4 text-foreground">
               {t("Third-Party Services")}
             </h2>
             <div className="space-y-4">
-              <p>
-                We work with trusted third-party services to deliver our
-                platform:
-              </p>
-              <ul className="ml-2 list-inside list-disc space-y-2">
+              <p>We work with trusted third-party services to deliver our platform:</p>
+              <ul className="list-disc list-inside space-y-2 ml-2">
                 <li>Cloud infrastructure providers for secure data storage</li>
-                <li>
-                  Payment processors for transaction handling (we never store
-                  payment card details)
-                </li>
-                <li>
-                  Analytics services for understanding service usage patterns
-                </li>
+                <li>Payment processors for transaction handling (we never store payment card details)</li>
+                <li>Analytics services for understanding service usage patterns</li>
               </ul>
               <p className="mt-4">
-                All third-party providers are bound by strict data protection
-                agreements and only process data on our behalf.
+                All third-party providers are bound by strict data protection agreements and only process data on our behalf.
               </p>
             </div>
           </section>
 
           <section>
-            <h2 className="mb-4 text-2xl font-semibold text-foreground">
+            <h2 className="text-2xl font-semibold mb-4 text-foreground">
               {t("International Data Transfers")}
             </h2>
             <div className="space-y-4">
-              <p>
-                Your data may be processed in countries outside your residence.
-                We ensure adequate protection through:
-              </p>
-              <ul className="ml-2 list-inside list-disc space-y-2">
-                <li>
-                  Standard contractual clauses approved by regulatory
-                  authorities
-                </li>
-                <li>
-                  Verification that receiving countries provide adequate data
-                  protection
-                </li>
-                <li>
-                  Additional safeguards where required by applicable law
-                </li>
+              <p>Your data may be processed in countries outside your residence. We ensure adequate protection through:</p>
+              <ul className="list-disc list-inside space-y-2 ml-2">
+                <li>Standard contractual clauses approved by regulatory authorities</li>
+                <li>Verification that receiving countries provide adequate data protection</li>
+                <li>Additional safeguards where required by applicable law</li>
               </ul>
             </div>
           </section>
 
           <section>
-            <h2 className="mb-4 text-2xl font-semibold text-foreground">
+            <h2 className="text-2xl font-semibold mb-4 text-foreground">
               {t("Children's Privacy")}
             </h2>
             <div className="space-y-4">
               <p>
-                Our services are not intended for individuals under 18 years of
-                age. We do not knowingly collect personal information from
-                children. If you believe we have inadvertently collected such
-                information, please contact us immediately so we can delete it.
+                Our services are not intended for individuals under 18 years of age. We do not knowingly collect personal information from children. If you believe we have inadvertently collected such information, please contact us immediately so we can delete it.
               </p>
             </div>
           </section>
 
           <section>
-            <h2 className="mb-4 text-2xl font-semibold text-foreground">
+            <h2 className="text-2xl font-semibold mb-4 text-foreground">
               {t("Changes to This Policy")}
             </h2>
             <div className="space-y-4">
               <p>
-                We may update this Privacy Policy periodically to reflect
-                changes in our practices or legal requirements. We will notify
-                you of significant changes via email or through prominent notice
-                on our platform. Continued use of our services after such
-                notification constitutes acceptance of the updated policy.
+                We may update this Privacy Policy periodically to reflect changes in our practices or legal requirements. We will notify you of significant changes via email or through prominent notice on our platform. Continued use of our services after such notification constitutes acceptance of the updated policy.
               </p>
             </div>
           </section>
