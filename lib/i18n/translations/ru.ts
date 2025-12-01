@@ -524,9 +524,9 @@ export const ru: Record<string, string> = {
   Selected: "Выбрано",
   "Start Video Call": "Начать видеозвонок",
   "AI will understand and respond in this language with native accent":"ИИ поймёт и ответит на выбранном языке",
-  "Video session in Ukrainian": "Видеосессия на украинском",
-  "Video session in Russian": "Видеосессия на русском",
-  "Video session in English": "Видеосессия на английском",
+  "Video session in Ukrainian ·": "Видеосессия на украинском",
+  "Video session in Russian ·": "Видеосессия на русском",
+  "Video session in English ·": "Видеосессия на английском",
 
   // ─────────────────────
   // Terms of Use – полные абзацы
