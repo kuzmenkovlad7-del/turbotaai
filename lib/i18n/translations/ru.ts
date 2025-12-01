@@ -19,6 +19,7 @@ export const ru: Record<string, string> = {
   "nav.home": "Главная",
   "nav.programs": "Программы",
   "nav.clientStories": "Истории клиентов",
+  "nav.about": "О нас",
   "nav.contacts": "Контакты",
   "nav.privacyPolicy": "Политика конфиденциальности",
   "nav.termsOfUse": "Условия использования",
