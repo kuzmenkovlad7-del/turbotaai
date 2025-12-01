@@ -376,4 +376,85 @@ export const uk: Record<string, string> = {
   "User Responsibilities": "Відповідальність користувача",
   "Limitation of Liability": "Обмеження відповідальності",
   "Changes to Terms": "Зміни умов",
+
+    // ─────────────────────
+  // About / Про продукт
+  // ─────────────────────
+  "About the product": "Про продукт",
+  "TurbotaAI — AI-psychologist that stays nearby when it feels hard":
+    "TurbotaAI — AI-психолог, який залишається поруч, коли важко",
+  "TurbotaAI is a digital assistant built on psychological literature and modern AI. It does not replace a live therapist, but gives gentle, structured support when it is difficult to reach someone or when you need to talk right now — in chat, voice or video.":
+    "TurbotaAI — це цифровий асистент, побудований на психологічній літературі та сучасному ШІ. Він не замінює живого терапевта, але дає мʼяку, структуровану підтримку, коли складно дотягнутися до когось або потрібно терміново виговоритися — у чаті, голосом чи по відео.",
+  "Who TurbotaAI is for": "Для кого створена TurbotaAI",
+  "On the first versions we focus on people who need emotional support in everyday life — without stigma and without long waiting.":
+    "У перших версіях ми фокусуємося на людях, яким потрібна емоційна підтримка в повсякденному житті — без стигми й без довгого очікування.",
+  "• Women who feel stress, anxiety, burnout or loneliness.":
+    "• Жінки, які відчувають стрес, тривогу, вигорання або самотність.",
+  "• Teenagers 12–18 who need a safe space to talk about emotions and self-esteem.":
+    "• Підлітки 12–18 років, яким потрібен безпечний простір, щоб говорити про емоції та самооцінку.",
+  "• People who are alone or feel isolated and want to be heard.":
+    "• Люди, які залишилися самі або почуваються ізольованими й хочуть бути почутими.",
+  "• Later — veterans and their families as a separate module.":
+    "• Пізніше — ветерани та їхні родини як окремий модуль.",
+
+  "How the assistant works": "Як працює асистент",
+  "The assistant listens first, asks clarifying questions and only then offers recommendations — step by step, without pressure.":
+    "Спочатку асистент слухає, ставить уточнювальні запитання й лише потім пропонує рекомендації — крок за кроком, без тиску.",
+  "• Chat, voice or video — you choose the format.":
+    "• Чат, голос або відео — ви обираєте формат.",
+  "• Clarifying questions instead of 20 tips at once — the assistant tries to understand your state.":
+    "• Уточнювальні запитання замість 20 порад одночасно — асистент намагається зрозуміти ваш стан.",
+  "• Breathing, grounding, short exercises, diary of emotions, small daily steps.":
+    "• Дихальні вправи, ґраундинг, короткі практики, щоденник емоцій, маленькі щоденні кроки.",
+  "• Short programs for 7–21 days to gently change habits and support you regularly.":
+    "• Короткі програми на 7–21 день, щоб мʼяко змінювати звички й регулярно підтримувати вас.",
+  "• Answers are based on selected psychological books and materials that were tested with a psychologist.":
+    "• Відповіді ґрунтуються на добірці психологічних книжок і матеріалів, які ми тестували разом із психологом.",
+
+  "What TurbotaAI is not": "Чим TurbotaAI не є",
+  "It is important to be honest about the limits of technology.":
+    "Важливо чесно говорити про обмеження технологій.",
+  "• TurbotaAI is not a doctor and not a psychiatrist.":
+    "• TurbotaAI — не лікар і не психіатр.",
+  "• It does not make diagnoses and does not replace emergency help.":
+    "• Вона не ставить діагнозів і не замінює невідкладну допомогу.",
+  "• In crisis or risk of harm to yourself or others, you should contact emergency services or a human specialist.":
+    "• У кризі чи за ризику завдати шкоди собі або іншим потрібно звертатися до екстрених служб або до живого фахівця.",
+  "• The assistant is a supportive tool that can live alongside individual or group therapy.":
+    "• Асистент — це допоміжний інструмент, який може існувати поруч з індивідуальною чи груповою терапією.",
+
+  "Sessions, test period and subscription":
+    "Сесії, тестовий період і підписка",
+  "On the first launch we plan to test the service with a free period, so that users can safely try the assistant and we can see how people really use TurbotaAI.":
+    "На старті ми плануємо протестувати сервіс із безкоштовним періодом, щоб користувачі могли безпечно спробувати асистента, а ми — побачити, як люди насправді користуються TurbotaAI.",
+  "After testing you can keep a small free part (for example, a few questions) and then switch to a simple paid model: a monthly subscription for regular support and a one-time access option for those who want to try a single extended session.":
+    "Після тестування можна залишити невелику безкоштовну частину (наприклад, кілька запитань), а далі перейти на просту платну модель: помісячну підписку для регулярної підтримки та разовий доступ для тих, хто хоче спробувати одну розширену сесію.",
+  "All payments will be processed through a certified payment provider, and refunds will be handled manually through support e-mail if something goes wrong.":
+    "Усі оплати проходитимуть через сертифікованого платіжного провайдера, а повернення коштів ми оброблятимемо вручну через email підтримки, якщо щось піде не так.",
+
+  "On launch in Ukraine": "Запуск в Україні",
+  "The first versions of TurbotaAI will be tested on the Ukrainian market with support for several languages. This will allow us to refine the quality of answers, tone of communication and scenarios before scaling to other countries.":
+    "Перші версії TurbotaAI ми протестуємо на українському ринку з підтримкою кількох мов. Це дасть змогу відточити якість відповідей, тон спілкування та сценарії перед масштабуванням в інші країни.",
+  "The goal is a safe, respectful assistant that you can open at any moment when you need to talk — without stigma and overcomplicated interfaces.":
+    "Мета — безпечний, поважний асистент, якого можна відкрити в будь-який момент, коли потрібно поговорити — без стигми й перевантажених інтерфейсів.",
+
+  // ─────────────────────
+  // Contact form (ContactForm)
+  // ─────────────────────
+  "Contact form is temporarily unavailable. Webhook is not configured yet.":
+    "Форма контакту тимчасово недоступна. Webhook ще не налаштований.",
+  "Please fill in your email and message.":
+    "Будь ласка, заповніть email і повідомлення.",
+  "Your message has been sent. We will reply to you as soon as possible.":
+    "Ваше повідомлення надіслано. Ми відповімо вам якнайшвидше.",
+  "Something went wrong while sending the message. Please try again a bit later.":
+    "Щось пішло не так під час надсилання повідомлення. Спробуйте, будь ласка, трохи пізніше.",
+  "Your name": "Ваше імʼя",
+  "How can we address you?": "Як до вас звертатися?",
+  "Your email": "Ваш email",
+  "Your message": "Ваше повідомлення",
+  "Briefly describe your request or idea.":
+    "Коротко опишіть свій запит або ідею.",
+  "Sending...": "Надсилання...",
+  "Send message": "Надіслати повідомлення",
 }
