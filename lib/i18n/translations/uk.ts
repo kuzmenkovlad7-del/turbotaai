@@ -497,4 +497,5 @@ export const uk: Record<string, string> = {
     "Клінічний психолог, що спеціалізується на тривозі, депресії та управлінні стресом на роботі.",
   Selected: "Обрано",
   "Start Video Call": "Почати відеодзвінок",
+  "Video session in Ukrainian": "Відео сесія українською",
 }
