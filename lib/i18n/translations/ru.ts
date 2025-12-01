@@ -470,4 +470,221 @@ export const ru: Record<string, string> = {
     "Клинический психолог, специализирующийся на тревоге, депрессии и управлении рабочим стрессом",
   Selected: "Выбрано",
   "Start Video Call": "Начать видеозвонок",
+    // ─────────────────────
+  // Условия использования – полные абзацы
+  // ─────────────────────
+  "Last Updated: November 2025": "Обновлено: ноябрь 2025 года",
+
+  "By accessing or using TurbotaAI's AI psychology services (the \"Service\"), you agree to be bound by these Terms of Use and all applicable laws and regulations. If you do not agree with any part of these Terms, you must not use the Service.":
+    "Пользуясь сервисами AI-психологии TurbotaAI (далее — «Сервис»), вы подтверждаете, что соглашаетесь с настоящими Условиями использования и всеми применимыми законами и нормативными актами. Если вы не согласны с какой-либо частью этих Условий, пожалуйста, не используйте Сервис.",
+
+  "These Terms constitute a legally binding agreement between you and the operator of TurbotaAI Psychology Services. Your continued use of the Service after we publish updates means that you accept the revised Terms.":
+    "Настоящие Условия являются юридически обязательным соглашением между вами и оператором сервиса TurbotaAI Psychology Services. Ваше дальнейшее использование Сервиса после публикации обновлений означает, что вы принимаете изменённые Условия.",
+
+  "To use the Service, you confirm that you:":
+    "Чтобы пользоваться Сервисом, вы подтверждаете, что:",
+
+  "are at least 18 years of age;":
+    "вам исполнилось не менее 18 лет;",
+
+  "have the legal capacity to enter into a contract;":
+    "вы обладаете полной гражданской дееспособностью для заключения договоров;",
+
+  "are not prohibited from using online services under any applicable laws;":
+    "вам не запрещено пользоваться онлайн-сервисами в соответствии с применимым законодательством;",
+
+  "provide accurate and up-to-date information when requested for registration or identification;":
+    "вы предоставляете правдивую, точную и актуальную информацию, когда это необходимо для регистрации или идентификации;",
+
+  "are responsible for maintaining the confidentiality of your account credentials (if an account is created) and for all activity that occurs under your account.":
+    "вы самостоятельно отвечаете за конфиденциальность своих учётных данных (если аккаунт создан) и за все действия, которые совершаются с использованием вашего аккаунта.",
+
+  "TurbotaAI provides AI-based psychological support tools. The Service is not a medical facility and does not provide services that qualify as medical or psychiatric treatment.":
+    "TurbotaAI предоставляет инструменты психологической поддержки на основе искусственного интеллекта. Сервис не является медицинским учреждением и не оказывает услуг, приравниваемых к медицинскому или психиатрическому лечению.",
+
+  "You agree to use the Service only for personal, non-commercial purposes, unless otherwise agreed with us in a separate written agreement. You must not:":
+    "Вы соглашаетесь использовать Сервис исключительно в личных, некоммерческих целях, если иное не предусмотрено отдельным письменным соглашением с нами. Вы не можете:",
+
+  "copy, modify or distribute the Service;":
+    "копировать, изменять или распространять Сервис;",  
+
+  "attempt to gain unauthorized access to our systems or other users' data;":
+    "пытаться получить несанкционированный доступ к нашим системам или данным других пользователей;",  
+
+  "use the Service to promote hate, harassment, self-harm or harm to others;":
+    "использовать Сервис для разжигания ненависти, преследования, причинения вреда себе или другим;",  
+
+  "use the Service in any way that may violate the law or the rights of third parties.":
+    "использовать Сервис любым способом, который может нарушать закон или права третьих лиц.",  
+
+  "The Service may be updated from time to time, and we may modify features, design or availability without prior notice.":
+    "Сервис может периодически обновляться, и мы вправе изменять функциональность, дизайн или доступность без предварительного уведомления.",
+
+  "You are responsible for the information you choose to share with the Service. Do not disclose data that you are not comfortable storing in digital form, unless otherwise stated in our Privacy Policy.":
+    "Вы несёте ответственность за информацию, которой делитесь через Сервис. Не раскрывайте данные, которые вам некомфортно хранить в цифровом виде, если иное прямо не предусмотрено нашей Политикой конфиденциальности.",
+
+  "You agree not to use the Service to send insults, threats, spam, advertising or any other unwanted or illegal content.":
+    "Вы соглашаетесь не использовать Сервис для рассылки оскорблений, угроз, спама, рекламы или любого другого нежелательного либо незаконного контента.",
+
+  "If you violate these Terms, or if we reasonably believe that your behaviour may harm the Service or other users, we may temporarily restrict or terminate your access to the Service.":
+    "Если вы нарушаете эти Условия или мы обоснованно полагаем, что ваше поведение может нанести вред Сервису или другим пользователям, мы можем временно ограничить либо прекратить ваш доступ к Сервису.",
+
+  "During the testing phase, some features of TurbotaAI may be provided free of charge or with limited access. Information about pricing, subscriptions and one-time sessions will be published separately in the Service interface and/or on the website.":
+    "На этапе тестирования некоторые функции TurbotaAI могут предоставляться бесплатно или с ограниченным доступом. Информация о тарифах, подписках и разовых сессиях будет отдельно опубликована в интерфейсе Сервиса и/или на сайте.",
+
+  "If you purchase a paid subscription or a one-time service, you agree to the applicable payment terms displayed on the pricing page. Payments may be processed via third-party payment providers.":
+    "Если вы оформляете платную подписку или приобретаете разовую услугу, вы соглашаетесь с условиями оплаты, указанными на странице тарифа. Платежи могут обрабатываться через сторонних платёжных провайдеров.",
+
+  "Refund conditions (if available) will be described in a separate section of the pricing page or in our refund policy. Please review these terms carefully before making a payment.":
+    "Условия возврата средств (если они предусмотрены) будут описаны в отдельном разделе страницы тарифа или в нашей политике возвратов. Пожалуйста, внимательно ознакомьтесь с ними до совершения оплаты.",
+
+  "The TurbotaAI Service is provided \"as is\" without any express or implied warranties regarding its accuracy, completeness or fitness for your particular purposes. We aim to keep the Service stable but do not guarantee that it will be available without interruptions or errors.":
+    "Сервис TurbotaAI предоставляется «как есть» без каких-либо прямых или подразумеваемых гарантий относительно его точности, полноты или пригодности для ваших конкретных целей. Мы стремимся поддерживать стабильную работу Сервиса, но не гарантируем его бесперебойную и безошибочную доступность.",
+
+  "TurbotaAI is not an emergency service and does not replace consultations with a doctor, psychiatrist or other licensed healthcare professional. If you are in danger or may harm yourself or others, you must immediately contact emergency services or a human specialist.":
+    "TurbotaAI не является службой экстренной помощи и не заменяет консультации врача, психиатра или другого лицензированного специалиста в сфере здравоохранения. Если вы находитесь в опасности или можете причинить вред себе или другим, немедленно обратитесь в службы экстренной помощи или к живому специалисту.",
+
+  "To the maximum extent permitted by law, we shall not be liable for any direct, indirect, incidental, punitive or consequential damages arising out of or in connection with your use of, or inability to use, the Service.":
+    "В максимально допустимых законом пределах мы не несём ответственности за любые прямые, косвенные, случайные, штрафные или косвенные убытки, возникающие в результате или в связи с использованием Сервиса либо невозможностью его использования.",
+
+  "We may update these Terms from time to time. The date of the latest update is indicated at the top of this page. In case of material changes, we may additionally notify you through the Service or by e-mail (if available).":
+    "Мы можем время от времени обновлять настоящие Условия. Дата последнего обновления указана в верхней части страницы. В случае существенных изменений мы можем дополнительно уведомить вас через Сервис или по электронной почте (если она у нас есть).",
+
+  "By continuing to use the Service after the new Terms come into effect, you agree to the updated Terms. If you do not agree with the changes, you must stop using the Service.":
+    "Продолжая пользоваться Сервисом после вступления в силу новых Условий, вы соглашаетесь с ними. Если вы не согласны с изменениями, вы должны прекратить использование Сервиса.",
+
+  "If you have any questions about these Terms of Use, you can contact us via the contact form on the website or by using the e-mail address listed in the \"Contact\" section.":
+    "Если у вас есть вопросы относительно настоящих Условий использования, вы можете связаться с нами через форму обратной связи на сайте либо по адресу электронной почты, указанному в разделе «Контакты».",
+
+  // ─────────────────────
+  // Политика конфиденциальности – полные абзацы
+  // ─────────────────────
+  "This Privacy Policy explains what information TurbotaAI collects, how we use it and how we protect it. We design the Service to respect your privacy and personal boundaries.":
+    "Настоящая Политика конфиденциальности объясняет, какую информацию собирает TurbotaAI, как мы её используем и защищаем. Мы проектируем Сервис так, чтобы уважать вашу приватность и личные границы.",
+
+  "By using the Service, you agree to the terms of this Policy. If you do not agree, please do not use the Service.":
+    "Пользуясь Сервисом, вы соглашаетесь с условиями этой Политики. Если вы с ними не согласны, пожалуйста, не используйте Сервис.",
+
+  "1. Personal and contact information":
+    "1. Персональная и контактная информация",
+
+  "We may collect the following information:":
+    "Мы можем собирать следующую информацию:",
+
+  "your name or nickname that you provide;":
+    "имя или псевдоним, который вы указываете;",  
+
+  "e-mail address if you submit it for contact or registration;":
+    "адрес электронной почты, если вы оставляете его для связи или регистрации;",  
+
+  "any other information you voluntarily provide in forms (for example, in the contact or sign-up form).":
+    "любую другую информацию, которую вы добровольно указываете в формах (например, в форме контакта или регистрации).",
+
+  "2. Session content and messages":
+    "2. Содержание сессий и сообщений",
+
+  "When you use chat, voice or video assistant, we process the content of your messages, spoken input or text in order to generate responses and guidance. Depending on settings, some of this data may be temporarily stored to:":
+    "При использовании чат-, голосового или видео-ассистента мы обрабатываем содержание ваших сообщений, голосовых обращений или текста, чтобы формировать ответы и рекомендации. В зависимости от настроек часть этих данных может временно сохраняться для:",
+
+  "maintain a conversation history;":
+    "ведения истории диалога;",  
+
+  "improve the quality of the assistant's replies;":
+    "улучшения качества ответов ассистента;",  
+
+  "analyse common patterns in anonymised or aggregated form.":
+    "анализа типичных паттернов в обезличенном или агрегированном виде.",  
+
+  "3. Technical information":
+    "3. Техническая информация",
+
+  "We may also collect technical data, such as:":
+    "Мы также можем собирать технические данные, например:",
+
+  "IP address and approximate location;":
+    "IP-адрес и приблизительное местоположение;",  
+
+  "information about your device, browser and operating system;":
+    "информацию о вашем устройстве, браузере и операционной системе;",  
+
+  "cookies and similar technologies required for the Service to work and for analytics.":
+    "cookie-файлы и подобные технологии, необходимые для работы Сервиса и аналитики.",  
+
+  "We use the collected data for the following purposes:":
+    "Мы используем собранные данные для следующих целей:",
+
+  "to provide you with access to chat, voice and video sessions;":
+    "предоставления вам доступа к чат-, голосовым и видеосессиям;",  
+
+  "to adapt the assistant's responses to your request and language;":
+    "адаптации ответов ассистента к вашему запросу и языку;",  
+
+  "to maintain the Service, diagnose errors and ensure security;":
+    "поддержки работы Сервиса, диагностики сбоев и обеспечения безопасности;",  
+
+  "to analyse how the Service is used and improve our support scenarios;":
+    "анализа того, как используется Сервис, и улучшения наших сценариев поддержки;",  
+
+  "to communicate with you (for example, responses to requests, important notifications).":
+    "коммуникации с вами (например, ответы на обращения, важные уведомления).",
+
+  "We do not sell your personal data to third parties and do not use the content of your sessions for targeted advertising.":
+    "Мы не продаём ваши персональные данные третьим лицам и не используем содержание ваших сессий для таргетированной рекламы.",
+
+  "We apply technical and organisational security measures to protect data from unauthorised access, loss or misuse. These may include encryption, access controls, log audits and other cybersecurity practices.":
+    "Мы применяем технические и организационные меры безопасности, чтобы защищать данные от несанкционированного доступа, утраты или злоупотребления. К ним могут относиться шифрование, ограничения доступа, аудит логов и другие практики кибербезопасности.",
+
+  "However, no online system can guarantee absolute security. You also play a role in keeping your data safe — for example, by not sharing your credentials with others and by using strong passwords (if user accounts are introduced).":
+    "Однако ни одна онлайн-система не может гарантировать абсолютную безопасность. Вы также участвуете в защите своих данных — например, не передавая учётные данные третьим лицам и используя надёжные пароли (если будут введены пользовательские аккаунты).",
+
+  "We retain data only for as long as necessary to fulfil the purposes described in this Policy or as required by law.":
+    "Мы храним данные только столько, сколько необходимо для достижения целей, описанных в настоящей Политике, либо пока этого требует закон.",
+
+  "Conversation history and technical logs may be deleted or anonymised after a certain period of time. In the future the interface may include settings that allow you to delete your history yourself.":
+    "История диалогов и технические логи могут удаляться или обезличиваться по истечении определённого периода времени. В дальнейшем в интерфейсе могут появиться отдельные настройки, позволяющие вам самостоятельно удалять свою историю.",
+
+  "To operate the Service we may use third-party providers such as hosting companies, payment processors, video platforms or AI model providers.":
+    "Для работы Сервиса мы можем привлекать сторонних поставщиков — например, хостинг-провайдеров, платёжные системы, видеоплатформы или поставщиков AI-моделей.",
+
+  "These providers may process your data on our behalf and in accordance with our instructions. We aim to work only with entities that follow appropriate data protection standards.":
+    "Такие поставщики могут обрабатывать ваши данные от нашего имени и в соответствии с нашими инструкциями. Мы стремимся сотрудничать только с компаниями, соблюдающими надлежащие стандарты защиты данных.",
+
+  "Because infrastructure may be located in different countries, your data may sometimes be transferred outside the country where you live. We take steps to ensure that such transfers comply with applicable data protection laws.":
+    "Поскольку инфраструктура может находиться в разных странах, ваши данные иногда могут передаваться за пределы страны вашего проживания. Мы принимаем меры, чтобы такая передача соответствовала требованиям применимого законодательства о защите данных.",
+
+  "TurbotaAI is not intended for independent use by children under the age of 13. If you are under 18, parental or guardian consent may be required under the laws of your country.":
+    "TurbotaAI не предназначена для самостоятельного использования детьми младше 13 лет. Если вам меньше 18, согласие родителей или опекунов может быть обязательным в соответствии с законами вашей страны.",
+
+  "If we become aware that we have collected personal data from a child without appropriate consent, we will take steps to delete such information.":
+    "Если мы узнаем, что собрали персональные данные ребёнка без надлежащего согласия, мы примем меры для удаления такой информации.",
+
+  "Depending on the laws of your country, you may have the right to:":
+    "В зависимости от законов вашей страны вы можете иметь право:",
+
+  "request information about the data we hold about you;":
+    "запрашивать информацию о данных, которые мы храним о вас;",  
+
+  "ask us to correct inaccurate information;":
+    "требовать исправления неточной информации;",  
+
+  "request deletion of certain data (where we are not required to keep it by law);":
+    "просить удалить часть данных (если мы не обязаны хранить их по закону);",  
+
+  "object to or restrict certain types of processing; and":
+    "возражать против определённых способов обработки или ограничивать их;",  
+
+  "lodge a complaint with a data protection supervisory authority.":
+    "подавать жалобу в надзорный орган по защите данных.",  
+
+  "To exercise your rights, you can contact us via the feedback form or the e-mail address listed in the \"Contact\" section.":
+    "Чтобы воспользоваться своими правами, вы можете написать нам через форму обратной связи или по адресу электронной почты, указанному в разделе «Контакты».",
+
+  "We may update this Privacy Policy from time to time. The date of the latest update is shown at the top of this page.":
+    "Мы можем время от времени обновлять настоящую Политику конфиденциальности. Дата последнего обновления указана в верхней части страницы.",
+
+  "If we make material changes, we may additionally notify you through the Service or by e-mail (if available). By continuing to use the Service after the changes take effect, you agree to the updated Policy.":
+    "Если мы внесём существенные изменения, мы можем дополнительно уведомить вас через Сервис или по электронной почте (если она у нас есть). Продолжая пользоваться Сервисом после вступления изменений в силу, вы соглашаетесь с обновлённой Политикой.",
+
+  "If you have any questions about this Privacy Policy or how we process your data, please contact us via the \"Contact\" page or the e-mail address provided there.":
+    "Если у вас есть вопросы относительно настоящей Политики конфиденциальности или способов обработки ваших данных, свяжитесь с нами через страницу «Контакты» или по адресу электронной почты, указанному там.",
 }
