@@ -17,8 +17,7 @@ const mainLinks: FooterLink[] = [
   { href: "/", labelKey: "nav.home" },
   { href: "/programs", labelKey: "nav.programs" },
   { href: "/client-stories", labelKey: "nav.clientStories" },
-  // здесь — только текст, без nav.about
-  { href: "/about", label: "About" },
+  { href: "/about", labelKey: "nav.about" },
   { href: "/contacts", labelKey: "nav.contacts" },
 ]
 
