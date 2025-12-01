@@ -21,8 +21,8 @@ const mainLinks: MainLink[] = [
   { href: "/", labelKey: "nav.home" },
   { href: "/programs", labelKey: "nav.programs" },
   { href: "/client-stories", labelKey: "nav.clientStories" },
-  // здесь специально только текст, без ключа, чтобы не торчало nav.about
-  { href: "/about", label: "About" },
+  // используем общий ключ, чтобы пункт переводился на все языки
+  { href: "/about", labelKey: "About the product" },
   { href: "/contacts", labelKey: "nav.contacts" },
 ]
 
