@@ -20,11 +20,12 @@ import {
   MicOff,
   Loader2,
   Sparkles,
+  Venus,
+  Mars,
 } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
 import { APP_NAME } from "@/lib/app-config"
-import { generateGoogleTTS, shouldUseGoogleTTS } from "@/lib/google-tts"
 
 declare global {
   interface Window {
@@ -32,8 +33,6 @@ declare global {
     webkitSpeechRecognition?: any
   }
 }
-
-type VoiceGender = "female" | "male"
 
 interface VoiceCallDialogProps {
   isOpen: boolean
@@ -56,40 +55,6 @@ const TURBOTA_AGENT_WEBHOOK_URL =
 
 // запасной бэкенд-проксирующий роут
 const FALLBACK_CHAT_API = "/api/chat"
-
-// Dr. Alexander's Google Cloud TTS credentials for voice calls
-// (ровно как у старых разработчиков)
-const VOICE_CALL_GOOGLE_TTS_CREDENTIALS = {
-  type: "service_account",
-  project_id: "strong-maker-471022-s6",
-  private_key_id: "dc48898af9911d21c7959fd5b13bb28db7ea1354",
-  private_key:
-    "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCuFvlHiJgmSpjv\n9stiMzxxidgqxcN2/ralj7zgkkjXXhOgikfeOhBpjvjBeLDgLxNynA7DjoQ8wHbf\ngdrRuCqnrg83NC/FXTLHDRXXLW+megwcNLu3Kl7gR7q8iABBw1FaZxFnjduejnti\nAxL3ZQnAFB9Uw2U9bQBh2TejD225TEJnyqiuecVD9pkAZE8aeN5ZgPnljLMjzkfk\njKSeZMU+2kHdcs4YCQ4ShNG2C7eL7mWsj1RpG9KKnOlkMlaZ8noM++pO4q7mCzc5\nDOUDv9gpCXKG1324KgZug1k3KN9jlyTdGs7r/MFcUHFRNWUOpCMdxkIdPLRMlWJT\nlF7uQabxAgMBAAECggEABbY6wRJV/aGicXMdOrBYKhh9929MKb4TM4zrA0pBahGL\n3s9SqtOoYLJAbqadVQmuX2sH3/ov1AdzjwNFcO6UNbK0DJlhfN4BMb836Xqz6Fgm\nSBGh3BFfkgfAdHmY2o+EPo1VqJpiq4ncuftEVsohnwP6AC+2BWUrZ0p3dRnnPXZZ\nad02aThfaG73awScY5T0rotCIlq5M2z748EoBKHPUKELFunq5EiPiQfSIynO/Gpm\nayNtJ8OH8eQXNEnr5ixa/lo3L3g8w2cA+DnMTrFX1UGsbgoGgbY9/8c4bSEAcjUA\na6U8NxTb9jqjDcnIeXmG6XW3Qhhu385EwqvGQSg4HQKBgQm2AQfF/RKkjbKworS\nXZfaBVgsMqR7pkqnOX54Fr/Y0mkdY6qjh4rG+OBo2GHLn+VRLSbWVSmpy962cZWo\nXHdi9n4rMSXApxLoYdb9pNeYrNO6uxxC+DM7R2tTI8J6LtyuTEsw9s/AOYkP/Skf\nUswHgqexqpZ3pAnZS3Ova7njRQKBgQDBD6gGwOa7krhpfgwJnhd7ver+Bar8VN1E\n2QFnCpETx2NGtZtOKwD2k+Zn+Y8dv/+TSaSj6kERgjqDBvSj/XU8kNN2Wdc22nwW\nnnLTo2fusaKpZP3OWdgNUMv7cC7RKjK5ZecO0JZGRF7f+6N4zs2707cbxAf0qR+S\nzTDbNii5vQKBgQCWe0bkhhcH7ZyuPHeGfuCYjVdXKIQ03shXjpE084+IZlGDiQ8Z\nnygGYQLZFgVaWheA/XAN1GJef7nlMNIgeHaTGqBQw68akU8wEWe23Rh2PGOhnIvl\n1CqBgCMkhXEneRj+vlldx+bSJi+FLsD53F2In9F1bgC8aUDKV/dH6W+6CQKBgQCy\nA4quN35JJH9QHj5hO9lxauvcMEO6CVJBYkrtxQuCjk4W6+t5ByQLONKxuqXhC6FQ\nIQ5jaeN3jnn/SRGYiGNqZivlq+9Kj+jtPkqopLp3mGlhAlMYyzTxCjgb7xPsH5nH\n45NK0MBPqElHBBN2mFGRSCVFv9qKGMuZJARRjL2+jQKBgQDVV50qRixSs2PkfbQa\n+NsCz16EHBFTz8mGkPtNZtWB2eZUK3toxmDw+iZormjPN8IxdgVjUmH4nA+PVMg9\nzcg+vXDBQlkD+lr3LDxi6vWfThbC1aY8W34qCjPBFYYPGH8W8sWUMSi388I5P3cI\ntI/Wlzv7csphuz620VfkkJlHjw==\n-----END PRIVATE KEY-----\n",
-  client_email: "tts-service-1@strong-maker-471022-s6.iam.gserviceaccount.com",
-  client_id: "103107984061473463379",
-  auth_uri: "https://accounts.google.com/o/oauth2/auth",
-  token_uri: "https://oauth2.googleapis.com/token",
-  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-  client_x509_cert_url:
-    "https://www.googleapis.com/robot/v1/metadata/x509/tts-service-1%40strong-maker-471022-s6.iam.gserviceaccount.com",
-  universe_domain: "googleapis.com",
-}
-
-// Текущие конфиги голосов — можно потом дать Ольге на ревью
-const VOICE_CALL_CONFIGS = {
-  uk: {
-    female: {
-      languageCode: "uk-UA",
-      name: "uk-UA-Chirp3-HD-Schedar",
-      ssmlGender: "FEMALE",
-    },
-    male: {
-      languageCode: "uk-UA",
-      name: "uk-UA-Standard-A",
-      ssmlGender: "MALE",
-    },
-  },
-}
 
 // аккуратно вытаскиваем текст из любого формата ответа n8n
 function extractAnswer(data: any): string {
@@ -131,15 +96,6 @@ function extractAnswer(data: any): string {
   return ""
 }
 
-// вспомогательно: базовый код языка для TTS ("uk" / "ru" / "en")
-function extractBaseLang(langRaw: string): string {
-  if (!langRaw) return "uk"
-  if (langRaw.startsWith("uk")) return "uk"
-  if (langRaw.startsWith("ru")) return "ru"
-  if (langRaw.startsWith("en")) return "en"
-  return "uk"
-}
-
 export default function VoiceCallDialog({
   isOpen,
   onClose,
@@ -160,7 +116,9 @@ export default function VoiceCallDialog({
   const [connectionStatus, setConnectionStatus] = useState<
     "connected" | "disconnected"
   >("disconnected")
-  const [voiceGender, setVoiceGender] = useState<VoiceGender>("female")
+
+  // новый state для выбора голоса
+  const [voiceGender, setVoiceGender] = useState<"female" | "male">("female")
 
   const recognitionRef = useRef<any | null>(null)
   const isRecognitionActiveRef = useRef(false)
@@ -170,6 +128,9 @@ export default function VoiceCallDialog({
   const isAiSpeakingRef = useRef(false)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
+
+  // audio-плеер для Google Cloud TTS
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
@@ -189,15 +150,6 @@ export default function VoiceCallDialog({
     if (lang.startsWith("uk")) return "uk-UA"
     if (lang.startsWith("ru")) return "ru-RU"
     return "en-US"
-  }
-
-  function computeBaseLangCode(): string {
-    const raw =
-      typeof (currentLanguage as any) === "string"
-        ? ((currentLanguage as any) as string)
-        : (currentLanguage as any)?.code || "uk"
-
-    return extractBaseLang(raw)
   }
 
   // ---------- управление SpeechRecognition (единая точка) ----------
@@ -343,6 +295,10 @@ export default function VoiceCallDialog({
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
   }
 
   useEffect(() => {
@@ -359,103 +315,123 @@ export default function VoiceCallDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ---------- озвучка ответа (Google TTS + fallback к browser TTS) ----------
+  // ---------- озвучка ответа (Google Cloud TTS + fallback) ----------
 
-  async function speakText(text: string, genderOverride?: VoiceGender) {
+  function speakText(text: string) {
     if (typeof window === "undefined") return
-    const clean = text?.toString().trim()
-    if (!clean) return
 
-    const baseLang = computeBaseLangCode()
-    const bcpLang = computeLangCode()
-    const gender = genderOverride || voiceGender
+    const cleanText = text?.trim()
+    if (!cleanText) return
+
+    const langCode = computeLangCode()
 
     const startSpeaking = () => {
       setIsAiSpeaking(true)
       isAiSpeakingRef.current = true
-      // пока говорим — слушать не нужно
       ensureRecognitionRunning()
     }
 
-    const finishSpeaking = () => {
+    const stopSpeaking = () => {
       setIsAiSpeaking(false)
       isAiSpeakingRef.current = false
-      // договорили — снова начинаем слушать, если звонок активен и мик не выключен
       ensureRecognitionRunning()
     }
 
-    // 1) Пытаемся использовать Google Cloud TTS (как в старом проекте)
-    try {
-      if (shouldUseGoogleTTS(baseLang)) {
-        startSpeaking()
-
-        const audioDataUrl = await generateGoogleTTS(
-          clean,
-          baseLang,
-          gender,
-          VOICE_CALL_GOOGLE_TTS_CREDENTIALS,
-          VOICE_CALL_CONFIGS,
-        )
-
-        const audio = new Audio(audioDataUrl)
-        audio.crossOrigin = "anonymous"
-        audio.onended = () => {
-          finishSpeaking()
-        }
-        audio.onerror = () => {
-          console.error("Google TTS audio error, falling back to browser speech")
-          finishSpeaking()
-        }
-
-        // на всякий случай глушим встроенный speechSynthesis
-        if (window.speechSynthesis) {
-          window.speechSynthesis.cancel()
-        }
-
-        try {
-          await audio.play()
-        } catch (e) {
-          console.error("Failed to play Google TTS audio", e)
-          finishSpeaking()
-        }
+    // fallback — браузерный TTS (на случай, если Google TTS не ответил)
+    const speakWithBrowserTTS = () => {
+      if (!window.speechSynthesis) {
+        stopSpeaking()
         return
       }
-    } catch (e) {
-      console.error("Google TTS failed, fallback to browser speech", e)
-      // уйдём в fallback ниже
+
+      const utterance = new SpeechSynthesisUtterance(cleanText)
+      utterance.lang = langCode
+      utterance.rate = 1
+      utterance.pitch = 1
+
+      utterance.onstart = () => {
+        startSpeaking()
+      }
+
+      utterance.onend = () => {
+        stopSpeaking()
+      }
+
+      utterance.onerror = () => {
+        stopSpeaking()
+      }
+
+      window.speechSynthesis.cancel()
+      window.speechSynthesis.speak(utterance)
     }
 
-    // 2) Fallback: стандартный browser speechSynthesis (как у тебя было)
-    if (!window.speechSynthesis) {
-      // если даже speechSynthesis нет — просто ничего не говорим
-      return
-    }
+    // Основная ветка — Google Cloud TTS через /api/tts
+    ;(async () => {
+      try {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: cleanText,
+            languageCode: langCode,
+            gender: voiceGender, // "female" | "male"
+          }),
+        })
 
-    const utterance = new SpeechSynthesisUtterance(clean)
-    utterance.lang = bcpLang
-    utterance.rate = 1
-    utterance.pitch = 1
+        if (!res.ok) {
+          console.error("TTS API error:", res.status)
+          speakWithBrowserTTS()
+          return
+        }
 
-    utterance.onstart = startSpeaking
-    utterance.onend = finishSpeaking
-    utterance.onerror = () => {
-      finishSpeaking()
-    }
+        const data = await res.json()
+        const audioUrl = data?.audioUrl as string | undefined
 
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
+        if (!audioUrl) {
+          console.error("TTS API: no audioUrl in response")
+          speakWithBrowserTTS()
+          return
+        }
+
+        // останавливаем предыдущий аудио-поток, если был
+        if (audioRef.current) {
+          audioRef.current.pause()
+          audioRef.current = null
+        }
+
+        const audio = new Audio(audioUrl)
+        audioRef.current = audio
+
+        audio.onplay = () => {
+          startSpeaking()
+        }
+
+        audio.onended = () => {
+          stopSpeaking()
+          audioRef.current = null
+        }
+
+        audio.onerror = (e) => {
+          console.error("TTS audio playback error:", e)
+          stopSpeaking()
+          audioRef.current = null
+        }
+
+        await audio.play()
+      } catch (error) {
+        console.error("TTS fetch error:", error)
+        speakWithBrowserTTS()
+      }
+    })()
   }
 
-  // ---------- отправка текста в n8n / TurbotaAI-агент ----------
+  // ---------- отправка текста в n8n / OpenAI ----------
 
   async function handleUserText(text: string) {
-    const langRaw =
+    const lang =
       typeof (currentLanguage as any) === "string"
         ? ((currentLanguage as any) as string)
         : (currentLanguage as any)?.code || "uk"
-
-    const langBase = extractBaseLang(langRaw)
-    const voiceLang = computeLangCode()
 
     // 1) prop → 2) env → 3) /api/chat
     const resolvedWebhook =
@@ -469,11 +445,11 @@ export default function VoiceCallDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: text,
-          language: langBase, // "uk" / "ru" / "en" — для агента
-          voiceLanguage: voiceLang, // "uk-UA" / "ru-RU" / "en-US" — для контекста
-          gender: voiceGender, // "female" | "male"
+          language: lang,
           email: effectiveEmail,
           mode: "voice",
+          gender: voiceGender, // пробрасываем в промпт Myitra
+          voiceLanguage: computeLangCode(),
         }),
       })
 
@@ -507,7 +483,7 @@ export default function VoiceCallDialog({
       }
 
       setMessages((prev) => [...prev, assistantMsg])
-      void speakText(answer, voiceGender)
+      speakText(answer)
     } catch (error: any) {
       console.error("Voice call error:", error)
       setNetworkError(t("Connection error. Please try again."))
@@ -517,11 +493,10 @@ export default function VoiceCallDialog({
 
   // ---------- управление звонком / микрофоном ----------
 
-  const startCall = (gender: VoiceGender) => {
+  const startCall = (gender: "female" | "male") => {
+    setVoiceGender(gender)
     setIsConnecting(true)
     setNetworkError(null)
-
-    setVoiceGender(gender)
 
     isMicMutedRef.current = false
     setIsMicMuted(false)
@@ -544,8 +519,6 @@ export default function VoiceCallDialog({
     isMicMutedRef.current = next
     ensureRecognitionRunning()
   }
-
-  const userEmailDisplay = effectiveEmail
 
   const statusText = !isCallActive
     ? t(
@@ -619,9 +592,14 @@ export default function VoiceCallDialog({
                     <p className="mb-1 font-medium text-slate-900">
                       {t("How it works")}
                     </p>
-                    <p>
+                    <p className="mb-2">
                       {t(
-                        "Press the button to start the call. Allow microphone access, then speak as if with a real psychologist.",
+                        "Choose a voice and start the session. The assistant will listen to you and answer like a real psychologist.",
+                      )}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      {t(
+                        "You can switch between female and male voice by ending the call and starting again with a different option.",
                       )}
                     </p>
                   </div>
@@ -645,6 +623,11 @@ export default function VoiceCallDialog({
                         <div className="mb-1 flex items-center gap-1 text-[10px] font-medium text-emerald-700">
                           <Brain className="h-3 w-3" />
                           {t("AI Psychologist")}
+                          <span className="ml-1 rounded-full bg-emerald-100 px-2 py-[1px] text-[9px] font-semibold uppercase tracking-wide text-emerald-700">
+                            {voiceGender === "female"
+                              ? t("Female voice")
+                              : t("Male voice")}
+                          </span>
                         </div>
                       )}
                       <p className="text-xs md:text-sm">{msg.text}</p>
@@ -698,68 +681,57 @@ export default function VoiceCallDialog({
               </div>
 
               {!isCallActive && (
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div className="text-[11px] text-slate-500">
-                    {t("Choose voice for the session")}:
-                    <span className="ml-1 font-medium text-slate-800">
-                      {voiceGender === "female"
-                        ? t("Female voice")
-                        : t("Male voice")}
-                    </span>
+                <div className="flex flex-col items-center gap-3 pt-1">
+                  <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    {t("Choose voice for this session")}
                   </div>
-                  <div className="flex justify-end gap-2">
+                  <div className="flex items-center justify-center gap-3">
                     <Button
                       type="button"
                       onClick={() => startCall("female")}
                       disabled={isConnecting}
-                      className="h-9 rounded-full bg-indigo-600 px-4 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-70"
+                      className={`h-10 rounded-full px-5 text-xs font-semibold shadow-sm flex items-center gap-2 ${
+                        voiceGender === "female"
+                          ? "bg-pink-600 text-white hover:bg-pink-700"
+                          : "bg-pink-50 text-pink-700 hover:bg-pink-100"
+                      }`}
                     >
                       {isConnecting && voiceGender === "female" ? (
                         <>
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          <Loader2 className="h-3 w-3 animate-spin" />
                           {t("Connecting")}
                         </>
                       ) : (
                         <>
-                          <span className="mr-1">👩</span>
-                          {t("Female voice")}
+                          <Venus className="h-3 w-3" />
+                          {t("Start with female voice")}
                         </>
                       )}
                     </Button>
+
                     <Button
                       type="button"
                       onClick={() => startCall("male")}
                       disabled={isConnecting}
-                      variant="outline"
-                      className="h-9 rounded-full px-4 text-xs font-medium"
+                      className={`h-10 rounded-full px-5 text-xs font-semibold shadow-sm flex items-center gap-2 ${
+                        voiceGender === "male"
+                          ? "bg-sky-600 text-white hover:bg-sky-700"
+                          : "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                      }`}
                     >
                       {isConnecting && voiceGender === "male" ? (
                         <>
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          <Loader2 className="h-3 w-3 animate-spin" />
                           {t("Connecting")}
                         </>
                       ) : (
                         <>
-                          <span className="mr-1">👨</span>
-                          {t("Male voice")}
+                          <Mars className="h-3 w-3" />
+                          {t("Start with male voice")}
                         </>
                       )}
                     </Button>
                   </div>
-                </div>
-              )}
-
-              {isCallActive && (
-                <div className="flex justify-between items-center text-[11px] text-slate-500">
-                  <span>
-                    {t("User")}: {userEmailDisplay}
-                  </span>
-                  <span>
-                    {t("Voice")}:{" "}
-                    {voiceGender === "female"
-                      ? t("Female")
-                      : t("Male")}
-                  </span>
                 </div>
               )}
             </div>
