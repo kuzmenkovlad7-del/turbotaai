@@ -6,7 +6,6 @@
     "build": "next build",
     "clean": "rm -rf .next",
     "dev": "next dev",
-    "postinstall": "prisma generate || true",
     "lint": "next lint",
     "start": "next start",
     "type-check": "tsc --noEmit"
@@ -86,7 +85,6 @@
     "typescript": "^5"
   },
   "engines": {
-    "node": ">=18.0.0",
-    "pnpm": ">=8.0.0"
+    "node": ">=18.0.0"
   }
 }
