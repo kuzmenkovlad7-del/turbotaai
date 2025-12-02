@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import textToSpeech from "@google-cloud/text-to-speech"
 
-// Важно: для Google Cloud SDK нужен Node.js runtime
+// Нам нужен Node runtime (не edge), чтобы работала Google Cloud библиотека
 export const runtime = "nodejs"
 
 type Gender = "female" | "male"
@@ -12,26 +12,39 @@ type VoiceConfig = {
   name?: string
 }
 
-// Карта голосов: здесь настраиваем мужской/женский под языки.
-// Можно пока оставить без name — тогда Google сам выберет голос по gender.
+// Карта голосов: здесь сразу выбираем "лучший" мужской/женский
 const VOICE_MAP: Record<string, Record<Gender, VoiceConfig>> = {
   "uk-UA": {
+    // Женский: даём Google самому выбрать лучший женский голос для uk-UA
     female: { languageCode: "uk-UA" },
-    male: { languageCode: "uk-UA" }, // сюда можно повесить Dr. Alexander (Chirp3)
+
+    // Мужской: твой премиальный Chirp3-голос (Dr. Alexander)
+    male: {
+      languageCode: "uk-UA",
+      name: "uk-UA-Chirp3-HD-Schedar",
+    },
   },
+
   "en-US": {
-    female: { languageCode: "en-US" },
-    male: { languageCode: "en-US" },
+    // На будущее — хорошие нейросетевые голоса
+    female: {
+      languageCode: "en-US",
+      name: "en-US-Neural2-C",
+    },
+    male: {
+      languageCode: "en-US",
+      name: "en-US-Neural2-D",
+    },
   },
 }
 
-// В .env.local кладём полный JSON сервис-аккаунта:
-// GOOGLE_TTS_CREDENTIALS_JSON={ ... }
+// В .env.local должен быть полный JSON сервис-аккаунта:
+// GOOGLE_TTS_CREDENTIALS_JSON='{ ... }'
 const credentialsJson = process.env.GOOGLE_TTS_CREDENTIALS_JSON
 
 if (!credentialsJson) {
   console.warn(
-    "[TTS] GOOGLE_TTS_CREDENTIALS_JSON is not set. /api/tts will return 500.",
+    "[TTS] GOOGLE_TTS_CREDENTIALS_JSON is not set. /api/tts будет возвращать 500.",
   )
 }
 
@@ -46,25 +59,32 @@ export async function POST(req: NextRequest) {
   try {
     if (!client) {
       return NextResponse.json(
-        { error: "TTS client is not configured (missing GOOGLE_TTS_CREDENTIALS_JSON)" },
+        {
+          success: false,
+          error:
+            "TTS client is not configured (missing GOOGLE_TTS_CREDENTIALS_JSON)",
+        },
         { status: 500 },
       )
     }
 
     const body = await req.json()
-    const text = (body?.text ?? "").toString().trim()
-    const languageCode = (body?.languageCode ?? "").toString().trim()
+    const rawText = (body?.text ?? "").toString()
+    const text = rawText.trim()
+    const rawLang = (body?.languageCode ?? "").toString().trim()
     const genderInput = body?.gender as Gender | undefined
 
-    if (!text || !languageCode) {
+    if (!text || !rawLang) {
       return NextResponse.json(
-        { error: "Missing text or languageCode" },
+        { success: false, error: "Missing text or languageCode" },
         { status: 400 },
       )
     }
 
-    const normalizedLang =
-      languageCode.toLowerCase().startsWith("uk") ? "uk-UA" : languageCode
+    // Если пришло "uk", "uk-ua" и т.п. — нормализуем в "uk-UA"
+    const normalizedLang = rawLang.toLowerCase().startsWith("uk")
+      ? "uk-UA"
+      : rawLang
 
     const voiceGender: Gender =
       genderInput === "male" || genderInput === "female"
@@ -97,7 +117,7 @@ export async function POST(req: NextRequest) {
 
     if (!audioContent) {
       return NextResponse.json(
-        { error: "No audio content from TTS" },
+        { success: false, error: "No audio content from TTS" },
         { status: 500 },
       )
     }
@@ -116,6 +136,7 @@ export async function POST(req: NextRequest) {
     console.error("[TTS] Error:", error)
     return NextResponse.json(
       {
+        success: false,
         error: "TTS error",
         details: error?.message ?? String(error),
       },
@@ -124,7 +145,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Опциональный health-check (можно оставить — не мешает)
+// Простой health-check (опционально)
 export async function GET() {
   return NextResponse.json(
     {
