@@ -1,178 +1,130 @@
 // app/api/tts/route.ts
-import { NextRequest, NextResponse } from "next/server"
-import textToSpeech from "@google-cloud/text-to-speech"
+import { NextResponse } from "next/server";
+import textToSpeech from "@google-cloud/text-to-speech";
 
-// Нам нужен Node runtime, а не edge
-export const runtime = "nodejs"
+// Создаём клиент один раз (лениво)
+let ttsClient: textToSpeech.TextToSpeechClient | null = null;
 
-type Gender = "female" | "male"
+function getTtsClient() {
+  if (ttsClient) return ttsClient;
 
-type VoiceConfig = {
-  languageCode: string
-  name?: string
+  const projectId = process.env.GOOGLE_TTS_PROJECT_ID;
+  const clientEmail = process.env.GOOGLE_TTS_CLIENT_EMAIL;
+  let privateKey = process.env.GOOGLE_TTS_PRIVATE_KEY || "";
+
+  // ВАЖНО: разворачиваем \n в настоящие переносы строки
+  privateKey = privateKey.replace(/\\n/g, "\n");
+
+  if (!projectId || !clientEmail || !privateKey) {
+    console.error("[/api/tts] Missing GOOGLE_TTS_* env vars", {
+      hasProjectId: !!projectId,
+      hasClientEmail: !!clientEmail,
+      hasPrivateKey: !!privateKey,
+    });
+
+    // Отдаём 500 с понятным текстом, чтобы ты видел в Network → Response
+    throw new Error(
+      "GOOGLE_TTS_PROJECT_ID / GOOGLE_TTS_CLIENT_EMAIL / GOOGLE_TTS_PRIVATE_KEY are not fully configured",
+    );
+  }
+
+  ttsClient = new textToSpeech.TextToSpeechClient({
+    credentials: {
+      type: "service_account",
+      project_id: projectId,
+      client_email: clientEmail,
+      private_key: privateKey,
+    },
+  });
+
+  return ttsClient;
 }
 
-// Карта голосов: укр + рус + англ
-const VOICE_MAP: Record<string, Record<Gender, VoiceConfig>> = {
-  // УКРАИНСКИЙ
-  "uk-UA": {
-    // Женский — даём Google самому выбрать лучший нейросетевой женский голос для uk-UA
-    female: { languageCode: "uk-UA" },
+type Gender = "female" | "male";
 
-    // Мужской — твой премиальный Chirp3-голос (Dr. Alexander)
-    male: {
-      languageCode: "uk-UA",
-      name: "uk-UA-Chirp3-HD-Schedar",
-    },
-  },
-
-  // РУССКИЙ
-  "ru-RU": {
-    // И женский, и мужской — через languageCode, а пол задаём ssmlGender.
-    // Google выберет современные нейросетевые русские голоса.
-    female: { languageCode: "ru-RU" },
-    male: { languageCode: "ru-RU" },
-  },
-
-  // АНГЛИЙСКИЙ (на будущее)
-  "en-US": {
-    female: {
-      languageCode: "en-US",
-      name: "en-US-Neural2-C",
-    },
-    male: {
-      languageCode: "en-US",
-      name: "en-US-Neural2-D",
-    },
-  },
+function mapGender(gender: Gender | string | undefined) {
+  return gender === "male" ? "MALE" : "FEMALE";
 }
 
-// В .env.local должен быть полный JSON сервис-аккаунта:
-// GOOGLE_TTS_CREDENTIALS_JSON='{ ... }'
-const credentialsJson = process.env.GOOGLE_TTS_CREDENTIALS_JSON
-
-if (!credentialsJson) {
-  console.warn(
-    "[TTS] GOOGLE_TTS_CREDENTIALS_JSON is not set. /api/tts будет возвращать 500.",
-  )
+function pickVoiceName(languageCode: string, gender: Gender) {
+  // Твои голоса от старых разработчиков
+  if (languageCode.startsWith("uk")) {
+    return gender === "female" ? "uk-UA-Chirp3-HD-Schedar" : "uk-UA-Standard-A";
+  }
+  // Можно расширить для ru/en и т.п. при необходимости
+  return undefined;
 }
 
-const client =
-  credentialsJson != null
-    ? new textToSpeech.TextToSpeechClient({
-        credentials: JSON.parse(credentialsJson),
-      })
-    : null
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    if (!client) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "TTS client is not configured (missing GOOGLE_TTS_CREDENTIALS_JSON)",
-        },
-        { status: 500 },
-      )
-    }
+    const body = await req.json().catch(() => ({} as any));
 
-    const body = await req.json()
-    const rawText = (body?.text ?? "").toString()
-    const text = rawText.trim()
-    const rawLang = (body?.languageCode ?? "").toString().trim()
-    const genderInput = body?.gender as Gender | undefined
+    const text = (body.text || body.message || body.content || "").toString().trim();
+    const languageCode =
+      (body.languageCode as string) ||
+      (body.langCode as string) ||
+      "uk-UA";
+    const gender = (body.gender as Gender) || "female";
 
-    if (!text || !rawLang) {
+    if (!text) {
       return NextResponse.json(
-        { success: false, error: "Missing text or languageCode" },
+        { error: "No text provided" },
         { status: 400 },
-      )
+      );
     }
 
-    // Нормализация языка:
-    // "uk", "uk-ua" → "uk-UA"
-    // "ru", "ru-ru" → "ru-RU"
-    let normalizedLang: string
-    const lower = rawLang.toLowerCase()
+    const client = getTtsClient();
 
-    if (lower.startsWith("uk")) {
-      normalizedLang = "uk-UA"
-    } else if (lower.startsWith("ru")) {
-      normalizedLang = "ru-RU"
-    } else if (lower.startsWith("en")) {
-      normalizedLang = "en-US"
-    } else {
-      normalizedLang = rawLang
-    }
+    const voiceName = pickVoiceName(languageCode, gender);
+    const ssmlGender = mapGender(gender);
 
-    const voiceGender: Gender =
-      genderInput === "male" || genderInput === "female"
-        ? genderInput
-        : "female"
-
-    const voiceConfig =
-      VOICE_MAP[normalizedLang]?.[voiceGender] ??
-      VOICE_MAP["uk-UA"][voiceGender]
-
-    const voice: any = {
-      languageCode: voiceConfig.languageCode,
-      ssmlGender: voiceGender === "male" ? "MALE" : "FEMALE",
-    }
-
-    if (voiceConfig.name) {
-      voice.name = voiceConfig.name
-    }
+    console.log("[/api/tts] Synthesizing speech", {
+      languageCode,
+      gender,
+      ssmlGender,
+      voiceName,
+      textSample: text.slice(0, 80),
+    });
 
     const [response] = await client.synthesizeSpeech({
       input: { text },
-      voice,
+      voice: {
+        languageCode,
+        ssmlGender,
+        name: voiceName,
+      },
       audioConfig: {
         audioEncoding: "MP3",
-        speakingRate: 0.95,
+        speakingRate: 1.0,
       },
-    })
+    });
 
-    const audioContent = response.audioContent
+    const audioContent = response.audioContent;
 
-    if (!audioContent) {
+    if (!audioContent || !audioContent.length) {
+      console.error("[/api/tts] No audioContent in Google response", response);
       return NextResponse.json(
-        { success: false, error: "No audio content from TTS" },
+        { error: "Google TTS returned empty audioContent" },
         { status: 500 },
-      )
+      );
     }
 
-    const buffer = Buffer.from(audioContent as Uint8Array)
-    const base64 = buffer.toString("base64")
-    const audioUrl = `data:audio/mp3;base64,${base64}`
+    const base64 = Buffer.from(audioContent).toString("base64");
+    console.log("[/api/tts] Synthesized OK, bytes:", audioContent.length);
 
-    return NextResponse.json({
-      success: true,
-      audioUrl,
-      language: normalizedLang,
-      gender: voiceGender,
-    })
-  } catch (error: any) {
-    console.error("[TTS] Error:", error)
+    return NextResponse.json(
+      { audioContent: base64 },
+      { status: 200 },
+    );
+  } catch (err: any) {
+    console.error("[/api/tts] ERROR:", err?.message, err);
+
     return NextResponse.json(
       {
-        success: false,
-        error: "TTS error",
-        details: error?.message ?? String(error),
+        error: "Google TTS error",
+        details: err?.message || String(err),
       },
       { status: 500 },
-    )
+    );
   }
-}
-
-// Health-check
-export async function GET() {
-  return NextResponse.json(
-    {
-      success: true,
-      message: "Google Cloud TTS API is running",
-      timestamp: new Date().toISOString(),
-    },
-    { status: 200 },
-  )
 }
