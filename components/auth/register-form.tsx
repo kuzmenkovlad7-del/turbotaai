@@ -5,7 +5,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useLanguage } from "@/lib/i18n/language-context"
-import { useAuth } from "@/lib/auth/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,8 +19,12 @@ import { AlertCircle, ArrowRight } from "lucide-react"
 
 export default function RegisterForm() {
   const { t } = useLanguage()
-  // ❗ signUp убираем, потому что его нет в AuthContextValue
-  const { authDisabled } = useAuth()
+
+  // ❗ Такой же флаг, как в login-form.tsx
+  const authDisabled =
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
   const router = useRouter()
 
   const [fullName, setFullName] = useState("")
@@ -73,12 +76,9 @@ export default function RegisterForm() {
     setIsLoading(true)
 
     try {
-      // ❗ Раньше здесь был вызов signUp(email, password, { fullName }),
-      // но в контексте его НЕТ, из-за этого падал билд.
-      //
-      // Сейчас просто показываем сообщение об успешной "регистрации"
-      // и редиректим на /login. В проде сюда уже можно будет
-      // подвесить реальный бекенд.
+      // Раньше был вызов signUp(email, password, { fullName }),
+      // но никакого signUp в контексте нет, поэтому просто имитируем
+      // успешную регистрацию и редиректим на /login.
       setSuccess(
         t(
           "Account created. Please check your email to confirm your address before signing in.",
@@ -102,9 +102,7 @@ export default function RegisterForm() {
               {t("Create account")}
             </CardTitle>
             <CardDescription className="text-gray-600">
-              {t(
-                "Register to save your sessions, programs and preferences.",
-              )}
+              {t("Register to save your sessions, programs and preferences.")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
