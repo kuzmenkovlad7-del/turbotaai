@@ -22,13 +22,12 @@ export default function Home() {
   const [isVoiceCallOpen, setIsVoiceCallOpen] = useState(false)
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false)
 
-  // ❌ Больше НЕ проверяем никакие webhook'и — открываем модалки сразу
+  // Открываем модалки сразу
   const openChat = () => {
     setIsChatOpen(true)
   }
 
   const openVoice = () => {
-    // Оставляем только предупреждение про поддержку браузера
     if (
       typeof window !== "undefined" &&
       // @ts-ignore
@@ -187,6 +186,8 @@ export default function Home() {
       <VideoCallDialog
         isOpen={isVideoCallOpen}
         onClose={() => setIsVideoCallOpen(false)}
+        // обязателен по типу, но внутри компонента не используется
+        openAiApiKey=""
         onError={(error) => {
           console.error("Video call error:", error)
           alert(
