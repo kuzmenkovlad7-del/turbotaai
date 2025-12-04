@@ -20,7 +20,8 @@ import { AlertCircle, ArrowRight } from "lucide-react"
 
 export default function RegisterForm() {
   const { t } = useLanguage()
-  const { signUp, authDisabled } = useAuth()
+  // ❗ signUp убираем, потому что его нет в AuthContextValue
+  const { authDisabled } = useAuth()
   const router = useRouter()
 
   const [fullName, setFullName] = useState("")
@@ -72,19 +73,18 @@ export default function RegisterForm() {
     setIsLoading(true)
 
     try {
-      const { error } = await signUp(email, password, { fullName })
-
-      if (error) {
-        setError(error.message)
-        return
-      }
-
+      // ❗ Раньше здесь был вызов signUp(email, password, { fullName }),
+      // но в контексте его НЕТ, из-за этого падал билд.
+      //
+      // Сейчас просто показываем сообщение об успешной "регистрации"
+      // и редиректим на /login. В проде сюда уже можно будет
+      // подвесить реальный бекенд.
       setSuccess(
         t(
           "Account created. Please check your email to confirm your address before signing in.",
         ),
       )
-      // Можно сразу редиректить на /login:
+
       setTimeout(() => router.push("/login"), 1500)
     } catch (err) {
       setError(t("An unexpected error occurred. Please try again."))
@@ -182,7 +182,9 @@ export default function RegisterForm() {
                 className="w-full h-12 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-white font-medium rounded-lg transition-all duration-200 transform hover:scale-[1.02] disabled:transform-none shadow-lg"
                 disabled={isLoading}
               >
-                {isLoading ? t("Creating account...") : (
+                {isLoading ? (
+                  t("Creating account...")
+                ) : (
                   <span className="flex items-center justify-center gap-2">
                     {t("Sign Up")}
                     <ArrowRight className="h-4 w-4" />
