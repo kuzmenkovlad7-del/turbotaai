@@ -1,4 +1,3 @@
-// components/voice-call-dialog.tsx
 "use client"
 
 import { useState, useRef, useEffect } from "react"
@@ -107,8 +106,10 @@ export default function VoiceCallDialog({
     "connected" | "disconnected"
   >("disconnected")
 
-  // выбор голоса для этой сессии
+  // выбор голоса для UI
   const [voiceGender, setVoiceGender] = useState<"female" | "male">("female")
+  // ОТДЕЛЬНО: реальный пол сессии, который всегда летит в /api/tts
+  const voiceGenderRef = useRef<"female" | "male">("female")
 
   const recognitionRef = useRef<any | null>(null)
   const isRecognitionActiveRef = useRef(false)
@@ -119,7 +120,7 @@ export default function VoiceCallDialog({
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
-  // audio-плеер для Google Cloud TTS
+  // audio-плеер для TTS
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
@@ -142,6 +143,11 @@ export default function VoiceCallDialog({
     return "en-US"
   }
 
+  function getCurrentGender(): "MALE" | "FEMALE" {
+    const g = voiceGenderRef.current || "female"
+    return g === "male" ? "MALE" : "FEMALE"
+  }
+
   // ---------- управление SpeechRecognition (единая точка) ----------
 
   function ensureRecognitionRunning() {
@@ -152,7 +158,9 @@ export default function VoiceCallDialog({
       !isMicMutedRef.current &&
       !isAiSpeakingRef.current
 
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const SR =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition
 
     // если слушать НЕ нужно — стопаем, если запущено
     if (!shouldListen) {
@@ -305,7 +313,7 @@ export default function VoiceCallDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ---------- озвучка ответа (Google Cloud TTS + fallback) ----------
+  // ---------- озвучка ответа (OpenAI TTS + fallback) ----------
   function speakText(text: string) {
     if (typeof window === "undefined") return
 
@@ -313,10 +321,11 @@ export default function VoiceCallDialog({
     if (!cleanText) return
 
     const langCode = computeLangCode() // "uk-UA" | "ru-RU" | "en-US"
+    const gender = getCurrentGender() // "MALE" | "FEMALE"
 
     console.log("[TTS] speakText()", {
       langCode,
-      gender: voiceGender,
+      gender,
       textSample: cleanText.slice(0, 80),
     })
 
@@ -334,7 +343,7 @@ export default function VoiceCallDialog({
       ensureRecognitionRunning()
     }
 
-    // fallback — браузерный TTS (если Google TTS не сработал)
+    // fallback — браузерный TTS (если /api/tts не сработал)
     const speakWithBrowserTTS = () => {
       const synth = (typeof window !== "undefined" &&
         (window as any).speechSynthesis) as SpeechSynthesis | undefined
@@ -350,7 +359,7 @@ export default function VoiceCallDialog({
       const utterance = new SpeechSynthesisUtterance(cleanText)
       utterance.lang = langCode
       utterance.rate = 1
-      utterance.pitch = 1
+      utterance.pitch = gender === "MALE" ? 0.9 : 1.1
 
       utterance.onstart = () => {
         startSpeaking()
@@ -369,32 +378,33 @@ export default function VoiceCallDialog({
       synth.speak(utterance)
     }
 
-    // Основная ветка — Google Cloud TTS через /api/tts
+    // Основная ветка — OpenAI TTS через /api/tts
     ;(async () => {
       try {
-        console.log("[TTS] Requesting /api/tts…")
+        const payload = {
+          text: cleanText,
+          language: langCode,
+          gender, // "MALE" | "FEMALE"
+        }
+
+        console.log("[TTS] Requesting /api/tts…", payload)
 
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: cleanText,
-            // важно: сервер ждёт поле language, а не languageCode
-            language: langCode,
-            // сервер нормализует в FEMALE/MALE, но сразу даём в верхнем регистре
-            gender: voiceGender.toUpperCase(), // "FEMALE" | "MALE"
-          }),
+          body: JSON.stringify(payload),
         })
 
-        // сначала читаем как текст, потом пробуем распарсить JSON —
-        // так не будет ошибки "Unexpected token '<'"
         const raw = await res.text()
         let data: any = null
 
         try {
           data = raw ? JSON.parse(raw) : null
         } catch (e) {
-          console.error("[TTS] /api/tts returned non-JSON response:", raw.slice(0, 200))
+          console.error(
+            "[TTS] /api/tts returned non-JSON response:",
+            raw.slice(0, 200),
+          )
         }
 
         console.log("[TTS] /api/tts status:", res.status, "data:", data)
@@ -409,7 +419,6 @@ export default function VoiceCallDialog({
           return
         }
 
-        // поддерживаем оба формата: audioUrl ИЛИ audioContent (base64)
         let audioUrl: string | undefined = data.audioUrl
 
         if (!audioUrl && data.audioContent) {
@@ -422,7 +431,6 @@ export default function VoiceCallDialog({
           return
         }
 
-        // останавливаем предыдущий аудио-поток, если есть
         if (audioRef.current) {
           audioRef.current.pause()
           audioRef.current = null
@@ -462,12 +470,11 @@ export default function VoiceCallDialog({
   // ---------- отправка текста в n8n / OpenAI ----------
 
   async function handleUserText(text: string) {
-    const lang =
+    const langCode =
       typeof (currentLanguage as any) === "string"
         ? ((currentLanguage as any) as string)
         : (currentLanguage as any)?.code || "uk"
 
-    // 1) prop → 2) env → 3) /api/chat
     const resolvedWebhook =
       (webhookUrl && webhookUrl.trim()) ||
       TURBOTA_AGENT_WEBHOOK_URL.trim() ||
@@ -479,10 +486,10 @@ export default function VoiceCallDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: text,
-          language: lang,
+          language: langCode,
           email: effectiveEmail,
           mode: "voice",
-          gender: voiceGender, // пробрасываем в промпт Myitra
+          gender: voiceGenderRef.current, // "female" | "male" — для промпта ассистента
           voiceLanguage: computeLangCode(),
         }),
       })
@@ -528,7 +535,10 @@ export default function VoiceCallDialog({
   // ---------- управление звонком / микрофоном ----------
 
   const startCall = (gender: "female" | "male") => {
+    // ЖЁСТКО фиксируем пол сессии
+    voiceGenderRef.current = gender
     setVoiceGender(gender)
+
     setIsConnecting(true)
     setNetworkError(null)
 
@@ -658,7 +668,7 @@ export default function VoiceCallDialog({
                           <Brain className="h-3 w-3" />
                           {t("AI Psychologist")}
                           <span className="ml-1 rounded-full bg-emerald-100 px-2 py-[1px] text-[9px] font-semibold uppercase tracking-wide text-emerald-700">
-                            {voiceGender === "female"
+                            {voiceGenderRef.current === "female"
                               ? t("Female voice")
                               : t("Male voice")}
                           </span>
@@ -725,12 +735,12 @@ export default function VoiceCallDialog({
                       onClick={() => startCall("female")}
                       disabled={isConnecting}
                       className={`h-10 rounded-full px-5 text-xs font-semibold shadow-sm flex items-center gap-2 ${
-                        voiceGender === "female"
+                        voiceGenderRef.current === "female"
                           ? "bg-pink-600 text-white hover:bg-pink-700"
                           : "bg-pink-50 text-pink-700 hover:bg-pink-100"
                       }`}
                     >
-                      {isConnecting && voiceGender === "female" ? (
+                      {isConnecting && voiceGenderRef.current === "female" ? (
                         <>
                           <Loader2 className="h-3 w-3 animate-spin" />
                           {t("Connecting")}
@@ -748,12 +758,12 @@ export default function VoiceCallDialog({
                       onClick={() => startCall("male")}
                       disabled={isConnecting}
                       className={`h-10 rounded-full px-5 text-xs font-semibold shadow-sm flex items-center gap-2 ${
-                        voiceGender === "male"
+                        voiceGenderRef.current === "male"
                           ? "bg-sky-600 text-white hover:bg-sky-700"
                           : "bg-sky-50 text-sky-700 hover:bg-sky-100"
                       }`}
                     >
-                      {isConnecting && voiceGender === "male" ? (
+                      {isConnecting && voiceGenderRef.current === "male" ? (
                         <>
                           <Loader2 className="h-3 w-3 animate-spin" />
                           {t("Connecting")}

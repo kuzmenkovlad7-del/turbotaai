@@ -41,3 +41,4 @@ Thumbs.db
 
 # pnpm
 .pnpm-debug.log*
+.env.local
