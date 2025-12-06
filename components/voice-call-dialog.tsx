@@ -106,9 +106,7 @@ export default function VoiceCallDialog({
     "connected" | "disconnected"
   >("disconnected")
 
-  // выбор голоса для UI
-  const [voiceGender, setVoiceGender] = useState<"female" | "male">("female")
-  // ОТДЕЛЬНО: реальный пол сессии, который всегда летит в /api/tts
+  // реальный пол сессии, который всегда летит в /api/tts
   const voiceGenderRef = useRef<"female" | "male">("female")
 
   const recognitionRef = useRef<any | null>(null)
@@ -122,6 +120,9 @@ export default function VoiceCallDialog({
 
   // audio-плеер для TTS
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // media stream для явного запроса доступа к микрофону (особенно на мобилках)
+  const micStreamRef = useRef<MediaStream | null>(null)
 
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
@@ -146,6 +147,66 @@ export default function VoiceCallDialog({
   function getCurrentGender(): "MALE" | "FEMALE" {
     const g = voiceGenderRef.current || "female"
     return g === "male" ? "MALE" : "FEMALE"
+  }
+
+  // ----- запрашиваем доступ к микрофону (особенно критично на мобильных) -----
+  async function requestMicrophoneAccess(): Promise<boolean> {
+    if (typeof navigator === "undefined") {
+      setNetworkError(
+        t(
+          "Microphone access is not available in this environment. Please open the assistant in a regular browser window.",
+        ),
+      )
+      return false
+    }
+
+    const hasMediaDevices =
+      typeof navigator.mediaDevices !== "undefined" &&
+      typeof navigator.mediaDevices.getUserMedia === "function"
+
+    if (!hasMediaDevices) {
+      setNetworkError(
+        t(
+          "Microphone access is not supported in this browser. Please use the latest version of Chrome, Edge or Safari.",
+        ),
+      )
+      return false
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      })
+
+      // если всё ок — сохраняем стрим и не трогаем треки до завершения звонка
+      micStreamRef.current = stream
+      setNetworkError(null)
+      return true
+    } catch (error: any) {
+      console.error("[Voice] getUserMedia error:", error)
+
+      const name = error?.name
+
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setNetworkError(
+          t(
+            "Microphone is blocked in the browser. Please allow access in the site permissions and reload the page.",
+          ),
+        )
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setNetworkError(
+          t("No microphone was found on this device. Please check your hardware."),
+        )
+      } else {
+        setNetworkError(
+          t(
+            "Could not start microphone. Check permissions in the browser and system settings, then try again.",
+          ),
+        )
+      }
+
+      return false
+    }
   }
 
   // ---------- управление SpeechRecognition (единая точка) ----------
@@ -202,6 +263,17 @@ export default function VoiceCallDialog({
 
       recognition.onerror = (event: any) => {
         console.error("Speech recognition error", event)
+
+        if (event?.error === "not-allowed" || event?.error === "service-not-allowed") {
+          setNetworkError(
+            t(
+              "Microphone is blocked for this site in the browser. Please allow access in the address bar and reload the page.",
+            ),
+          )
+          setConnectionStatus("disconnected")
+          return
+        }
+
         if (event?.error !== "no-speech") {
           setNetworkError(t("Error while listening. Please try again."))
         }
@@ -218,7 +290,7 @@ export default function VoiceCallDialog({
             !isMicMutedRef.current &&
             !isAiSpeakingRef.current
 
-          if (stillShouldListen) {
+          if (stillStillListen) {
             ensureRecognitionRunning()
           }
         }, 300)
@@ -252,7 +324,14 @@ export default function VoiceCallDialog({
         recognition.start()
         // onstart сам выставит флаги
       } catch (e: any) {
-        if (e?.name !== "InvalidStateError") {
+        if (e?.name === "NotAllowedError") {
+          setNetworkError(
+            t(
+              "Microphone is blocked for this site. Please allow access in the browser settings and reload the page.",
+            ),
+          )
+          setConnectionStatus("disconnected")
+        } else if (e?.name !== "InvalidStateError") {
           console.error("Cannot start recognition", e)
           setNetworkError(
             t("Could not start microphone. Check permissions and try again."),
@@ -296,6 +375,18 @@ export default function VoiceCallDialog({
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current = null
+    }
+
+    // останавливаем и освобождаем медиа-треки микрофона
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop()
+        } catch (e) {
+          console.error("Error stopping mic track", e)
+        }
+      })
+      micStreamRef.current = null
     }
   }
 
@@ -534,10 +625,9 @@ export default function VoiceCallDialog({
 
   // ---------- управление звонком / микрофоном ----------
 
-  const startCall = (gender: "female" | "male") => {
+  const startCall = async (gender: "female" | "male") => {
     // ЖЁСТКО фиксируем пол сессии
     voiceGenderRef.current = gender
-    setVoiceGender(gender)
 
     setIsConnecting(true)
     setNetworkError(null)
@@ -545,12 +635,21 @@ export default function VoiceCallDialog({
     isMicMutedRef.current = false
     setIsMicMuted(false)
 
-    setTimeout(() => {
-      isCallActiveRef.current = true
-      setIsCallActive(true)
+    // сначала явно просим доступ к микрофону (особенно важно на телефонах)
+    const micOk = await requestMicrophoneAccess()
+    if (!micOk) {
       setIsConnecting(false)
-      ensureRecognitionRunning()
-    }, 200)
+      setIsCallActive(false)
+      isCallActiveRef.current = false
+      setConnectionStatus("disconnected")
+      return
+    }
+
+    isCallActiveRef.current = true
+    setIsCallActive(true)
+    setIsConnecting(false)
+    setConnectionStatus("connected")
+    ensureRecognitionRunning()
   }
 
   const endCall = () => {
@@ -569,7 +668,7 @@ export default function VoiceCallDialog({
         "In crisis situations, please contact local emergency services immediately.",
       )
     : isAiSpeaking
-      ? t("Assistant is speaking…")
+      ? t("Assistant is speaking...")
       : isMicMuted
         ? t("Paused. Turn on microphone to continue.")
         : isListening
@@ -732,7 +831,9 @@ export default function VoiceCallDialog({
                   <div className="flex items-center justify-center gap-3">
                     <Button
                       type="button"
-                      onClick={() => startCall("female")}
+                      onClick={() => {
+                        void startCall("female")
+                      }}
                       disabled={isConnecting}
                       className={`h-10 rounded-full px-5 text-xs font-semibold shadow-sm flex items-center gap-2 ${
                         voiceGenderRef.current === "female"
@@ -755,7 +856,9 @@ export default function VoiceCallDialog({
 
                     <Button
                       type="button"
-                      onClick={() => startCall("male")}
+                      onClick={() => {
+                        void startCall("male")
+                      }}
                       disabled={isConnecting}
                       className={`h-10 rounded-full px-5 text-xs font-semibold shadow-sm flex items-center gap-2 ${
                         voiceGenderRef.current === "male"
