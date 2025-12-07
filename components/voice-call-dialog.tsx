@@ -121,9 +121,6 @@ export default function VoiceCallDialog({
   // audio-плеер для TTS
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // media stream для явного запроса доступа к микрофону (особенно на мобилках)
-  const micStreamRef = useRef<MediaStream | null>(null)
-
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
   // Скролл вниз при новых сообщениях
@@ -147,66 +144,6 @@ export default function VoiceCallDialog({
   function getCurrentGender(): "MALE" | "FEMALE" {
     const g = voiceGenderRef.current || "female"
     return g === "male" ? "MALE" : "FEMALE"
-  }
-
-  // ----- запрашиваем доступ к микрофону (особенно критично на мобильных) -----
-  async function requestMicrophoneAccess(): Promise<boolean> {
-    if (typeof navigator === "undefined") {
-      setNetworkError(
-        t(
-          "Microphone access is not available in this environment. Please open the assistant in a regular browser window.",
-        ),
-      )
-      return false
-    }
-
-    const hasMediaDevices =
-      typeof navigator.mediaDevices !== "undefined" &&
-      typeof navigator.mediaDevices.getUserMedia === "function"
-
-    if (!hasMediaDevices) {
-      setNetworkError(
-        t(
-          "Microphone access is not supported in this browser. Please use the latest version of Chrome, Edge or Safari.",
-        ),
-      )
-      return false
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-      })
-
-      // если всё ок — сохраняем стрим и не трогаем треки до завершения звонка
-      micStreamRef.current = stream
-      setNetworkError(null)
-      return true
-    } catch (error: any) {
-      console.error("[Voice] getUserMedia error:", error)
-
-      const name = error?.name
-
-      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-        setNetworkError(
-          t(
-            "Microphone is blocked in the browser. Please allow access in the site permissions and reload the page.",
-          ),
-        )
-      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-        setNetworkError(
-          t("No microphone was found on this device. Please check your hardware."),
-        )
-      } else {
-        setNetworkError(
-          t(
-            "Could not start microphone. Check permissions in the browser and system settings, then try again.",
-          ),
-        )
-      }
-
-      return false
-    }
   }
 
   // ---------- управление SpeechRecognition (единая точка) ----------
@@ -264,10 +201,23 @@ export default function VoiceCallDialog({
       recognition.onerror = (event: any) => {
         console.error("Speech recognition error", event)
 
-        if (event?.error === "not-allowed" || event?.error === "service-not-allowed") {
+        if (
+          event?.error === "not-allowed" ||
+          event?.error === "service-not-allowed"
+        ) {
           setNetworkError(
             t(
               "Microphone is blocked for this site in the browser. Please allow access in the address bar and reload the page.",
+            ),
+          )
+          setConnectionStatus("disconnected")
+          return
+        }
+
+        if (event?.error === "audio-capture") {
+          setNetworkError(
+            t(
+              "Could not access the microphone on this device. Please check permissions and try again.",
             ),
           )
           setConnectionStatus("disconnected")
@@ -290,7 +240,7 @@ export default function VoiceCallDialog({
             !isMicMutedRef.current &&
             !isAiSpeakingRef.current
 
-          if (stillStillListen) {
+          if (stillShouldListen) {
             ensureRecognitionRunning()
           }
         }, 300)
@@ -375,18 +325,6 @@ export default function VoiceCallDialog({
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current = null
-    }
-
-    // останавливаем и освобождаем медиа-треки микрофона
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((track) => {
-        try {
-          track.stop()
-        } catch (e) {
-          console.error("Error stopping mic track", e)
-        }
-      })
-      micStreamRef.current = null
     }
   }
 
@@ -635,20 +573,11 @@ export default function VoiceCallDialog({
     isMicMutedRef.current = false
     setIsMicMuted(false)
 
-    // сначала явно просим доступ к микрофону (особенно важно на телефонах)
-    const micOk = await requestMicrophoneAccess()
-    if (!micOk) {
-      setIsConnecting(false)
-      setIsCallActive(false)
-      isCallActiveRef.current = false
-      setConnectionStatus("disconnected")
-      return
-    }
-
     isCallActiveRef.current = true
     setIsCallActive(true)
     setIsConnecting(false)
     setConnectionStatus("connected")
+
     ensureRecognitionRunning()
   }
 
@@ -824,18 +753,17 @@ export default function VoiceCallDialog({
               </div>
 
               {!isCallActive && (
-                <div className="flex flex-col items-center gap-3 pt-1">
-                  <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                <div className="flex flex-col gap-3 pt-1">
+                  <div className="text-center text-[11px] font-medium uppercase tracking-wide text-slate-500">
                     {t("Choose voice for this session")}
                   </div>
-                  <div className="flex items-center justify-center gap-3">
+
+                  <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
                     <Button
                       type="button"
-                      onClick={() => {
-                        void startCall("female")
-                      }}
                       disabled={isConnecting}
-                      className={`h-10 rounded-full px-5 text-xs font-semibold shadow-sm flex items-center gap-2 ${
+                      onClick={() => void startCall("female")}
+                      className={`h-11 w-full rounded-full px-5 text-sm font-semibold shadow-sm flex items-center justify-center gap-2 ${
                         voiceGenderRef.current === "female"
                           ? "bg-pink-600 text-white hover:bg-pink-700"
                           : "bg-pink-50 text-pink-700 hover:bg-pink-100"
@@ -843,12 +771,12 @@ export default function VoiceCallDialog({
                     >
                       {isConnecting && voiceGenderRef.current === "female" ? (
                         <>
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="h-4 w-4 animate-spin" />
                           {t("Connecting")}
                         </>
                       ) : (
                         <>
-                          <Sparkles className="h-3 w-3" />
+                          <Sparkles className="h-4 w-4" />
                           {t("Start with female voice")}
                         </>
                       )}
@@ -856,11 +784,9 @@ export default function VoiceCallDialog({
 
                     <Button
                       type="button"
-                      onClick={() => {
-                        void startCall("male")
-                      }}
                       disabled={isConnecting}
-                      className={`h-10 rounded-full px-5 text-xs font-semibold shadow-sm flex items-center gap-2 ${
+                      onClick={() => void startCall("male")}
+                      className={`h-11 w-full rounded-full px-5 text-sm font-semibold shadow-sm flex items-center justify-center gap-2 ${
                         voiceGenderRef.current === "male"
                           ? "bg-sky-600 text-white hover:bg-sky-700"
                           : "bg-sky-50 text-sky-700 hover:bg-sky-100"
@@ -868,12 +794,12 @@ export default function VoiceCallDialog({
                     >
                       {isConnecting && voiceGenderRef.current === "male" ? (
                         <>
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="h-4 w-4 animate-spin" />
                           {t("Connecting")}
                         </>
                       ) : (
                         <>
-                          <Brain className="h-3 w-3" />
+                          <Phone className="h-4 w-4" />
                           {t("Start with male voice")}
                         </>
                       )}
