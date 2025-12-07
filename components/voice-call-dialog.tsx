@@ -841,7 +841,7 @@ export default function VoiceCallDialog({
                   <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
                     {t("Choose voice for this session")}
                   </div>
-                  <div className="flex items-center justify-center gap-3">
+                  <div className="w-full flex items-center justify-center gap-3">
                     <Button
                       type="button"
                       onClick={() => {
@@ -873,7 +873,7 @@ export default function VoiceCallDialog({
                         void startCall("male")
                       }}
                       disabled={isConnecting}
-                      className={`h-10 rounded-full px-5 text-xs font-semibold shadow-sm flex items-center gap-2 ${
+                      className={`w-full h-10 rounded-full px-5 text-xs font-semibold shadow-sm flex items-center gap-2 ${
                         voiceGenderRef.current === "male"
                           ? "bg-sky-600 text-white hover:bg-sky-700"
                           : "bg-sky-50 text-sky-700 hover:bg-sky-100"
