@@ -85,6 +85,29 @@ function extractAnswer(data: any): string {
   return ""
 }
 
+// ------- helpers для окружения (где поддерживаем стриминговый voice-режим) -------
+
+function isMobileBrowser(): boolean {
+  if (typeof navigator === "undefined") return false
+  const ua = navigator.userAgent || ""
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+}
+
+function hasSpeechRecognitionSupport(): boolean {
+  if (typeof window === "undefined") return false
+  return (
+    "SpeechRecognition" in window || "webkitSpeechRecognition" in window
+  )
+}
+
+/**
+ * Стриминговое голосовое распознавание поддерживаем ТОЛЬКО там,
+ * где есть Web Speech API и это не мобильный браузер.
+ */
+function supportsStreamingVoice(): boolean {
+  return hasSpeechRecognitionSupport() && !isMobileBrowser()
+}
+
 export default function VoiceCallDialog({
   isOpen,
   onClose,
@@ -122,7 +145,7 @@ export default function VoiceCallDialog({
   // audio-плеер для TTS (/api/tts)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // media stream для явного запроса доступа к микрофону (когда нет Web Speech API)
+  // media stream для явного запроса доступа к микрофону (если понадобится)
   const micStreamRef = useRef<MediaStream | null>(null)
 
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
@@ -150,7 +173,7 @@ export default function VoiceCallDialog({
     return g === "male" ? "MALE" : "FEMALE"
   }
 
-  // ----- явный запрос к микрофону (используем только там, где нет Web Speech API) -----
+  // ----- явный запрос к микрофону (оставляем для будущих вариантов, но сейчас используем редко) -----
   async function requestMicrophoneAccess(): Promise<boolean> {
     if (typeof navigator === "undefined") {
       setNetworkError(
@@ -226,6 +249,26 @@ export default function VoiceCallDialog({
   function ensureRecognitionRunning() {
     if (typeof window === "undefined") return
 
+    const streamingSupported = supportsStreamingVoice()
+
+    // если окружение не поддерживает стриминговое распознавание — честно говорим об этом
+    if (!streamingSupported) {
+      isRecognitionActiveRef.current = false
+      setIsListening(false)
+      setConnectionStatus("disconnected")
+      setDebugInfo(
+        `[ensureRecognitionRunning] streaming voice not supported; mobile=${String(
+          isMobileBrowser(),
+        )}; hasSR=${String(hasSpeechRecognitionSupport())}`,
+      )
+      setNetworkError(
+        t(
+          "Voice recognition is not supported in this browser or device. Please use a desktop browser for full voice session.",
+        ),
+      )
+      return
+    }
+
     const shouldListen =
       isCallActiveRef.current &&
       !isMicMutedRef.current &&
@@ -273,7 +316,9 @@ export default function VoiceCallDialog({
         setConnectionStatus("connected")
         setNetworkError(null)
         setDebugInfo(
-          `[SpeechRecognition.onstart] lang=${recognition.lang} ua=${navigator.userAgent}`,
+          `[SpeechRecognition.onstart] lang=${recognition.lang} ua=${
+            navigator.userAgent
+          }`,
         )
       }
 
@@ -288,7 +333,7 @@ export default function VoiceCallDialog({
         if (event?.error === "not-allowed") {
           setNetworkError(
             t(
-              "Microphone is blocked for this site in the browser. Please allow access in the address bar and reload the page.",
+              "Your browser blocks the speech recognition service. Please use a desktop browser for full voice session.",
             ),
           )
           setConnectionStatus("disconnected")
@@ -298,7 +343,7 @@ export default function VoiceCallDialog({
         if (event?.error === "service-not-allowed") {
           setNetworkError(
             t(
-              "Speech recognition is disabled or not available on this device. Please enable speech recognition in the system settings or use another browser.",
+              "Speech recognition service is not available on this device. Please try from a desktop browser.",
             ),
           )
           setConnectionStatus("disconnected")
@@ -398,9 +443,6 @@ export default function VoiceCallDialog({
 
     hardStopRecognition()
 
-    if (typeof window !== "undefined" && (window as any).speechSynthesis) {
-      ;(window as any).speechSynthesis.cancel()
-    }
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current = null
@@ -539,7 +581,6 @@ export default function VoiceCallDialog({
       } catch (error) {
         console.error("[TTS] fetch error:", error)
       } finally {
-        // на всякий случай, если onended не сработает
         if (isAiSpeakingRef.current) {
           stopSpeaking()
         }
@@ -623,19 +664,29 @@ export default function VoiceCallDialog({
     isMicMutedRef.current = false
     setIsMicMuted(false)
 
-    let micOk = true
+    const streamingSupported = supportsStreamingVoice()
 
-    if (typeof window !== "undefined") {
-      const SR =
-        (window as any).SpeechRecognition ||
-        (window as any).webkitSpeechRecognition
-
-      // если в браузере нет Web Speech API — просим микрофон через getUserMedia
-      if (!SR) {
-        micOk = await requestMicrophoneAccess()
-      }
+    // если окружение не поддерживает стриминговое распознавание — честно говорим об этом
+    if (!streamingSupported) {
+      setIsConnecting(false)
+      setIsCallActive(false)
+      isCallActiveRef.current = false
+      setConnectionStatus("disconnected")
+      setDebugInfo(
+        `[startCall] streaming voice not supported; mobile=${String(
+          isMobileBrowser(),
+        )}; hasSR=${String(hasSpeechRecognitionSupport())}`,
+      )
+      setNetworkError(
+        t(
+          "Voice recognition is not supported in this mobile browser. Please open the assistant on a desktop browser for full voice session.",
+        ),
+      )
+      return
     }
 
+    // здесь можем дополнительно запросить доступ к микрофону, если захотим
+    const micOk = await requestMicrophoneAccess()
     if (!micOk) {
       setIsConnecting(false)
       setIsCallActive(false)
