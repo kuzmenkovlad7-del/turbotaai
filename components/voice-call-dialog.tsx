@@ -85,29 +85,6 @@ function extractAnswer(data: any): string {
   return ""
 }
 
-// ------- helpers для окружения (где поддерживаем стриминговый voice-режим) -------
-
-function isMobileBrowser(): boolean {
-  if (typeof navigator === "undefined") return false
-  const ua = navigator.userAgent || ""
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
-}
-
-function hasSpeechRecognitionSupport(): boolean {
-  if (typeof window === "undefined") return false
-  return (
-    "SpeechRecognition" in window || "webkitSpeechRecognition" in window
-  )
-}
-
-/**
- * Стриминговое голосовое распознавание поддерживаем ТОЛЬКО там,
- * где есть Web Speech API и это не мобильный браузер.
- */
-function supportsStreamingVoice(): boolean {
-  return hasSpeechRecognitionSupport() && !isMobileBrowser()
-}
-
 export default function VoiceCallDialog({
   isOpen,
   onClose,
@@ -145,7 +122,7 @@ export default function VoiceCallDialog({
   // audio-плеер для TTS (/api/tts)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // media stream для явного запроса доступа к микрофону (если понадобится)
+  // media stream для явного запроса доступа к микрофону, если нужно
   const micStreamRef = useRef<MediaStream | null>(null)
 
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
@@ -173,7 +150,7 @@ export default function VoiceCallDialog({
     return g === "male" ? "MALE" : "FEMALE"
   }
 
-  // ----- явный запрос к микрофону (оставляем для будущих вариантов, но сейчас используем редко) -----
+  // ----- явный запрос к микрофону, если потребуется -----
   async function requestMicrophoneAccess(): Promise<boolean> {
     if (typeof navigator === "undefined") {
       setNetworkError(
@@ -249,26 +226,6 @@ export default function VoiceCallDialog({
   function ensureRecognitionRunning() {
     if (typeof window === "undefined") return
 
-    const streamingSupported = supportsStreamingVoice()
-
-    // если окружение не поддерживает стриминговое распознавание — честно говорим об этом
-    if (!streamingSupported) {
-      isRecognitionActiveRef.current = false
-      setIsListening(false)
-      setConnectionStatus("disconnected")
-      setDebugInfo(
-        `[ensureRecognitionRunning] streaming voice not supported; mobile=${String(
-          isMobileBrowser(),
-        )}; hasSR=${String(hasSpeechRecognitionSupport())}`,
-      )
-      setNetworkError(
-        t(
-          "Voice recognition is not supported in this browser or device. Please use a desktop browser for full voice session.",
-        ),
-      )
-      return
-    }
-
     const shouldListen =
       isCallActiveRef.current &&
       !isMicMutedRef.current &&
@@ -315,10 +272,12 @@ export default function VoiceCallDialog({
         setIsListening(true)
         setConnectionStatus("connected")
         setNetworkError(null)
+        const href =
+          typeof window !== "undefined" ? window.location.href : "no-window"
         setDebugInfo(
           `[SpeechRecognition.onstart] lang=${recognition.lang} ua=${
             navigator.userAgent
-          }`,
+          } href=${href}`,
         )
       }
 
@@ -333,7 +292,7 @@ export default function VoiceCallDialog({
         if (event?.error === "not-allowed") {
           setNetworkError(
             t(
-              "Your browser blocks the speech recognition service. Please use a desktop browser for full voice session.",
+              "Browser blocked speech recognition on this device. Please check microphone permissions or try another browser.",
             ),
           )
           setConnectionStatus("disconnected")
@@ -343,7 +302,7 @@ export default function VoiceCallDialog({
         if (event?.error === "service-not-allowed") {
           setNetworkError(
             t(
-              "Speech recognition service is not available on this device. Please try from a desktop browser.",
+              "Speech recognition service is not available on this device. Please try from another browser or device.",
             ),
           )
           setConnectionStatus("disconnected")
@@ -400,7 +359,7 @@ export default function VoiceCallDialog({
         if (e?.name === "NotAllowedError") {
           setNetworkError(
             t(
-              "Microphone is blocked for this site in the browser. Please allow access in the address bar and reload the page.",
+              "Browser blocked speech recognition. Please check microphone permissions for this site.",
             ),
           )
           setConnectionStatus("disconnected")
@@ -472,7 +431,7 @@ export default function VoiceCallDialog({
     }
   }, [])
 
-  // ---------- озвучка ответа (ТОЛЬКО OpenAI TTS через /api/tts, без браузерного speechSynthesis) ----------
+  // ---------- озвучка ответа (ТОЛЬКО OpenAI TTS через /api/tts) ----------
   function speakText(text: string) {
     if (typeof window === "undefined") return
 
@@ -540,6 +499,11 @@ export default function VoiceCallDialog({
             data?.error || res.statusText,
             data?.details || "",
           )
+          setNetworkError(
+            t(
+              "Audio playback is temporarily unavailable. The answer is shown as text.",
+            ),
+          )
           return
         }
 
@@ -551,6 +515,11 @@ export default function VoiceCallDialog({
 
         if (!audioUrl) {
           console.error("[TTS] No audioUrl/audioContent in response")
+          setNetworkError(
+            t(
+              "Audio playback is temporarily unavailable. The answer is shown as text.",
+            ),
+          )
           return
         }
 
@@ -569,6 +538,11 @@ export default function VoiceCallDialog({
 
         audio.onerror = (e) => {
           console.error("[TTS] audio playback error:", e)
+          setNetworkError(
+            t(
+              "Audio playback is temporarily unavailable. The answer is shown as text.",
+            ),
+          )
           stopSpeaking()
           audioRef.current = null
         }
@@ -577,9 +551,19 @@ export default function VoiceCallDialog({
           await audio.play()
         } catch (e) {
           console.error("[TTS] play() rejected", e)
+          setNetworkError(
+            t(
+              "Audio playback is temporarily unavailable. The answer is shown as text.",
+            ),
+          )
         }
       } catch (error) {
         console.error("[TTS] fetch error:", error)
+        setNetworkError(
+          t(
+            "Audio playback is temporarily unavailable. The answer is shown as text.",
+          ),
+        )
       } finally {
         if (isAiSpeakingRef.current) {
           stopSpeaking()
@@ -664,29 +648,17 @@ export default function VoiceCallDialog({
     isMicMutedRef.current = false
     setIsMicMuted(false)
 
-    const streamingSupported = supportsStreamingVoice()
-
-    // если окружение не поддерживает стриминговое распознавание — честно говорим об этом
-    if (!streamingSupported) {
-      setIsConnecting(false)
-      setIsCallActive(false)
-      isCallActiveRef.current = false
-      setConnectionStatus("disconnected")
-      setDebugInfo(
-        `[startCall] streaming voice not supported; mobile=${String(
-          isMobileBrowser(),
-        )}; hasSR=${String(hasSpeechRecognitionSupport())}`,
-      )
-      setNetworkError(
-        t(
-          "Voice recognition is not supported in this mobile browser. Please open the assistant on a desktop browser for full voice session.",
-        ),
-      )
-      return
+    // если нужно — явно просим микрофон (для браузеров без Web Speech API)
+    let micOk = true
+    if (typeof window !== "undefined") {
+      const SR =
+        (window as any).SpeechRecognition ||
+        (window as any).webkitSpeechRecognition
+      if (!SR) {
+        micOk = await requestMicrophoneAccess()
+      }
     }
 
-    // здесь можем дополнительно запросить доступ к микрофону, если захотим
-    const micOk = await requestMicrophoneAccess()
     if (!micOk) {
       setIsConnecting(false)
       setIsCallActive(false)
