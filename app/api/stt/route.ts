@@ -1,93 +1,158 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 
+const OPENAI_API_KEY =
+  process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_STT || ""
+
+// можно включить edge-runtime, но это опционально
 export const runtime = "edge"
 
-function normalizeLanguage(raw: string | null): string | undefined {
-  if (!raw) return undefined
-  // "uk-ua" -> "uk", "uk_UA" -> "uk", "uk" -> "uk"
-  const code = raw.toString().trim().toLowerCase().split(/[-_]/)[0]
-  if (!code || code.length < 2 || code.length > 5) return undefined
-  return code
+const SUPPORTED_MIME_TYPES = [
+  "audio/flac",
+  "audio/m4a",
+  "audio/mp3",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/mpga",
+  "audio/ogg",
+  "audio/oga",
+  "audio/wav",
+  "audio/webm",
+  "video/webm",
+]
+
+const SUPPORTED_EXTS = [
+  "flac",
+  "m4a",
+  "mp3",
+  "mp4",
+  "mpeg",
+  "mpga",
+  "oga",
+  "ogg",
+  "wav",
+  "webm",
+]
+
+function guessExt(mime: string): string {
+  if (mime.includes("flac")) return "flac"
+  if (mime.includes("m4a")) return "m4a"
+  if (mime.includes("mp3")) return "mp3"
+  if (mime.includes("mp4")) return "mp4"
+  if (mime.includes("mpeg") || mime.includes("mpga")) return "mpeg"
+  if (mime.includes("oga")) return "oga"
+  if (mime.includes("ogg")) return "ogg"
+  if (mime.includes("wav")) return "wav"
+  if (mime.includes("webm")) return "webm"
+  return "webm"
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const formData = await req.formData()
-
-    const file = formData.get("file")
-    const rawLanguage = (formData.get("language") as string | null) ?? null
-    const language = normalizeLanguage(rawLanguage)
-
-    if (!file || !(file instanceof Blob)) {
-      console.error("[/api/stt] no audio file in request")
+    if (!OPENAI_API_KEY) {
       return NextResponse.json(
-        { success: false, error: "No audio file provided" },
+        {
+          success: false,
+          error: "Missing OPENAI_API_KEY for STT",
+        },
+        { status: 500 },
+      )
+    }
+
+    const formData = await req.formData()
+    const file = formData.get("file")
+    const languageRaw = (formData.get("language") || "uk").toString()
+
+    if (!(file instanceof Blob)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No audio file provided",
+        },
         { status: 400 },
       )
     }
 
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      console.error("[/api/stt] OPENAI_API_KEY is missing")
+    const mime = file.type || "audio/webm"
+
+    const isSupported =
+      SUPPORTED_MIME_TYPES.includes(mime) ||
+      mime.startsWith("audio/") ||
+      mime.startsWith("video/")
+
+    if (!isSupported) {
       return NextResponse.json(
-        { success: false, error: "Server STT config error (missing API key)" },
-        { status: 500 },
+        {
+          success: false,
+          error: `Invalid file format. Supported formats: ${JSON.stringify(
+            SUPPORTED_EXTS,
+          )}`,
+        },
+        { status: 400 },
       )
     }
 
-    // Собираем форму для OpenAI: обязательно язык в формате ISO-639-1
-    const openaiForm = new FormData()
-    openaiForm.append("file", file, "audio.webm")
-    openaiForm.append("model", "whisper-1")
-    openaiForm.append("response_format", "json")
-    if (language) {
-      openaiForm.append("language", language)
-    }
+    const ext = guessExt(mime)
+    const audioFile =
+      file instanceof File
+        ? file
+        : new File([file], `speech.${ext}`, { type: mime })
 
-    console.log("[/api/stt] sending to OpenAI STT", {
-      langRaw: rawLanguage,
-      langNormalized: language,
-    })
+    const lang = languageRaw.split("-")[0] || "uk"
 
-    const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
+    const fd = new FormData()
+    fd.append("file", audioFile)
+    fd.append("model", "gpt-4o-mini-transcribe")
+    fd.append("language", lang)
+    fd.append("response_format", "json")
+
+    const openaiRes = await fetch(
+      "https://api.openai.com/v1/audio/transcriptions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: fd,
       },
-      body: openaiForm,
-    })
+    )
 
-    const data = await res.json().catch(() => ({}))
+    const raw = await openaiRes.text()
+    let data: any = null
 
-    if (!res.ok) {
-      console.error("[/api/stt] OpenAI error", {
-        status: res.status,
-        error: data?.error,
-      })
+    try {
+      data = raw ? JSON.parse(raw) : null
+    } catch {
+      data = null
+    }
 
-      const message =
-        data?.error?.message ||
-        `STT request failed with status ${res.status}`
-
+    if (!openaiRes.ok || !data) {
+      console.error("STT OpenAI error:", openaiRes.status, raw)
       return NextResponse.json(
-        { success: false, error: message },
+        {
+          success: false,
+          error:
+            data?.error?.message ||
+            `OpenAI STT error: ${openaiRes.status} ${openaiRes.statusText}`,
+        },
         { status: 500 },
       )
     }
 
-    const text =
-      typeof data?.text === "string" ? data.text : ""
-
-    console.log("[/api/stt] transcription ok, length:", text.length)
+    const text = (data.text || "").toString().trim()
 
     return NextResponse.json({
       success: true,
       text,
     })
-  } catch (error) {
-    console.error("[/api/stt] unexpected error", error)
+  } catch (error: any) {
+    console.error("STT route fatal error:", error)
     return NextResponse.json(
-      { success: false, error: "Internal STT error" },
+      {
+        success: false,
+        error:
+          error?.message ||
+          "Unexpected error while processing speech-to-text request",
+      },
       { status: 500 },
     )
   }
