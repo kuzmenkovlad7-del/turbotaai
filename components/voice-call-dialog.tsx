@@ -367,7 +367,7 @@ export default function VoiceCallDialog({
         }
       }
 
-      recorder.onerror = (event: MediaRecorderErrorEvent) => {
+      recorder.onerror = (event: any) => {
         recorderActiveRef.current = false
         setIsListening(false)
         appendDebug(
