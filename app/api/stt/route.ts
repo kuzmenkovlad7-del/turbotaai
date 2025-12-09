@@ -1,51 +1,20 @@
 import { NextResponse } from "next/server"
 
-const OPENAI_API_KEY =
-  process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_STT || ""
-
-// можно включить edge-runtime, но это опционально
 export const runtime = "edge"
 
-const SUPPORTED_MIME_TYPES = [
-  "audio/flac",
-  "audio/m4a",
-  "audio/mp3",
-  "audio/mp4",
-  "audio/mpeg",
-  "audio/mpga",
-  "audio/ogg",
-  "audio/oga",
-  "audio/wav",
-  "audio/webm",
-  "video/webm",
-]
+const OPENAI_API_KEY =
+  process.env.OPENAI_API_KEY ||
+  process.env.OPENAI_API_KEY_STT ||
+  process.env.OPENAI_API_KEY_TURBOTA ||
+  ""
 
-const SUPPORTED_EXTS = [
-  "flac",
-  "m4a",
-  "mp3",
-  "mp4",
-  "mpeg",
-  "mpga",
-  "oga",
-  "ogg",
-  "wav",
-  "webm",
-]
-
-function guessExt(mime: string): string {
-  if (mime.includes("flac")) return "flac"
-  if (mime.includes("m4a")) return "m4a"
-  if (mime.includes("mp3")) return "mp3"
-  if (mime.includes("mp4")) return "mp4"
-  if (mime.includes("mpeg") || mime.includes("mpga")) return "mpeg"
-  if (mime.includes("oga")) return "oga"
-  if (mime.includes("ogg")) return "ogg"
-  if (mime.includes("wav")) return "wav"
-  if (mime.includes("webm")) return "webm"
-  return "webm"
-}
-
+/**
+ * Простой мост к OpenAI STT:
+ * - принимает файл из MediaRecorder (обычно audio/webm)
+ * - НЕ делает никаких лишних проверок "повреждён / неподдерживаемый"
+ * - отправляет как есть в /v1/audio/transcriptions
+ * - возвращает { success: true, text } или { success: false, error }
+ */
 export async function POST(req: Request) {
   try {
     if (!OPENAI_API_KEY) {
@@ -74,24 +43,15 @@ export async function POST(req: Request) {
 
     const mime = file.type || "audio/webm"
 
-    const isSupported =
-      SUPPORTED_MIME_TYPES.includes(mime) ||
-      mime.startsWith("audio/") ||
-      mime.startsWith("video/")
+    // Делаем File, чтобы у OpenAI точно было имя и расширение
+    const ext = mime.includes("webm")
+      ? "webm"
+      : mime.includes("wav")
+        ? "wav"
+        : mime.includes("mp3")
+          ? "mp3"
+          : "webm"
 
-    if (!isSupported) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Invalid file format. Supported formats: ${JSON.stringify(
-            SUPPORTED_EXTS,
-          )}`,
-        },
-        { status: 400 },
-      )
-    }
-
-    const ext = guessExt(mime)
     const audioFile =
       file instanceof File
         ? file
@@ -101,6 +61,7 @@ export async function POST(req: Request) {
 
     const fd = new FormData()
     fd.append("file", audioFile)
+    // модель можно поменять при необходимости
     fd.append("model", "gpt-4o-mini-transcribe")
     fd.append("language", lang)
     fd.append("response_format", "json")
@@ -127,6 +88,8 @@ export async function POST(req: Request) {
 
     if (!openaiRes.ok || !data) {
       console.error("STT OpenAI error:", openaiRes.status, raw)
+
+      // ВАЖНО: не роняем всё, а аккуратно возвращаем ошибку наверх
       return NextResponse.json(
         {
           success: false,
