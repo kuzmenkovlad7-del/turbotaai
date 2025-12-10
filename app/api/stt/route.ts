@@ -11,13 +11,13 @@ const OPENAI_API_KEY =
 /**
  * /api/stt
  *
- * Принимает:
+ * Ждём:
  *  - formData "file"  (Blob от MediaRecorder, обычно audio/webm)
  *  - formData "language" (uk-UA / ru-RU / en-US и т.п.)
  *
- * Делает:
+ * Делаем:
  *  - маленькие куски (тишина) -> success: true, text: ""
- *  - все остальные куски -> прокидывает как есть в OpenAI STT
+ *  - нормальные куски -> отправляем в OpenAI STT
  */
 export async function POST(req: Request) {
   try {
@@ -47,8 +47,7 @@ export async function POST(req: Request) {
       )
     }
 
-    // если это совсем крошечный кусок (обычно тишина) — просто возвращаем "пустую" расшифровку,
-    // а не 500, чтобы не ломать логику на фронте
+    // Совсем мелкие куски (обычно тишина) — не считаем ошибкой
     if (file.size < 1500) {
       return NextResponse.json(
         {
@@ -61,7 +60,6 @@ export async function POST(req: Request) {
 
     const mime = file.type || "audio/webm"
 
-    // подберём расширение для имени файла
     const ext = mime.includes("webm")
       ? "webm"
       : mime.includes("wav")
@@ -75,12 +73,10 @@ export async function POST(req: Request) {
         ? file
         : new File([file], `chunk.${ext}`, { type: mime })
 
-    // "uk-UA" -> "uk", "ru-RU" -> "ru", и т.д.
     const lang = languageRaw.split("-")[0] || "uk"
 
     const fd = new FormData()
     fd.append("file", audioFile)
-    // можно поменять модель, если захочешь, на whisper-1
     fd.append("model", "gpt-4o-mini-transcribe")
     fd.append("language", lang)
     fd.append("response_format", "json")
@@ -118,7 +114,7 @@ export async function POST(req: Request) {
           success: false,
           error:
             data?.error?.message ||
-            `OpenAI STT error: ${openaiRes.status} ${openaiRes.statusText}`,
+            \`OpenAI STT error: \${openaiRes.status} \${openaiRes.statusText}\`,
         },
         { status: 500 },
       )
