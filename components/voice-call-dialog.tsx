@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
+import { APP_NAME } from "@/lib/app-config"
 
 interface VoiceCallDialogProps {
   isOpen: boolean
@@ -35,7 +36,7 @@ type VoiceMessage = {
   id: string
   role: "user" | "assistant"
   text: string
-  /** каким голосом был сказан именно ЭТОТ ответ */
+  /** пол, с которым был сказан/озвучен этот кусок */
   gender?: "female" | "male"
 }
 
@@ -107,6 +108,9 @@ export default function VoiceCallDialog({
     "connected" | "disconnected"
   >("disconnected")
 
+  // лог в консоль (панель в UI убрали)
+  const [debugLines, setDebugLines] = useState<string[]>([])
+
   const voiceGenderRef = useRef<"female" | "male">("female")
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
@@ -118,6 +122,7 @@ export default function VoiceCallDialog({
   const lastTranscriptRef = useRef("")
 
   const isCallActiveRef = useRef(false)
+  const isAiSpeakingRef = useRef(false)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -127,11 +132,19 @@ export default function VoiceCallDialog({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, debugLines])
 
   function logDebug(message: string) {
     const ts = new Date().toISOString()
-    console.log(`${ts} ${message}`)
+    const line = `${ts} ${message}`
+    console.log(line)
+    setDebugLines((prev) => {
+      const next = [...prev, line]
+      if (next.length > 80) {
+        return next.slice(next.length - 80)
+      }
+      return next
+    })
   }
 
   function computeLangCode(): string {
@@ -154,6 +167,14 @@ export default function VoiceCallDialog({
 
   async function maybeSendStt() {
     if (!isCallActiveRef.current) return
+
+    // пока ассистент говорит — игнорируем чанки, чтобы не ловить озвучку
+    if (isAiSpeakingRef.current) {
+      logDebug("[STT] skip chunk: AI is speaking")
+      audioChunksRef.current = []
+      return
+    }
+
     if (isSttBusyRef.current) {
       logDebug("[STT] skip, request already in progress")
       return
@@ -166,6 +187,9 @@ export default function VoiceCallDialog({
       isSttBusyRef.current = true
 
       const blob = new Blob(chunks, { type: "audio/webm" })
+      // после отправки начинаем накапливать заново
+      audioChunksRef.current = []
+
       logDebug(`[STT] sending audio blob size=${blob.size}`)
 
       const res = await fetch("/api/stt", {
@@ -219,6 +243,7 @@ export default function VoiceCallDialog({
         id: `${Date.now()}-user`,
         role: "user",
         text: delta,
+        gender: voiceGenderRef.current,
       }
 
       setMessages((prevMsgs) => [...prevMsgs, userMsg])
@@ -228,11 +253,10 @@ export default function VoiceCallDialog({
       logDebug(`[STT] fatal error: ${error?.message || "Unknown error"}`)
     } finally {
       isSttBusyRef.current = false
-      audioChunksRef.current = [] // очищаем отправленные чанки
     }
   }
 
-  // --------- TTS через /api/tts ---------
+  // --------- TTS через /api/tts (Google TTS / OpenAI TTS) ---------
 
   function speakText(text: string) {
     if (typeof window === "undefined") return
@@ -252,30 +276,12 @@ export default function VoiceCallDialog({
 
     const beginSpeaking = () => {
       setIsAiSpeaking(true)
-
-      const rec = mediaRecorderRef.current
-      if (rec && rec.state === "recording") {
-        try {
-          rec.pause()
-          logDebug("[Recorder] pause() while TTS audio is playing")
-        } catch (e) {
-          console.error("Recorder pause error", e)
-        }
-      }
+      isAiSpeakingRef.current = true
     }
 
     const finishSpeaking = () => {
       setIsAiSpeaking(false)
-
-      const rec = mediaRecorderRef.current
-      if (rec && rec.state === "paused" && isCallActiveRef.current) {
-        try {
-          rec.resume()
-          logDebug("[Recorder] resume() after TTS")
-        } catch (e) {
-          console.error("Recorder resume error", e)
-        }
-      }
+      isAiSpeakingRef.current = false
     }
 
     ;(async () => {
@@ -370,11 +376,11 @@ export default function VoiceCallDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: text,
-          language: langCode, // "uk" | "ru" | "en" — как было в старой версии
+          language: langCode,
           email: effectiveEmail,
           mode: "voice",
-          gender: voiceGenderRef.current, // "female" | "male"
-          voiceLanguage: computeLangCode(), // "uk-UA" | "ru-RU" | "en-US"
+          gender: voiceGenderRef.current,
+          voiceLanguage: computeLangCode(),
         }),
       })
 
@@ -388,7 +394,7 @@ export default function VoiceCallDialog({
       try {
         data = JSON.parse(raw)
       } catch {
-        // не JSON — значит строка
+        // не JSON — строка
       }
 
       logDebug("[CHAT] raw response received")
@@ -405,7 +411,7 @@ export default function VoiceCallDialog({
         id: `${Date.now()}-assistant`,
         role: "assistant",
         text: answer,
-        gender: voiceGenderRef.current, // фиксируем пол для КОНКРЕТНОГО ответа
+        gender: voiceGenderRef.current,
       }
 
       setMessages((prev) => [...prev, assistantMsg])
@@ -543,6 +549,7 @@ export default function VoiceCallDialog({
     setIsListening(false)
     setIsMicMuted(false)
     setIsAiSpeaking(false)
+    isAiSpeakingRef.current = false
     setConnectionStatus("disconnected")
 
     const rec = mediaRecorderRef.current
@@ -585,31 +592,17 @@ export default function VoiceCallDialog({
     if (!rec) return
 
     if (next) {
-      // выключаем мик
-      if (rec.state === "recording") {
-        try {
-          rec.pause()
-          logDebug("[CALL] mic muted -> recorder.pause()")
-        } catch (e) {
-          console.error("Recorder pause error", e)
-        }
-      }
+      // просто логически ставим на паузу — записываем, но не шлём в STT
+      logDebug("[CALL] mic muted (STT disabled)")
     } else {
-      // включаем мик
-      if (rec.state === "paused" && isCallActiveRef.current) {
-        try {
-          rec.resume()
-          logDebug("[CALL] mic unmuted -> recorder.resume()")
-        } catch (e) {
-          console.error("Recorder resume error", e)
-        }
-      }
+      logDebug("[CALL] mic unmuted (STT enabled)")
     }
   }
 
   useEffect(() => {
     if (!isOpen) {
       endCall()
+      setDebugLines([])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
@@ -649,7 +642,7 @@ export default function VoiceCallDialog({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
-                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg:white/10 bg-white/10">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
                     <Phone className="h-4 w-4" />
                   </span>
                   {t("Voice session with AI-psychologist")}
@@ -704,8 +697,7 @@ export default function VoiceCallDialog({
                 )}
 
                 {messages.map((msg) => {
-                  const messageGender =
-                    msg.gender || voiceGenderRef.current || "female"
+                  const messageGender = msg.gender || voiceGenderRef.current
 
                   return (
                     <div
@@ -788,7 +780,7 @@ export default function VoiceCallDialog({
                   <div className="text-center text-[11px] font-medium uppercase tracking-wide text-slate-500">
                     {t("Choose voice for this session")}
                   </div>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex w-full flex-col gap-2">
                     <Button
                       type="button"
                       onClick={() => {
