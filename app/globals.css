@@ -2,54 +2,435 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    /* Тёплый светлый фон + тёмный текст */
-    --background: 46 38% 97%;
-    --foreground: 222 47% 11%;
-
-    /* Золото + тёмно-зелёный акцент */
-    --primary: 40 45% 50%; /* золотистый */
-    --primary-foreground: 50 100% 98%;
-
-    --secondary: 160 12% 92%;
-    --secondary-foreground: 222 47% 11%;
-
-    --muted: 35 22% 90%;
-    --muted-foreground: 215 15% 40%;
-
-    --accent: 165 24% 24%; /* глубокий зелёный для кнопок/линий */
-    --accent-foreground: 50 100% 98%;
-
-    --destructive: 0 72% 50%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 35 18% 85%;
-    --input: 35 18% 85%;
-    --ring: 40 45% 50%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-
-    --radius: 0.75rem;
-  }
-
-  * {
-    @apply border-border;
-  }
-
-  body {
-    @apply bg-background text-foreground antialiased;
-  }
+body {
+  font-family: Arial, Helvetica, sans-serif;
 }
 
 @layer utilities {
-  .container {
-    @apply mx-auto max-w-6xl px-4 sm:px-6 lg:px-8;
+  .text-balance {
+    text-wrap: balance;
   }
 }
 
-/* TurbotaAI / Voiceflow chat bubble: поверх сайта, но ниже модальных окон */
-#vf-chat {
-  z-index: 40 !important;
+@layer base {
+  :root {
+    /* TurbotaAI production design system - indigo-violet */
+    --background: 0 0% 100%; /* Pure white #FFFFFF */
+    --foreground: 222 47% 11%; /* Near-black text #0F172A */
+    --card: 0 0% 100%; /* White cards */
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 222 47% 11%; /* Near-black for primary CTAs */
+    --primary-foreground: 0 0% 100%; /* White text */
+    --secondary: 0 0% 100%; /* White for secondary buttons */
+    --secondary-foreground: 222 47% 11%;
+    --muted: 220 14% 96%; /* Very light gray #F8FAFC */
+    --muted-foreground: 215 16% 47%; /* Gray text #64748B */
+    --accent: 239 84% 67%; /* Indigo-violet #6366F1 - primary brand accent */
+    --accent-foreground: 0 0% 100%; /* White text on accent */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 13% 91%; /* Light gray borders #E2E8F0 */
+    --input: 220 13% 91%;
+    --ring: 239 84% 67%; /* Accent color for focus rings */
+    --radius: 0.75rem;
+    /* Brand gradient: indigo to violet */
+    --brand-indigo: 239 84% 67%; /* #6366F1 */
+    --brand-violet: 258 90% 66%; /* #8B5CF6 */
+    /* Цвета для радужной CTA-кнопки */
+    --color-1: 0 100% 63%;   /* красный/розовый */
+    --color-2: 270 100% 63%; /* фиолетовый */
+    --color-3: 210 100% 63%; /* синий */
+    --color-4: 195 100% 63%; /* бирюзовый */
+    --color-5: 90 100% 63%;  /* лаймовый */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Background styles */
+.bg-waves {
+  background-image: url("/blue-waves-bg.png");
+  background-size: cover;
+  background-position: center;
+}
+
+/* RTL Support */
+[dir="rtl"] {
+  text-align: right;
+}
+
+[dir="rtl"] .flex-row {
+  flex-direction: row-reverse;
+}
+
+[dir="rtl"] .space-x-6 > * + * {
+  margin-right: 1.5rem;
+  margin-left: 0;
+}
+
+[dir="rtl"] .space-x-4 > * + * {
+  margin-right: 1rem;
+  margin-left: 0;
+}
+
+[dir="rtl"] .space-x-2 > * + * {
+  margin-right: 0.5rem;
+  margin-left: 0;
+}
+
+[dir="rtl"] .mr-2 {
+  margin-right: 0;
+  margin-left: 0.5rem;
+}
+
+[dir="rtl"] .ml-2 {
+  margin-left: 0;
+  margin-right: 0.5rem;
+}
+
+[dir="rtl"] .ml-auto {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+[dir="rtl"] .mr-auto {
+  margin-right: 0;
+  margin-left: auto;
+}
+
+/* Language transition animation */
+.language-transition {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Responsive utilities */
+.responsive-container {
+  width: 100%;
+  padding-right: 1rem;
+  padding-left: 1rem;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+@media (min-width: 640px) {
+  .responsive-container {
+    padding-right: 1.5rem;
+    padding-left: 1.5rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .responsive-container {
+    padding-right: 2rem;
+    padding-left: 2rem;
+  }
+}
+
+/* Responsive typography */
+.responsive-heading {
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+@media (min-width: 640px) {
+  .responsive-heading {
+    font-size: 2rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .responsive-heading {
+    font-size: 2.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .responsive-heading {
+    font-size: 3rem;
+  }
+}
+
+/* Improved responsive images */
+.responsive-image {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Responsive spacing */
+.responsive-section {
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+}
+
+@media (min-width: 640px) {
+  .responsive-section {
+    padding-top: 3rem;
+    padding-bottom: 3rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .responsive-section {
+    padding-top: 4rem;
+    padding-bottom: 4rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .responsive-section {
+    padding-top: 5rem;
+    padding-bottom: 5rem;
+  }
+}
+
+/* Fix for mobile overflow issues */
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* Improved touch targets for mobile */
+@media (max-width: 640px) {
+  button,
+  .button,
+  [role="button"],
+  a.nav-link {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Fix for mobile Safari 100vh issue */
+.min-h-screen {
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+}
+
+/* Added support for dynamic viewport height on mobile */
+@supports (height: 100dvh) {
+  .h-\[100dvh\] {
+    height: 100dvh;
+  }
+}
+
+/* Added safe area padding for notched devices */
+.safe-area-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+@media (min-width: 640px) {
+  .safe-area-bottom {
+    padding-bottom: 1rem;
+  }
+}
+
+/* Responsive background images */
+.bg-waves {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+@media (max-width: 640px) {
+  .bg-waves {
+    /* Optimized background size for mobile performance */
+    background-size: cover;
+    background-attachment: scroll;
+  }
+}
+
+/* Added touch-action optimizations for better gesture handling */
+@layer utilities {
+  .touch-pan-y {
+    touch-action: pan-y;
+  }
+
+  .touch-pan-x {
+    touch-action: pan-x;
+  }
+
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  .touch-none {
+    touch-action: none;
+  }
+}
+
+/* Added safe area support for notched devices (iPhone X+) */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+
+  header {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+
+/* Added prefers-reduced-motion support for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Improved focus visibility for keyboard navigation */
+@media (prefers-reduced-motion: no-preference) {
+  :focus-visible {
+    outline: 2px solid #0284c7;
+    outline-offset: 2px;
+    transition: outline-offset 0.2s ease;
+  }
+}
+
+/* Enhanced mobile input styling to prevent zoom on iOS */
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important; /* Prevents iOS zoom on focus */
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+  }
+
+  /* Ensure buttons are touch-friendly */
+  button,
+  .button,
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Optimized video elements for mobile playback */
+video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+@media (max-width: 640px) {
+  video {
+    object-fit: cover;
+  }
+}
+
+/* Added horizontal scroll container optimization */
+.scroll-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.scroll-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.scroll-container::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px;
+}
+
+.scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Global soft grid background pattern */
+.bg-soft-grid {
+  background-image:
+    linear-gradient(to right, rgba(226, 232, 240, 0.3) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(226, 232, 240, 0.3) 1px, transparent 1px);
+  background-size: 4rem 4rem;
+}
+
+/* Pulsing animation for CTA buttons */
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.02);
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* Pulsating circle animation for hero icon */
+@keyframes pulse-circle {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(1.2);
+  }
+}
+
+.animate-pulse-circle {
+  animation: pulse-circle 2s ease-in-out infinite;
+}
+
+/* Pulsing glow animation for primary CTA */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsl(var(--accent) / 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px 4px hsl(var(--accent) / 0.3);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Violet pulsing glow for hero CTA */
+@keyframes pulse-glow-violet {
+  0%, 100% {
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 4px 30px rgba(139, 92, 246, 0.5);
+    transform: scale(1.02);
+  }
+}
+
+.animate-pulse-glow-violet {
+  animation: pulse-glow-violet 2.5s ease-in-out infinite;
 }
