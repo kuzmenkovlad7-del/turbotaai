@@ -1,49 +1,34 @@
-import { NextRequest, NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
+import { NextResponse } from "next/server"
 
-export const runtime = "nodejs"
-export const dynamic = "force-dynamic"
+export const runtime = "edge"
 
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.OPENAI_API_KEY
-
     if (!apiKey) {
-      console.error("[STT] OPENAI_API_KEY is missing")
       return NextResponse.json(
-        {
-          success: false,
-          error: "STT server misconfigured: missing OPENAI_API_KEY",
-        },
+        { success: false, error: "OPENAI_API_KEY is not configured" },
         { status: 500 },
       )
     }
 
-    const arrayBuffer = await req.arrayBuffer()
-    const byteLength = arrayBuffer.byteLength
-
-    if (!byteLength || byteLength < 1024) {
-      console.error("[STT] empty or too small audio payload:", byteLength)
+    const audioBuffer = await req.arrayBuffer()
+    if (!audioBuffer || audioBuffer.byteLength < 8000) {
+      // слишком короткий / пустой звук — просто возвращаем пустой текст
       return NextResponse.json(
-        {
-          success: false,
-          error: "Audio payload is too small or empty",
-        },
-        { status: 400 },
+        { success: true, text: "" },
+        { status: 200 },
       )
     }
 
-    console.log("[STT] received audio bytes:", byteLength)
+    const blob = new Blob([audioBuffer], { type: "audio/webm" })
 
-    // Собираем webm как один файл
-    const blob = new Blob([arrayBuffer], { type: "audio/webm" })
     const formData = new FormData()
     formData.append("file", blob, "audio.webm")
-    formData.append("model", "gpt-4o-mini-transcribe")
-    formData.append("response_format", "json")
-    formData.append("temperature", "0")
-
-    // язык можно не жёстко задавать — пусть определяет сам
-    // formData.append("language", "uk")
+    formData.append("model", "whisper-1")
+    // язык можно не указывать — Whisper сам определит;
+    // при желании можно добавить: formData.append("language", "uk");
 
     const openaiRes = await fetch(
       "https://api.openai.com/v1/audio/transcriptions",
@@ -56,37 +41,21 @@ export async function POST(req: NextRequest) {
       },
     )
 
-    const raw = await openaiRes.text()
-    let data: any = null
-
-    try {
-      data = raw ? JSON.parse(raw) : null
-    } catch {
-      data = null
-    }
-
-    if (!openaiRes.ok || !data) {
-      console.error(
-        "[STT] OpenAI error:",
-        openaiRes.status,
-        openaiRes.statusText,
-        raw.slice(0, 500),
-      )
-
+    if (!openaiRes.ok) {
+      const errorText = await openaiRes.text()
+      console.error("OpenAI STT error:", openaiRes.status, errorText)
       return NextResponse.json(
         {
           success: false,
-          error:
-            data?.error?.message ||
-            `OpenAI STT error: ${openaiRes.status} ${openaiRes.statusText}`,
+          error: "Speech recognition error",
+          details: errorText,
         },
         { status: 500 },
       )
     }
 
+    const data: any = await openaiRes.json()
     const text = (data.text || "").toString().trim()
-
-    console.log("[STT] success, text:", text.slice(0, 120))
 
     return NextResponse.json(
       {
@@ -95,27 +64,14 @@ export async function POST(req: NextRequest) {
       },
       { status: 200 },
     )
-  } catch (error: any) {
-    console.error("[STT] route fatal error:", error)
+  } catch (error) {
+    console.error("STT route fatal error:", error)
     return NextResponse.json(
       {
         success: false,
-        error:
-          error?.message ||
-          "Unexpected error while processing speech-to-text request",
+        error: "Unexpected server error while processing audio",
       },
       { status: 500 },
     )
   }
-}
-
-export async function GET() {
-  return NextResponse.json(
-    {
-      success: true,
-      message: "STT endpoint is running",
-      timestamp: new Date().toISOString(),
-    },
-    { status: 200 },
-  )
 }
