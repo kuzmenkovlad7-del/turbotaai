@@ -37,11 +37,14 @@ type VoiceMessage = {
   text: string
 }
 
+// основной вебхук TurbotaAI агента
 const TURBOTA_AGENT_WEBHOOK_URL =
   process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL || ""
 
+// запасной бекенд-прокси
 const FALLBACK_CHAT_API = "/api/chat"
 
+// аккуратно вытаскиваем текст из любого формата ответа n8n
 function extractAnswer(data: any): string {
   if (!data) return ""
 
@@ -110,15 +113,22 @@ export default function VoiceCallDialog({
   const voiceGenderRef = useRef<"female" | "male">("female")
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
+  // MediaRecorder + поток
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
+
+  // очередь аудиочанков для STT (всегда отправляем по одному)
+  const sttQueueRef = useRef<Blob[]>([])
   const isSttBusyRef = useRef(false)
+  const lastTranscriptRef = useRef("")
+
   const isCallActiveRef = useRef(false)
+  const isAiSpeakingRef = useRef(false)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  // автоскролл
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -141,28 +151,28 @@ export default function VoiceCallDialog({
     return g === "male" ? "MALE" : "FEMALE"
   }
 
-  // --------- STT: отправка webm в /api/stt ---------
-  // Ключевое: после каждого запроса очищаем audioChunksRef
-  // и не показываем UI-ошибку, если /api/stt вернул 500.
+  function resetSttState() {
+    sttQueueRef.current = []
+    isSttBusyRef.current = false
+    lastTranscriptRef.current = ""
+  }
 
-  async function maybeSendStt() {
-    if (!isCallActiveRef.current) return
-    if (isSttBusyRef.current) {
-      logDebug("[STT] skip, request already in progress")
+  // --------- STT: отправка чанков очередью ---------
+
+  async function processNextSttChunk() {
+    if (!isCallActiveRef.current) {
+      resetSttState()
       return
     }
 
-    const chunks = audioChunksRef.current
-    if (!chunks || chunks.length === 0) return
-
-    const blob = new Blob(chunks, { type: "audio/webm" })
-    audioChunksRef.current = []
+    if (isSttBusyRef.current) return
+    const blob = sttQueueRef.current.shift()
+    if (!blob) return
 
     logDebug(`[STT] sending audio blob size=${blob.size}`)
+    isSttBusyRef.current = true
 
     try {
-      isSttBusyRef.current = true
-
       const res = await fetch("/api/stt", {
         method: "POST",
         headers: {
@@ -187,35 +197,52 @@ export default function VoiceCallDialog({
 
         logDebug(`[STT] error status=${res.status} msg=${msg}`)
         console.error("[STT] error response:", res.status, raw)
-
-        // Никаких красных плашек в UI для этой ситуации.
-        // Просто игнорируем неудачный чанк.
+        // здесь просто игнорируем нераспознанный чанк, UI не трогаем
         return
       }
 
       const fullText = (data.text || "").toString().trim()
-      logDebug(`[STT] transcript="${fullText}"`)
+      logDebug(`[STT] transcript full="${fullText}"`)
 
       if (!fullText) return
+
+      // берём только "дельту" по отношению к предыдущему полному тексту
+      const prev = lastTranscriptRef.current
+      let delta = fullText
+
+      if (prev && fullText.startsWith(prev)) {
+        delta = fullText.slice(prev.length)
+      }
+
+      delta = delta.trim()
+      lastTranscriptRef.current = fullText
+
+      if (!delta) {
+        logDebug("[STT] no new delta after diff")
+        return
+      }
 
       const userMsg: VoiceMessage = {
         id: `${Date.now()}-user`,
         role: "user",
-        text: fullText,
+        text: delta,
       }
 
       setMessages((prevMsgs) => [...prevMsgs, userMsg])
-      await handleUserText(fullText)
+      await handleUserText(delta)
     } catch (error: any) {
       console.error("[STT] fatal error", error)
       logDebug(`[STT] fatal error: ${error?.message || "Unknown error"}`)
-      // Здесь тоже не дёргаем networkError, чтобы не сыпать ошибками пользователю.
     } finally {
       isSttBusyRef.current = false
+      // если в очереди ещё есть куски — обрабатываем следующий
+      if (isCallActiveRef.current && sttQueueRef.current.length > 0) {
+        void processNextSttChunk()
+      }
     }
   }
 
-  // --------- TTS ---------
+  // --------- TTS через /api/tts ---------
 
   function speakText(text: string) {
     if (typeof window === "undefined") return
@@ -235,6 +262,7 @@ export default function VoiceCallDialog({
 
     const beginSpeaking = () => {
       setIsAiSpeaking(true)
+      isAiSpeakingRef.current = true
 
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "recording") {
@@ -249,6 +277,7 @@ export default function VoiceCallDialog({
 
     const finishSpeaking = () => {
       setIsAiSpeaking(false)
+      isAiSpeakingRef.current = false
 
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "paused" && isCallActiveRef.current) {
@@ -340,7 +369,7 @@ export default function VoiceCallDialog({
     })()
   }
 
-  // --------- CHAT ---------
+  // --------- отправка текста в n8n / OpenAI ---------
 
   async function handleUserText(text: string) {
     const langCode =
@@ -381,7 +410,7 @@ export default function VoiceCallDialog({
       try {
         data = JSON.parse(raw)
       } catch {
-        // строка
+        // не JSON — значит строка
       }
 
       logDebug("[CHAT] raw response received")
@@ -419,6 +448,8 @@ export default function VoiceCallDialog({
     setIsConnecting(true)
     setNetworkError(null)
 
+    resetSttState()
+
     try {
       if (
         typeof navigator === "undefined" ||
@@ -452,8 +483,7 @@ export default function VoiceCallDialog({
 
       const recorder = new MediaRecorder(stream, options)
       mediaRecorderRef.current = recorder
-      audioChunksRef.current = []
-      isSttBusyRef.current = false
+      isCallActiveRef.current = true
 
       recorder.onstart = () => {
         logDebug("[Recorder] onstart")
@@ -461,12 +491,22 @@ export default function VoiceCallDialog({
       }
 
       recorder.ondataavailable = (event: BlobEvent) => {
-        if (event.data && event.data.size > 0) {
-          audioChunksRef.current.push(event.data)
-          logDebug(
-            `[Recorder] dataavailable size=${event.data.size} totalChunks=${audioChunksRef.current.length}`,
-          )
-          void maybeSendStt()
+        if (!event.data || event.data.size === 0) return
+        if (!isCallActiveRef.current) return
+
+        // не слушаем собственную озвучку ассистента
+        if (isAiSpeakingRef.current) {
+          logDebug("[Recorder] skip chunk: AI is speaking")
+          return
+        }
+
+        logDebug(
+          `[Recorder] dataavailable size=${event.data.size} queueLen=${sttQueueRef.current.length}`,
+        )
+
+        sttQueueRef.current.push(event.data)
+        if (!isSttBusyRef.current) {
+          void processNextSttChunk()
         }
       }
 
@@ -487,10 +527,10 @@ export default function VoiceCallDialog({
         )
       }
 
+      // чанк каждые 4 секунды
       recorder.start(4000)
       logDebug("[Recorder] start(4000) called — chunk every 4s")
 
-      isCallActiveRef.current = true
       setIsCallActive(true)
       setIsConnecting(false)
       setConnectionStatus("connected")
@@ -537,8 +577,10 @@ export default function VoiceCallDialog({
     setIsListening(false)
     setIsMicMuted(false)
     setIsAiSpeaking(false)
+    isAiSpeakingRef.current = false
     setConnectionStatus("disconnected")
     setNetworkError(null)
+    resetSttState()
 
     const rec = mediaRecorderRef.current
     if (rec && rec.state !== "inactive") {
@@ -569,9 +611,6 @@ export default function VoiceCallDialog({
     if (typeof window !== "undefined" && (window as any).speechSynthesis) {
       ;(window as any).speechSynthesis.cancel()
     }
-
-    audioChunksRef.current = []
-    isSttBusyRef.current = false
   }
 
   const toggleMic = () => {
@@ -579,7 +618,6 @@ export default function VoiceCallDialog({
     setIsMicMuted(next)
 
     const rec = mediaRecorderRef.current
-
     if (!rec) return
 
     if (next) {
