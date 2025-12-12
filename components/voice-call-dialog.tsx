@@ -109,19 +109,14 @@ function diffTranscript(prev: string, full: string): string {
   const maxCommon = Math.min(prevWords.length, fullWords.length)
   let common = 0
 
-  while (
-    common < maxCommon &&
-    prevWords[common] === fullWords[common]
-  ) {
+  while (common < maxCommon && prevWords[common] === fullWords[common]) {
     common++
   }
 
   if (common === 0) {
-    // ничего общего — лучше вернуть всю фразу
     return full
   }
 
-  // режем по словам на основе "сырого" full, чтобы не городить сложный LCS
   const rawTokens = full.split(/\s+/)
   if (common >= rawTokens.length) return ""
 
@@ -171,7 +166,6 @@ export default function VoiceCallDialog({
   }, [messages])
 
   function logDebug(...args: any[]) {
-    // при необходимости можно включить console.log
     // eslint-disable-next-line no-console
     console.log(...args)
   }
@@ -193,6 +187,8 @@ export default function VoiceCallDialog({
   }
 
   // --------- STT: послать накопленный webm в /api/stt ---------
+  // ВАЖНО: НЕ чистим audioChunksRef, всегда шлём ВЕСЬ звук с начала сессии,
+  // чтобы backend видел полноценный webm c заголовком, а не обрезанный кусок.
 
   async function maybeSendStt() {
     if (!isCallActiveRef.current) return
@@ -203,11 +199,12 @@ export default function VoiceCallDialog({
 
     if (!audioChunksRef.current.length) return
 
-    // забираем всё, что накопилось, и очищаем буфер
-    const chunks = audioChunksRef.current.splice(0)
-    const blob = new Blob(chunks, { type: "audio/webm" })
+    const blob = new Blob(audioChunksRef.current, { type: "audio/webm" })
 
-    if (!blob.size) return
+    // слишком маленькие кусочки (0–1 сек) игнорируем — от них мало пользы
+    if (blob.size < 8000) {
+      return
+    }
 
     try {
       isSttBusyRef.current = true
@@ -249,13 +246,12 @@ export default function VoiceCallDialog({
       const prev = lastTranscriptRef.current
       const delta = diffTranscript(prev, fullText)
 
+      lastTranscriptRef.current = fullText
+
       if (!delta) {
         logDebug("[STT] no new delta after diff")
-        lastTranscriptRef.current = fullText
         return
       }
-
-      lastTranscriptRef.current = fullText
 
       const userMsg: VoiceMessage = {
         id: `${Date.now()}-user`,
@@ -273,7 +269,7 @@ export default function VoiceCallDialog({
     }
   }
 
-  // --------- TTS через /api/tts (Google / OpenAI TTS) ---------
+  // --------- TTS через /api/tts ---------
 
   function speakText(text: string) {
     if (typeof window === "undefined") return
