@@ -84,8 +84,6 @@ export default function RootLayout({
             (function(d, t) {
               var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
               v.onload = function() {
-                if (!window.voiceflow || !window.voiceflow.chat) return;
-
                 window.voiceflow.chat.load({
                   verify: { projectID: '6920c09ba59edfa96ca49b3a' },
                   url: 'https://general-runtime.voiceflow.com',
@@ -94,28 +92,6 @@ export default function RootLayout({
                     url: 'https://runtime-api.voiceflow.com'
                   }
                 });
-
-                // подправляем слой и позицию виджета — он фиксирован справа внизу, под модальными окнами
-                var attempts = 0;
-                var maxAttempts = 20;
-                var interval = setInterval(function() {
-                  var bubble =
-                    document.getElementById('vf-chat') ||
-                    document.getElementById('voiceflow-chat');
-
-                  if (bubble) {
-                    bubble.style.position = 'fixed';
-                    bubble.style.bottom = '16px';
-                    bubble.style.right = '16px';
-                    bubble.style.left = 'auto';
-                    bubble.style.top = 'auto';
-                    bubble.style.zIndex = '40';
-                    clearInterval(interval);
-                  }
-
-                  attempts++;
-                  if (attempts >= maxAttempts) clearInterval(interval);
-                }, 500);
               };
               v.src = 'https://cdn.voiceflow.com/widget-next/bundle.mjs';
               v.type = 'text/javascript';

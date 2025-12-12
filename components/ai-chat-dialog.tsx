@@ -28,14 +28,11 @@ type ChatMessage = {
   text: string
 }
 
-// PRIMARY: фронт → TurbotaAI агент вебхук из env
 const TURBOTA_AGENT_WEBHOOK_URL =
   process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL || ""
 
-// запасной бэкенд-проксирующий роут
 const FALLBACK_CHAT_API = "/api/chat"
 
-// аккуратно вытаскиваем текст из любого формата ответа n8n
 function extractAnswer(data: any): string {
   if (!data) return ""
 
@@ -53,9 +50,7 @@ function extractAnswer(data: any): string {
       first.content ||
       first.result ||
       JSON.stringify(first)
-    )
-      ?.toString()
-      .trim()
+    )?.toString().trim()
   }
 
   if (typeof data === "object") {
@@ -67,9 +62,7 @@ function extractAnswer(data: any): string {
       data.content ||
       data.result ||
       JSON.stringify(data)
-    )
-      ?.toString()
-      .trim()
+    )?.toString().trim()
   }
 
   return ""
@@ -151,7 +144,7 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
       try {
         data = JSON.parse(raw)
       } catch {
-        // не JSON — оставляем как есть
+        // строка
       }
 
       console.log("Chat raw response:", data)
@@ -234,10 +227,10 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
                     }`}
                   >
                     <div
-                      className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs md:text-sm shadow-sm ${
+                      className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs md:text-sm ${
                         msg.role === "user"
-                          ? "rounded-br-sm bg-slate-900 text-white"
-                          : "rounded-bl-sm bg-slate-50 text-slate-900"
+                          ? "rounded-br-sm bg-slate-900 text-white shadow-sm"
+                          : "rounded-bl-sm bg-slate-50 text-slate-900 shadow-sm"
                       }`}
                     >
                       {msg.text}
@@ -258,7 +251,7 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder={t("Write here what is happening to you...")}
-                  className="resize-none text-sm bg-slate-50 focus-visible:ring-indigo-500"
+                  className="resize-none text-sm"
                 />
 
                 <div className="flex items-center justify-between gap-2">
