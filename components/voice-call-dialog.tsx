@@ -37,11 +37,9 @@ type VoiceMessage = {
   text: string
 }
 
-// основной вебхук TurbotaAI агента
 const TURBOTA_AGENT_WEBHOOK_URL =
   process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL || ""
 
-// запасной бекенд-прокси
 const FALLBACK_CHAT_API = "/api/chat"
 
 function extractAnswer(data: any): string {
@@ -85,7 +83,6 @@ function extractAnswer(data: any): string {
 
 function logDebug(message: string) {
   const ts = new Date().toISOString()
-  // оставляем только лог в консоль, без отдельной панели
   console.log(`${ts} ${message}`)
 }
 
@@ -113,18 +110,15 @@ export default function VoiceCallDialog({
   const voiceGenderRef = useRef<"female" | "male">("female")
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
-  // MediaRecorder + поток
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const isSttBusyRef = useRef(false)
-
   const isCallActiveRef = useRef(false)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // автоскролл
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -147,9 +141,9 @@ export default function VoiceCallDialog({
     return g === "male" ? "MALE" : "FEMALE"
   }
 
-  // --------- STT: отправка накопленного webm в /api/stt ---------
-  // КЛЮЧЕВОЕ: после каждого успешного запроса очищаем audioChunksRef,
-  // чтоб не слать всю историю звонка и не ловить 500/огромные файлы.
+  // --------- STT: отправка webm в /api/stt ---------
+  // Ключевое: после каждого запроса очищаем audioChunksRef
+  // и не показываем UI-ошибку, если /api/stt вернул 500.
 
   async function maybeSendStt() {
     if (!isCallActiveRef.current) return
@@ -161,7 +155,6 @@ export default function VoiceCallDialog({
     const chunks = audioChunksRef.current
     if (!chunks || chunks.length === 0) return
 
-    // берём только накопившиеся с последнего запроса чанки
     const blob = new Blob(chunks, { type: "audio/webm" })
     audioChunksRef.current = []
 
@@ -169,7 +162,6 @@ export default function VoiceCallDialog({
 
     try {
       isSttBusyRef.current = true
-      setNetworkError(null)
 
       const res = await fetch("/api/stt", {
         method: "POST",
@@ -196,10 +188,8 @@ export default function VoiceCallDialog({
         logDebug(`[STT] error status=${res.status} msg=${msg}`)
         console.error("[STT] error response:", res.status, raw)
 
-        // мягко показываем юзеру, но не рвём звонок
-        setNetworkError(
-          t("Could not recognize speech. Please repeat your phrase."),
-        )
+        // Никаких красных плашек в UI для этой ситуации.
+        // Просто игнорируем неудачный чанк.
         return
       }
 
@@ -219,15 +209,13 @@ export default function VoiceCallDialog({
     } catch (error: any) {
       console.error("[STT] fatal error", error)
       logDebug(`[STT] fatal error: ${error?.message || "Unknown error"}`)
-      setNetworkError(
-        t("Voice recognition error. Please try again in a few seconds."),
-      )
+      // Здесь тоже не дёргаем networkError, чтобы не сыпать ошибками пользователю.
     } finally {
       isSttBusyRef.current = false
     }
   }
 
-  // --------- TTS через /api/tts (Google / OpenAI TTS) ---------
+  // --------- TTS ---------
 
   function speakText(text: string) {
     if (typeof window === "undefined") return
@@ -352,7 +340,7 @@ export default function VoiceCallDialog({
     })()
   }
 
-  // --------- отправка текста в n8n / OpenAI ---------
+  // --------- CHAT ---------
 
   async function handleUserText(text: string) {
     const langCode =
@@ -393,7 +381,7 @@ export default function VoiceCallDialog({
       try {
         data = JSON.parse(raw)
       } catch {
-        // не JSON — значит строка
+        // строка
       }
 
       logDebug("[CHAT] raw response received")
