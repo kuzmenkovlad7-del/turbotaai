@@ -1,336 +1,182 @@
 "use client"
 
-import * as React from "react"
 import { useState, useRef, useEffect } from "react"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { X, Phone, Mic, MicOff, Loader2 } from "lucide-react"
-import { cn } from "@/lib/utils"
-
-type VoiceGender = "female" | "male"
-type Author = "user" | "assistant"
-
-interface CallMessage {
-  id: string
-  author: Author
-  text: string
-  voice?: VoiceGender // для ассистента запоминаем, каким голосом сказано
-}
-
-type ConnectionStatus = "idle" | "connected" | "error"
-
-const DEBUG = true
-
-function logDebug(msg: string, ...args: any[]) {
-  if (typeof window === "undefined" || !DEBUG) return
-  const ts = new Date().toISOString()
-  // eslint-disable-next-line no-console
-  console.log(`${ts} ${msg}`, ...args)
-}
-
-function createId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    // eslint-disable-next-line no-undef
-    return crypto.randomUUID()
-  }
-  return Math.random().toString(36).slice(2)
-}
-
-function detectLangCode(): string {
-  if (typeof navigator === "undefined") return "ru-RU"
-  const lng = navigator.language.toLowerCase()
-
-  if (lng.startsWith("uk")) return "uk-UA"
-  if (lng.startsWith("en")) return "en-US"
-  if (lng.startsWith("pl")) return "pl-PL"
-  if (lng.startsWith("de")) return "de-DE"
-
-  return "ru-RU"
-}
+import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Phone,
+  Wifi,
+  WifiOff,
+  Brain,
+  Mic,
+  MicOff,
+  Loader2,
+  Sparkles,
+} from "lucide-react"
+import { useLanguage } from "@/lib/i18n/language-context"
+import { useAuth } from "@/lib/auth/auth-context"
 
 interface VoiceCallDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  isOpen: boolean
+  onClose: () => void
+  onError?: (error: Error) => void
+  userEmail?: string
+  webhookUrl?: string
 }
 
-export function VoiceCallDialog({ open, onOpenChange }: VoiceCallDialogProps) {
+type Gender = "female" | "male"
+
+type VoiceMessage = {
+  id: string
+  role: "user" | "assistant"
+  text: string
+  gender?: Gender
+}
+
+// основной вебхук TurbotaAI агента
+const TURBOTA_AGENT_WEBHOOK_URL =
+  process.env.NEXT_PUBLIC_TURBOTA_AGENT_WEBHOOK_URL || ""
+
+// запасной бэкенд-прокси
+const FALLBACK_CHAT_API = "/api/chat"
+
+// аккуратно вытаскиваем текст из любого формата ответа n8n
+function extractAnswer(data: any): string {
+  if (!data) return ""
+
+  if (typeof data === "string") {
+    return data.trim()
+  }
+
+  if (Array.isArray(data) && data.length > 0) {
+    const first = data[0] ?? {}
+    return (
+      first.text ||
+      first.response ||
+      first.output ||
+      first.message ||
+      first.content ||
+      first.result ||
+      JSON.stringify(first)
+    )
+      ?.toString()
+      .trim()
+  }
+
+  if (typeof data === "object") {
+    return (
+      data.text ||
+      data.response ||
+      data.output ||
+      data.message ||
+      data.content ||
+      data.result ||
+      JSON.stringify(data)
+    )
+      ?.toString()
+      .trim()
+  }
+
+  return ""
+}
+
+export default function VoiceCallDialog({
+  isOpen,
+  onClose,
+  onError,
+  userEmail,
+  webhookUrl,
+}: VoiceCallDialogProps) {
+  const { t, currentLanguage } = useLanguage()
+  const { user } = useAuth()
+
   const [isCallActive, setIsCallActive] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
-  const [messages, setMessages] = useState<CallMessage[]>([])
+  const [messages, setMessages] = useState<VoiceMessage[]>([])
   const [networkError, setNetworkError] = useState<string | null>(null)
-  const [connectionStatus, setConnectionStatus] =
-    useState<ConnectionStatus>("idle")
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connected" | "disconnected"
+  >("disconnected")
 
+  const effectiveEmail = userEmail || user?.email || "guest@example.com"
+
+  // текущий выбранный пол голоса для СЕССИИ
+  const voiceGenderRef = useRef<Gender>("female")
+
+  // recorder + аудиопоток
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const recorderMimeRef = useRef<string | null>(null)
-
-  const pendingChunksRef = useRef<BlobPart[]>([])
-  const pendingSizeRef = useRef<number>(0)
+  const audioChunksRef = useRef<Blob[]>([])
   const isSttBusyRef = useRef(false)
 
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-
   const isCallActiveRef = useRef(false)
-  const isMicMutedRef = useRef(false)
   const isAiSpeakingRef = useRef(false)
-  const voiceGenderRef = useRef<VoiceGender>("female")
-
-  const langCodeRef = useRef<string>(detectLangCode())
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // автоскролл вниз
+  // автоскролл
   useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    el.scrollTop = el.scrollHeight
-  }, [messages.length])
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages, networkError])
 
-  function getCurrentGender(): VoiceGender {
-    return voiceGenderRef.current ?? "female"
+  function logDebug(message: string) {
+    const ts = new Date().toISOString()
+    // оставляем чисто в консоли
+    console.log(`${ts} ${message}`)
   }
 
-  function resetRecorderBuffer() {
-    pendingChunksRef.current = []
-    pendingSizeRef.current = 0
+  function computeLangCode(): string {
+    const lang =
+      typeof (currentLanguage as any) === "string"
+        ? ((currentLanguage as any) as string)
+        : (currentLanguage as any)?.code || "uk"
+
+    if (lang.startsWith("uk")) return "uk-UA"
+    if (lang.startsWith("ru")) return "ru-RU"
+    return "en-US"
   }
 
-  function fullCleanup() {
-    isCallActiveRef.current = false
-    setIsCallActive(false)
-    setIsListening(false)
-    setIsAiSpeaking(false)
-    isAiSpeakingRef.current = false
-    setIsMicMuted(false)
-    isMicMutedRef.current = false
-    setConnectionStatus("idle")
-    resetRecorderBuffer()
-
-    const rec = mediaRecorderRef.current
-    if (rec && rec.state !== "inactive") {
-      try {
-        rec.stop()
-      } catch {
-        // ignore
-      }
-    }
-    mediaRecorderRef.current = null
-
-    const stream = mediaStreamRef.current
-    if (stream) {
-      stream.getTracks().forEach((t) => {
-        try {
-          t.stop()
-        } catch {
-          // ignore
-        }
-      })
-    }
-    mediaStreamRef.current = null
-
-    const audio = audioRef.current
-    if (audio) {
-      try {
-        audio.pause()
-        audio.src = ""
-      } catch {
-        // ignore
-      }
-    }
+  function getCurrentGender(): "MALE" | "FEMALE" {
+    const g = voiceGenderRef.current || "female"
+    return g === "male" ? "MALE" : "FEMALE"
   }
 
-  // полная зачистка при размонтировании
-  useEffect(() => {
-    return () => {
-      fullCleanup()
+  // ---------- STT: отправка аудио в /api/stt ----------
+
+  async function maybeSendStt() {
+    if (!isCallActiveRef.current) return
+    if (isSttBusyRef.current) {
+      logDebug("[STT] skip, request already in progress")
+      return
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // TTS
-  async function speakText(text: string) {
-    const clean = text.trim()
-    if (!clean || !isCallActiveRef.current) return
-
-    const lang = langCodeRef.current
-    const gender = getCurrentGender()
-
-    logDebug("[TTS] speakText", {
-      lang,
-      gender,
-      sample: clean.slice(0, 80),
-    })
-
-    setIsAiSpeaking(true)
-    isAiSpeakingRef.current = true
-
-    try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: clean,
-          lang,
-          gender,
-        }),
-      })
-
-      const ok = res.ok
-      const buf = await res.arrayBuffer()
-
-      if (!ok) {
-        throw new Error(
-          `TTS error: ${res.status} ${res.statusText}`,
-        )
-      }
-
-      const blob = new Blob([buf], { type: "audio/mpeg" })
-      const url = URL.createObjectURL(blob)
-
-      let audio = audioRef.current
-      if (!audio) {
-        audio = new Audio()
-        audioRef.current = audio
-      }
-
-      audio.onended = () => {
-        URL.revokeObjectURL(url)
-        logDebug("[TTS] audio ended")
-      }
-      audio.onerror = (e) => {
-        logDebug("[TTS] audio error", e)
-      }
-
-      audio.src = url
-      await audio.play()
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("[TTS] error", e)
-      setNetworkError(
-        "Проблема с озвучкой ответа. Попробуйте сказать фразу ещё раз.",
-      )
-    } finally {
-      setIsAiSpeaking(false)
-      isAiSpeakingRef.current = false
-    }
-  }
-
-  async function sendToAssistant(userText: string) {
-    const clean = userText.trim()
-    if (!clean) return
-
-    const lang = langCodeRef.current
-    const gender = getCurrentGender()
-
-    const userMsg: CallMessage = {
-      id: createId(),
-      author: "user",
-      text: clean,
-    }
-
-    setMessages((prev) => [...prev, userMsg])
-
-    try {
-      logDebug("[CHAT] send to n8n", { lang, gender })
-
-      const res = await fetch(
-        "https://n8n.vladkuzmenko.com/webhook/turbotaai-agent",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: clean,
-            lang,
-            gender,
-          }),
-        },
-      )
-
-      const raw = await res.text()
-      let data: any = null
-      try {
-        data = raw ? JSON.parse(raw) : null
-      } catch {
-        data = null
-      }
-
-      if (!res.ok) {
-        throw new Error(
-          `Agent error: ${res.status} ${res.statusText} body=${raw.slice(
-            0,
-            200,
-          )}`,
-        )
-      }
-
-      const assistantText: string =
-        (data?.reply ??
-          data?.text ??
-          data?.message ??
-          data?.answer ??
-          "Спасибо, я вас слышу. Продолжайте, пожалуйста.")
-          .toString()
-          .trim()
-
-      const assistantMsg: CallMessage = {
-        id: createId(),
-        author: "assistant",
-        text: assistantText,
-        voice: gender,
-      }
-
-      setMessages((prev) => [...prev, assistantMsg])
-
-      await speakText(assistantText)
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("[CHAT] error", e)
-      setNetworkError(
-        "Не удалось связаться с ассистентом. Проверьте интернет и попробуйте ещё раз.",
-      )
-    }
-  }
-
-  // STT — берём только свежий буфер и НЕ копим всю историю,
-  // чтобы backend не получал огромный файл и не слетал в 500.
-  async function runSttOnce() {
-    if (!isCallActiveRef.current) {
-      resetRecorderBuffer()
+    if (isAiSpeakingRef.current) {
+      logDebug("[STT] skip, AI is speaking")
       return
     }
 
-    if (isAiSpeakingRef.current || isMicMutedRef.current) {
-      resetRecorderBuffer()
-      return
-    }
-
-    if (isSttBusyRef.current) return
-
-    const chunks = pendingChunksRef.current
-    const size = pendingSizeRef.current
-
-    if (!chunks.length || size < 20000) {
-      // слишком короткий/пустой звук — не мучаем STT
-      return
-    }
-
-    const mime =
-      recorderMimeRef.current ||
-      "audio/webm;codecs=opus"
-
-    const blob = new Blob(chunks, { type: mime })
-    resetRecorderBuffer()
-
-    logDebug(`[STT] sending audio blob size=${blob.size}`)
-
-    isSttBusyRef.current = true
+    const chunks = audioChunksRef.current
+    if (!chunks || chunks.length === 0) return
 
     try {
-      const res = await fetch("https://www.turbotaai.com/api/stt", {
+      isSttBusyRef.current = true
+
+      const blob = new Blob(chunks, { type: "audio/webm" })
+      logDebug(`[STT] sending audio blob size=${blob.size}`)
+
+      const res = await fetch("/api/stt", {
         method: "POST",
         headers: {
           "Content-Type": "audio/webm",
@@ -340,6 +186,7 @@ export function VoiceCallDialog({ open, onOpenChange }: VoiceCallDialogProps) {
 
       const raw = await res.text()
       let data: any = null
+
       try {
         data = raw ? JSON.parse(raw) : null
       } catch {
@@ -347,90 +194,302 @@ export function VoiceCallDialog({ open, onOpenChange }: VoiceCallDialogProps) {
       }
 
       if (!res.ok || !data || data.success === false) {
-        const errMsg =
-          data?.error || `${res.status} ${res.statusText}` || "Unknown STT error"
-
-        logDebug(
-          `[STT] error status=${res.status} msg=${errMsg}`,
-        )
-        // eslint-disable-next-line no-console
         console.error("[STT] error response:", res.status, raw)
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: createId(),
-            author: "assistant",
-            text: "Не удалось распознать речь. Пожалуйста, повторите фразу.",
-            voice: getCurrentGender(),
-          },
-        ])
-
+        logDebug(
+          `[STT] error status=${res.status} msg=${
+            data?.error || "Unknown STT error"
+          }`,
+        )
+        setNetworkError(
+          t(
+            "Speech recognition error. Please check microphone access and try again.",
+          ),
+        )
         return
       }
 
-      const text: string = (data.text || "").toString().trim()
-      logDebug(`[STT] transcript="${text}"`)
+      const text = (data.text || "").toString().trim()
+      logDebug(`[STT] transcript full="${text}"`)
 
-      if (!text) return
+      if (!text) {
+        // пустой результат — просто игнорируем
+        return
+      }
 
-      await sendToAssistant(text)
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("[STT] fatal error", e)
+      // фикс: считаем, что это одно завершённое высказывание,
+      // после успешного STT очищаем буфер, чтобы следующее
+      // сообщение шло с нуля и не наслаивалось.
+      audioChunksRef.current = []
+
+      const userMsg: VoiceMessage = {
+        id: `${Date.now()}-user`,
+        role: "user",
+        text,
+        gender: voiceGenderRef.current,
+      }
+
+      setMessages((prev) => [...prev, userMsg])
+      setNetworkError(null)
+      await handleUserText(text)
+    } catch (error: any) {
+      console.error("[STT] fatal error", error)
+      logDebug(`[STT] fatal error: ${error?.message || "Unknown error"}`)
       setNetworkError(
-        "Проблема с распознаванием речи. Попробуйте ещё раз или выберите другой формат общения.",
+        t("Speech recognition error. Please try again in a few moments."),
       )
     } finally {
       isSttBusyRef.current = false
     }
   }
 
-  async function startCall(gender: VoiceGender) {
+  // ---------- TTS: /api/tts + пауза рекордера ----------
+
+  function speakText(text: string) {
+    if (typeof window === "undefined") return
+
+    const cleanText = text?.trim()
+    if (!cleanText) return
+
+    const langCode = computeLangCode()
+    const gender = getCurrentGender()
+
+    logDebug(
+      `[TTS] speakText lang=${langCode} gender=${gender} sample=${cleanText.slice(
+        0,
+        80,
+      )}`,
+    )
+
+    const beginSpeaking = () => {
+      setIsAiSpeaking(true)
+      isAiSpeakingRef.current = true
+
+      const rec = mediaRecorderRef.current
+      if (rec && rec.state === "recording") {
+        try {
+          rec.pause()
+          logDebug("[Recorder] pause() while TTS is playing")
+        } catch (e) {
+          console.error("Recorder pause error", e)
+        }
+      }
+    }
+
+    const finishSpeaking = () => {
+      setIsAiSpeaking(false)
+      isAiSpeakingRef.current = false
+
+      const rec = mediaRecorderRef.current
+      if (rec && rec.state === "paused" && isCallActiveRef.current) {
+        try {
+          rec.resume()
+          logDebug("[Recorder] resume() after TTS")
+        } catch (e) {
+          console.error("Recorder resume error", e)
+        }
+      }
+    }
+
+    ;(async () => {
+      try {
+        const payload = {
+          text: cleanText,
+          language: langCode,
+          gender,
+        }
+
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+
+        const raw = await res.text()
+        let data: any = null
+
+        try {
+          data = raw ? JSON.parse(raw) : null
+        } catch {
+          data = null
+        }
+
+        logDebug(
+          `[TTS] /api/tts status=${res.status} success=${data?.success}`,
+        )
+
+        if (!res.ok || !data || data.success === false || !data.audioContent) {
+          console.error("[TTS] API error", data || raw)
+          finishSpeaking()
+          return
+        }
+
+        const audioUrl = `data:audio/mp3;base64,${data.audioContent}`
+
+        if (audioRef.current) {
+          audioRef.current.pause()
+          audioRef.current = null
+        }
+
+        const audio = new Audio(audioUrl)
+        audioRef.current = audio
+
+        audio.onplay = () => {
+          beginSpeaking()
+        }
+
+        audio.onended = () => {
+          finishSpeaking()
+          audioRef.current = null
+        }
+
+        audio.onerror = (e) => {
+          console.error("[TTS] audio playback error", e)
+          finishSpeaking()
+          audioRef.current = null
+        }
+
+        try {
+          await audio.play()
+        } catch (e) {
+          console.error("[TTS] play() rejected", e)
+          finishSpeaking()
+        }
+      } catch (error) {
+        console.error("[TTS] fetch error:", error)
+        finishSpeaking()
+      }
+    })()
+  }
+
+  // ---------- отправка текста в n8n / OpenAI ----------
+
+  async function handleUserText(text: string) {
+    const langCode =
+      typeof (currentLanguage as any) === "string"
+        ? ((currentLanguage as any) as string)
+        : (currentLanguage as any)?.code || "uk"
+
+    const resolvedWebhook =
+      (webhookUrl && webhookUrl.trim()) ||
+      TURBOTA_AGENT_WEBHOOK_URL.trim() ||
+      FALLBACK_CHAT_API
+
+    logDebug(
+      `[CHAT] send to ${resolvedWebhook} lang=${langCode} gender=${voiceGenderRef.current}`,
+    )
+
+    try {
+      const res = await fetch(resolvedWebhook, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: text,
+          language: langCode,
+          email: effectiveEmail,
+          mode: "voice",
+          gender: voiceGenderRef.current,
+          voiceLanguage: computeLangCode(),
+        }),
+      })
+
+      if (!res.ok) {
+        throw new Error(`Chat API error: ${res.status}`)
+      }
+
+      const raw = await res.text()
+      let data: any = raw
+
+      try {
+        data = JSON.parse(raw)
+      } catch {
+        // не JSON — значит просто текст
+      }
+
+      logDebug("[CHAT] raw response received")
+
+      let answer = extractAnswer(data)
+
+      if (!answer) {
+        answer = t(
+          "I'm sorry, I couldn't process your message. Please try again.",
+        )
+      }
+
+      const assistantMsg: VoiceMessage = {
+        id: `${Date.now()}-assistant`,
+        role: "assistant",
+        text: answer,
+        gender: voiceGenderRef.current,
+      }
+
+      setMessages((prev) => [...prev, assistantMsg])
+      speakText(answer)
+    } catch (error: any) {
+      console.error("Voice call error:", error)
+      setNetworkError(t("Connection error. Please try again."))
+      if (onError && error instanceof Error) onError(error)
+    }
+  }
+
+  // ---------- управление звонком / микрофоном ----------
+
+  const startCall = async (gender: Gender) => {
+    voiceGenderRef.current = gender
     logDebug(`gender=${gender}`)
     logDebug("[CALL] startCall")
 
-    voiceGenderRef.current = gender
-    langCodeRef.current = detectLangCode()
-
     setIsConnecting(true)
     setNetworkError(null)
-    resetRecorderBuffer()
 
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("getUserMedia not supported")
+      if (
+        typeof navigator === "undefined" ||
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia
+      ) {
+        setNetworkError(
+          t(
+            "Microphone access is not supported in this browser. Please use the latest version of Chrome, Edge or Safari.",
+          ),
+        )
+        setIsConnecting(false)
+        return
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
       })
+      logDebug("[Recorder] getUserMedia access granted")
+
       mediaStreamRef.current = stream
 
       const options: MediaRecorderOptions = {}
-      try {
-        if (
-          typeof MediaRecorder !== "undefined" &&
-          MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ) {
+      if (typeof MediaRecorder !== "undefined") {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
           options.mimeType = "audio/webm;codecs=opus"
-        } else if (
-          typeof MediaRecorder !== "undefined" &&
-          MediaRecorder.isTypeSupported("audio/webm")
-        ) {
+        } else if (MediaRecorder.isTypeSupported("audio/webm")) {
           options.mimeType = "audio/webm"
         }
-      } catch {
-        // ignore
       }
 
       const recorder = new MediaRecorder(stream, options)
       mediaRecorderRef.current = recorder
-      recorderMimeRef.current = recorder.mimeType || options.mimeType || null
+      audioChunksRef.current = []
+      isSttBusyRef.current = false
 
       recorder.onstart = () => {
         logDebug("[Recorder] onstart")
         setIsListening(true)
+      }
+
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+          logDebug(
+            `[Recorder] dataavailable size=${event.data.size} totalChunks=${audioChunksRef.current.length}`,
+          )
+          void maybeSendStt()
+        }
       }
 
       recorder.onstop = () => {
@@ -438,273 +497,363 @@ export function VoiceCallDialog({ open, onOpenChange }: VoiceCallDialogProps) {
         setIsListening(false)
       }
 
-      recorder.ondataavailable = (event: BlobEvent) => {
-        if (!event.data || event.data.size === 0) return
-        if (!isCallActiveRef.current) return
-
-        if (isAiSpeakingRef.current || isMicMutedRef.current) {
-          logDebug("[Recorder] skip chunk: AI speaking or mic muted")
-          return
-        }
-
-        pendingChunksRef.current.push(event.data)
-        pendingSizeRef.current += event.data.size
-
-        logDebug(
-          `[Recorder] dataavailable size=${event.data.size} queueSize=${pendingSizeRef.current}`,
-        )
-
-        void runSttOnce()
-      }
-
-      recorder.onerror = (event) => {
-        // eslint-disable-next-line no-console
+      recorder.onerror = (event: any) => {
         console.error("[Recorder] error", event)
-        setNetworkError(
-          "Ошибка записи микрофона. Попробуйте перезапустить голосовую сессию.",
+        logDebug(
+          `[Recorder] error name=${event?.name || ""} msg=${
+            event?.message || ""
+          }`,
         )
+        setNetworkError(t("Microphone error. Please try again."))
       }
 
-      recorder.start(4000)
-      logDebug("[Recorder] start(4000) — chunk каждые 4с")
+      recorder.start(4000) // каждые 4 секунды chunk
+      logDebug("[Recorder] start(4000) called — chunk every 4s")
 
       isCallActiveRef.current = true
       setIsCallActive(true)
       setIsConnecting(false)
       setConnectionStatus("connected")
-
-      // приветственное сообщение добавляем в историю, не стирая старую
-      const welcome: CallMessage = {
-        id: createId(),
-        author: "assistant",
-        text:
-          "Здравствуйте! Как вы сегодня? Есть ли что-то, о чём вы хотели бы поговорить или обсудить?",
-        voice: gender,
-      }
-      setMessages((prev) => [...prev, welcome])
-
-      await speakText(welcome.text)
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("[CALL] startCall error", e)
-      setIsConnecting(false)
-      setConnectionStatus("error")
-      setNetworkError(
-        "Не удалось получить доступ к микрофону. Проверьте разрешения в браузере.",
+    } catch (error: any) {
+      console.error("[Recorder] getUserMedia error:", error)
+      logDebug(
+        `[Recorder] getUserMedia error name=${error?.name || ""} msg=${
+          error?.message || ""
+        }`,
       )
+
+      const name = error?.name
+
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setNetworkError(
+          t(
+            "Microphone is blocked for this site in the browser. Please allow access in the address bar and reload the page.",
+          ),
+        )
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setNetworkError(
+          t("No microphone was found on this device. Please check your hardware."),
+        )
+      } else {
+        setNetworkError(
+          t(
+            "Could not start microphone. Check permissions in the browser and system settings, then try again.",
+          ),
+        )
+      }
+
+      setIsConnecting(false)
+      isCallActiveRef.current = false
+      setIsCallActive(false)
+      setConnectionStatus("disconnected")
     }
   }
 
-  function endCall() {
+  const endCall = () => {
     logDebug("[CALL] endCall")
-    fullCleanup()
+
+    isCallActiveRef.current = false
+    setIsCallActive(false)
+    setIsListening(false)
+    setIsMicMuted(false)
+    setIsAiSpeaking(false)
+    isAiSpeakingRef.current = false
+    setConnectionStatus("disconnected")
+    setNetworkError(null)
+
+    isSttBusyRef.current = false
+    audioChunksRef.current = []
+
+    const rec = mediaRecorderRef.current
+    if (rec && rec.state !== "inactive") {
+      try {
+        rec.stop()
+      } catch (e) {
+        console.error("Recorder stop error", e)
+      }
+    }
+    mediaRecorderRef.current = null
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop()
+        } catch (e) {
+          console.error("Track stop error", e)
+        }
+      })
+      mediaStreamRef.current = null
+    }
+
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
+
+    if (typeof window !== "undefined" && (window as any).speechSynthesis) {
+      ;(window as any).speechSynthesis.cancel()
+    }
   }
 
-  function toggleMic() {
+  const toggleMic = () => {
     const next = !isMicMuted
     setIsMicMuted(next)
-    isMicMutedRef.current = next
+
+    const rec = mediaRecorderRef.current
+    if (!rec) return
+
+    if (next) {
+      if (rec.state === "recording") {
+        try {
+          rec.pause()
+          logDebug("[CALL] mic muted -> recorder.pause()")
+        } catch (e) {
+          console.error("Recorder pause error", e)
+        }
+      }
+    } else {
+      if (rec.state === "paused" && isCallActiveRef.current) {
+        try {
+          rec.resume()
+          logDebug("[CALL] mic unmuted -> recorder.resume()")
+        } catch (e) {
+          console.error("Recorder resume error", e)
+        }
+      }
+    }
   }
 
-  const statusLabel =
-    connectionStatus === "connected"
-      ? isAiSpeaking
-        ? "Ассистент говорит..."
-        : isListening
-        ? "Ассистент слушает, можно говорить."
-        : "Подключено"
-      : connectionStatus === "error"
-      ? "Ошибка подключения"
-      : "Отключено"
-
-  const statusDotClass =
-    connectionStatus === "connected"
-      ? "bg-emerald-400"
-      : connectionStatus === "error"
-      ? "bg-red-400"
-      : "bg-slate-400"
-
-  function handleDialogOpenChange(next: boolean) {
-    if (!next) {
+  useEffect(() => {
+    if (!isOpen) {
       endCall()
     }
-    onOpenChange(next)
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen])
+
+  useEffect(() => {
+    return () => {
+      endCall()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const statusText = !isCallActive
+    ? t(
+        "In crisis situations, please contact local emergency services immediately.",
+      )
+    : isAiSpeaking
+      ? t("Assistant is speaking...")
+      : isMicMuted
+        ? t("Paused. Turn on microphone to continue.")
+        : isListening
+          ? t("Listening… you can speak.")
+          : t("Waiting... you can start speaking at any moment.")
 
   return (
-    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden bg-slate-950 text-slate-50 border border-slate-800">
-        <div className="flex flex-col h-[560px]">
-          {/* HEADER */}
-          <div className="relative px-6 pt-5 pb-4 bg-gradient-to-r from-[#5f6bff] via-[#9b5cff] to-[#ff6f9b] text-white">
-            <button
-              type="button"
-              onClick={() => handleDialogOpenChange(false)}
-              className="absolute right-4 top-4 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition"
-            >
-              <X className="h-4 w-4" />
-            </button>
-
-            <div className="text-xs mb-1 opacity-90">Голосовой формат</div>
-            <h2 className="text-lg font-semibold">
-              Голосовая сессия с AI-психологом
-            </h2>
-            <p className="mt-1 text-xs max-w-[320px] text-white/80">
-              Вы можете говорить вслух — ассистент будет слушать, отвечать и
-              озвучивать ответы.
-            </p>
-
-            <div className="mt-3 flex items-center gap-2 text-[11px] text-white/80">
-              <span
-                className={cn(
-                  "inline-flex h-2 w-2 rounded-full",
-                  statusDotClass,
-                )}
-              />
-              <span>{statusLabel}</span>
-            </div>
-          </div>
-
-          {/* BODY */}
-          <div className="flex-1 flex flex-col bg-slate-950">
-            <div
-              ref={scrollRef}
-              className="flex-1 px-4 py-3 space-y-3 overflow-y-auto scroll-smooth"
-            >
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={cn(
-                    "flex flex-col gap-1",
-                    msg.author === "assistant"
-                      ? "items-start"
-                      : "items-end",
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          endCall()
+          onClose()
+        }
+      }}
+    >
+      <DialogContent className="max-w-xl border-none bg-transparent p-0">
+        <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/10">
+          <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
+                    <Phone className="h-4 w-4" />
+                  </span>
+                  {t("Voice session with AI-psychologist")}
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs text-indigo-100">
+                  {t(
+                    "You can talk out loud, the assistant will listen, answer and voice the reply.",
                   )}
-                >
-                  {msg.author === "assistant" && (
-                    <div className="flex flex-wrap gap-1 text-[10px] font-medium text-emerald-800">
-                      <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50/90 px-2 py-0.5">
-                        AI-психолог
-                      </span>
-                      <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50/90 px-2 py-0.5">
-                        {msg.voice === "male"
-                          ? "мужской голос"
-                          : "женский голос"}
-                      </span>
-                    </div>
+                </DialogDescription>
+              </div>
+
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-1 text-[11px] text-indigo-100">
+                  {connectionStatus === "connected" ? (
+                    <>
+                      <Wifi className="h-3 w-3 text-emerald-200" />{" "}
+                      {t("Connected")}
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="h-3 w-3 text-rose-200" />{" "}
+                      {t("Disconnected")}
+                    </>
                   )}
-
-                  <div
-                    className={cn(
-                      "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-snug shadow-sm",
-                      msg.author === "assistant"
-                        ? "self-start bg-emerald-50 text-emerald-950"
-                        : "self-end bg-slate-900 text-slate-50",
-                    )}
-                  >
-                    {msg.text}
-                  </div>
-                </div>
-              ))}
-
-              {!messages.length && (
-                <div className="mt-4 text-xs text-slate-400">
-                  Когда начнёте голосовую сессию, здесь появится история
-                  диалога.
-                </div>
-              )}
-            </div>
-
-            {/* FOOTER */}
-            {isCallActive ? (
-              <div className="border-t border-slate-800 px-4 py-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs text-slate-200">
-                  <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>{statusLabel}</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={toggleMic}
-                    className={cn(
-                      "inline-flex h-9 w-9 items-center justify-center rounded-full border text-slate-50 transition",
-                      isMicMuted
-                        ? "bg-slate-800 border-slate-600"
-                        : "bg-emerald-500 border-emerald-400",
-                    )}
-                    aria-label={
-                      isMicMuted ? "Включить микрофон" : "Выключить микрофон"
-                    }
-                  >
-                    {isMicMuted ? (
-                      <MicOff className="h-4 w-4" />
-                    ) : (
-                      <Mic className="h-4 w-4" />
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={endCall}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white transition"
-                    aria-label="Завершить звонок"
-                  >
-                    <Phone className="h-4 w-4 rotate-[135deg]" />
-                  </button>
                 </div>
               </div>
-            ) : (
-              <div className="border-t border-slate-800 px-4 py-3 flex flex-col gap-3">
-                <div className="text-[11px] text-slate-400">
-                  В кризисных ситуациях немедленно обращайтесь в местные службы
-                  экстренной помощи. Этот формат не заменяет живого
-                  специалиста, но помогает структурировать мысли.
+            </div>
+          </DialogHeader>
+
+          <div className="flex h-[500px] flex-col md:h-[540px]">
+            <ScrollArea className="flex-1 px-5 pt-4 pb-2">
+              <div
+                ref={scrollRef}
+                className="max-h-full space-y-3 pr-1 text-xs md:text-sm"
+              >
+                {!isCallActive && messages.length === 0 && (
+                  <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-slate-700">
+                    <p className="mb-1 font-medium text-slate-900">
+                      {t("How it works")}
+                    </p>
+                    <p className="mb-2">
+                      {t(
+                        "Choose a voice and start the session. The assistant will listen to you and answer like a real psychologist.",
+                      )}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      {t(
+                        "You can switch between female and male voice by ending the call and starting again with a different option.",
+                      )}
+                    </p>
+                  </div>
+                )}
+
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${
+                      msg.role === "user" ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 shadow-sm ${
+                        msg.role === "user"
+                          ? "rounded-br-sm bg-slate-900 text-white"
+                          : "rounded-bl-sm bg-emerald-50 text-slate-900"
+                      }`}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className="mb-1 flex items-center gap-1 text-[10px] font-medium text-emerald-700">
+                          <Brain className="h-3 w-3" />
+                          {t("AI Psychologist")}
+                          <span className="ml-1 rounded-full bg-emerald-100 px-2 py-[1px] text-[9px] font-semibold uppercase tracking-wide text-emerald-700">
+                            {msg.gender === "female"
+                              ? t("Female voice")
+                              : t("Male voice")}
+                          </span>
+                        </div>
+                      )}
+                      <p className="text-xs md:text-sm">{msg.text}</p>
+                    </div>
+                  </div>
+                ))}
+
+                {networkError && (
+                  <div className="rounded-2xl bg-rose-50 px-3 py-3 text-xs text-rose-700">
+                    {networkError}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+
+            <div className="flex flex-col gap-2 border-t border-slate-100 px-5 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                  <Sparkles className="h-3 w-3" />
+                  {statusText}
                 </div>
 
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-[11px] font-medium text-slate-300">
-                    ВЫБЕРИТЕ ГОЛОС ДЛЯ ЭТОЙ СЕССИИ
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-2">
+                {isCallActive && (
+                  <div className="flex items-center gap-2">
                     <Button
                       type="button"
-                      size="sm"
-                      disabled={isConnecting}
-                      onClick={() => startCall("female")}
-                      className="flex-1 bg-pink-500 hover:bg-pink-600 text-white rounded-full px-4 py-2 text-xs font-semibold"
+                      size="icon"
+                      onClick={toggleMic}
+                      className={`h-8 w-8 rounded-full border ${
+                        isMicMuted
+                          ? "border-rose-200 bg-rose-50 text-rose-600"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}
                     >
-                      {isConnecting ? (
+                      {isMicMuted ? (
+                        <MicOff className="h-4 w-4" />
+                      ) : (
+                        <Mic className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      onClick={endCall}
+                      className="h-8 w-8 rounded-full bg-rose-600 text-white hover:bg-rose-700"
+                    >
+                      <Phone className="h-4 w-4 rotate-[135deg]" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {!isCallActive && (
+                <div className="flex flex-col items-stretch gap-3 pt-1">
+                  <div className="text-center text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    {t("Choose voice for this session")}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        void startCall("female")
+                      }}
+                      disabled={isConnecting}
+                      className={`h-11 w-full rounded-full px-5 text-xs font-semibold shadow-sm flex items-center justify-center gap-2 ${
+                        voiceGenderRef.current === "female"
+                          ? "bg-pink-600 text-white hover:bg-pink-700"
+                          : "bg-pink-50 text-pink-700 hover:bg-pink-100"
+                      }`}
+                    >
+                      {isConnecting &&
+                      voiceGenderRef.current === "female" ? (
                         <>
-                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                          Подключаемся...
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          {t("Connecting")}
                         </>
                       ) : (
-                        "Начать с женским голосом"
+                        <>
+                          <Sparkles className="h-3 w-3" />
+                          {t("Start with female voice")}
+                        </>
                       )}
                     </Button>
 
                     <Button
                       type="button"
-                      size="sm"
-                      variant="outline"
+                      onClick={() => {
+                        void startCall("male")
+                      }}
                       disabled={isConnecting}
-                      onClick={() => startCall("male")}
-                      className="flex-1 rounded-full border-slate-700 bg-transparent text-slate-100 hover:bg-slate-800 px-4 py-2 text-xs font-semibold"
+                      className={`h-11 w-full rounded-full px-5 text-xs font-semibold shadow-sm flex items-center justify-center gap-2 ${
+                        voiceGenderRef.current === "male"
+                          ? "bg-sky-600 text-white hover:bg-sky-700"
+                          : "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                      }`}
                     >
-                      Начать с мужским голосом
+                      {isConnecting && voiceGenderRef.current === "male" ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          {t("Connecting")}
+                        </>
+                      ) : (
+                        <>
+                          <Brain className="h-3 w-3" />
+                          {t("Start with male voice")}
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>
-
-                {networkError && (
-                  <div className="text-[11px] text-red-400">
-                    {networkError}
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </DialogContent>
