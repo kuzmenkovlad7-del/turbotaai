@@ -870,60 +870,100 @@ export default function VideoCallDialog({
   async function startCall() {
 
     if (isConnecting) return
+
     setIsConnecting(true)
+
     setSpeechError(null)
 
-    try {
-      // Start permission request immediately (still inside the click gesture)
 
-      // Mark call active BEFORE starting recognition
+    try {
+
+      // Start video session WITHOUT requesting microphone.
+
+      // Microphone/voice input will be requested only by the mic button.
+
       setIsCallActive(true)
+
       isCallActiveRef.current = true
 
+
       setMessages([])
+
       setInterimTranscript("")
 
+
+      // mic is OFF by default
+
       setIsMicMuted(true)
+
       isMicMutedRef.current = true
+
+
       lastSpeechActivityRef.current = Date.now()
+
       recognitionStopReasonRef.current = "none"
 
-      // IMPORTANT: Start recognition while we still have the user gesture (Android requirement)
-    // startSpeechRecognition() moved to mic button (Android gesture-safe)// Now wait for mic permission result
-      const micOk = await micPromise
-      if (!micOk) {
-        // Rollback UI if permission denied / failed
-        setIsMicMuted(true)
-        isMicMutedRef.current = true
-        stopSpeechRecognition()
 
-        setIsCallActive(false)
-        isCallActiveRef.current = false
-        setIsConnecting(false)
-        return
-      }
+      // play idle video if available (ignore autoplay restrictions)
 
-      // play idle video if available
-      if (hasEnhancedVideo && videosRef.current.idle && (videosRef.current.idle as any).play) {
+      if (
+
+        hasEnhancedVideo &&
+
+        videosRef.current.idle &&
+
+        (videosRef.current.idle as any).play
+
+      ) {
+
         try {
+
           await (videosRef.current.idle as any).play()
+
         } catch {
-          // ignore autoplay restrictions here
+
+          // ignore autoplay restrictions
+
         }
+
       }
+
     } catch (e) {
+
       console.error("[VIDEO] startCall error", e)
-      setSpeechError("Could not start. Check microphone permissions and try again.")
+
+
+      setSpeechError(
+
+        t(
+
+          "Could not start the video session. Please check camera permissions and try again.",
+
+        ),
+
+      )
+
+
       setIsCallActive(false)
+
       isCallActiveRef.current = false
+
+
       setIsMicMuted(true)
+
       isMicMutedRef.current = true
+
+
       stopSpeechRecognition()
+
     } finally {
+
       setIsConnecting(false)
+
     }
-  
-}
+
+  }
+
 
   function endCall() {
     setIsCallActive(false)
@@ -1057,7 +1097,7 @@ export default function VideoCallDialog({
               endCall()
               onClose()
             }}
-            className="text-white hover:bg-indigo-500/60 min-w-[44px] min-h-[44px] flex-shrink-0"
+            className="h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 text-white border border-white/20"
           >
             <X className="h-5 w-5" />
           </Button>
