@@ -872,40 +872,42 @@ export default function VideoCallDialog({
     setSpeechError(null)
 
     try {
-      // Активируем UI звонка. Камера поднимется через useEffect (getUserMedia({video:true})).
+      // Включаем UI звонка. Камера/видео должны подниматься отдельной логикой (useEffect/getUserMedia video:true).
       setIsCallActive(true)
       isCallActiveRef.current = true
-      setIsCameraOff(false)
 
       setMessages([])
       setInterimTranscript("")
 
-      // Микрофон НЕ трогаем на старте. Разрешение и старт прослушки — только по кнопке микрофона.
+      // Микрофон не трогаем на старте. Разрешение и старт — только по кнопке микрофона.
       setIsMicMuted(true)
       isMicMutedRef.current = true
+
       lastSpeechActivityRef.current = Date.now()
       recognitionStopReasonRef.current = "none"
+    } catch (e: any) {
+      const name =
+        (e && (e.name || e.constructor?.name)) ? String(e.name || e.constructor?.name) : "Error"
+      const msg =
+        (e && e.message) ? String(e.message) : String(e)
 
-      // idle video (если есть)
-      if (hasEnhancedVideo && videosRef.current.idle && (videosRef.current.idle as any).play) {
-        try {
-          await (videosRef.current.idle as any).play()
-        } catch {
-          // ignore autoplay restrictions
-        }
-      }
-    } catch (e) {
-      console.error("[VIDEO] startCall error", e)
-      setSpeechError("Could not start. Please try again.")
+      console.error("[VIDEO] startCall error:", e)
+      // ВЫВОДИМ реальную причину на экран (чтобы не гадать)
+      setSpeechError(`Could not start: ${name}: ${msg}`)
+
       setIsCallActive(false)
       isCallActiveRef.current = false
       setIsMicMuted(true)
       isMicMutedRef.current = true
-      stopSpeechRecognition()
+      try:
+        stopSpeechRecognition()
+      except Exception:
+        pass
     } finally {
       setIsConnecting(false)
     }
   }
+
 
 
   function endCall() {
