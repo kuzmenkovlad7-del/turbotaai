@@ -873,7 +873,10 @@ export default function VideoCallDialog({
     setSpeechError(null)
 
     try {
-      const micOk = await requestMicrophoneAccess()
+      // IMPORTANT: Start recognition immediately inside the click handler (Android needs user gesture)
+startSpeechRecognition()
+
+const micOk = await requestMicrophoneAccess()
       if (!micOk) {
         setIsConnecting(false)
         return
@@ -899,8 +902,7 @@ export default function VideoCallDialog({
         } catch {}
       }
 
-      startSpeechRecognition()
-    } catch (error: any) {
+          } catch (error: any) {
       console.error("Failed to start call:", error)
       setSpeechError(
         error?.message ||
