@@ -10,16 +10,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  Phone,
-  Wifi,
-  WifiOff,
-  Brain,
-  Mic,
-  MicOff,
-  Loader2,
-  Sparkles,
-} from "lucide-react"
+import { Phone, Brain, Mic, MicOff, Loader2, Sparkles } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
 
@@ -140,9 +131,6 @@ export default function VoiceCallDialog({
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
   const [messages, setMessages] = useState<VoiceMessage[]>([])
   const [networkError, setNetworkError] = useState<string | null>(null)
-  const [connectionStatus, setConnectionStatus] = useState<
-    "connected" | "disconnected"
-  >("disconnected")
 
   const voiceGenderRef = useRef<"female" | "male">("female")
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
@@ -186,9 +174,9 @@ export default function VoiceCallDialog({
     return g === "male" ? "MALE" : "FEMALE"
   }
 
-  // --------- STT: послать накопленный webm в /api/stt ---------
+  // --------- STT: послать накопленный звук в /api/stt ---------
   // ВАЖНО: НЕ чистим audioChunksRef, всегда шлём ВЕСЬ звук с начала сессии,
-  // чтобы backend видел полноценный webm c заголовком, а не обрезанный кусок.
+  // чтобы backend видел полноценный контейнер, а не обрезанный кусок.
 
   async function maybeSendStt() {
     if (!isCallActiveRef.current) return
@@ -199,21 +187,26 @@ export default function VoiceCallDialog({
 
     if (!audioChunksRef.current.length) return
 
-    const blob = new Blob(audioChunksRef.current, { type: "audio/webm" })
+    // iOS/Safari может писать audio/mp4 — НЕ форсим audio/webm
+    const recMime = mediaRecorderRef.current?.mimeType || ""
+    const firstChunkMime = audioChunksRef.current[0]?.type || ""
+    const mimeType = (recMime || firstChunkMime || "audio/webm").toString()
 
-    // слишком маленькие кусочки (0–1 сек) игнорируем — от них мало пользы
+    const blob = new Blob(audioChunksRef.current, { type: mimeType })
+
+    // слишком маленькие кусочки игнорируем — от них мало пользы
     if (blob.size < 8000) {
       return
     }
 
     try {
       isSttBusyRef.current = true
-      logDebug("[STT] sending audio blob size=", blob.size)
+      logDebug("[STT] sending audio blob size=", blob.size, "type=", blob.type)
 
       const res = await fetch("/api/stt", {
         method: "POST",
         headers: {
-          "Content-Type": "audio/webm",
+          "Content-Type": blob.type || "application/octet-stream",
         },
         body: blob,
       })
@@ -486,10 +479,13 @@ export default function VoiceCallDialog({
 
       const options: MediaRecorderOptions = {}
       if (typeof MediaRecorder !== "undefined") {
+        // Chrome/Android — webm opus; Safari/iOS — часто mp4
         if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
           options.mimeType = "audio/webm;codecs=opus"
         } else if (MediaRecorder.isTypeSupported("audio/webm")) {
           options.mimeType = "audio/webm"
+        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          options.mimeType = "audio/mp4"
         }
       }
 
@@ -511,7 +507,9 @@ export default function VoiceCallDialog({
             "[Recorder] dataavailable size=" +
               event.data.size +
               " totalChunks=" +
-              audioChunksRef.current.length,
+              audioChunksRef.current.length +
+              " type=" +
+              (event.data.type || ""),
           )
           void maybeSendStt()
         }
@@ -538,7 +536,6 @@ export default function VoiceCallDialog({
       isCallActiveRef.current = true
       setIsCallActive(true)
       setIsConnecting(false)
-      setConnectionStatus("connected")
     } catch (error: any) {
       console.error("[Recorder] getUserMedia error:", error)
       logDebug(
@@ -571,7 +568,6 @@ export default function VoiceCallDialog({
       setIsConnecting(false)
       isCallActiveRef.current = false
       setIsCallActive(false)
-      setConnectionStatus("disconnected")
     }
   }
 
@@ -583,7 +579,6 @@ export default function VoiceCallDialog({
     setIsListening(false)
     setIsMicMuted(false)
     setIsAiSpeaking(false)
-    setConnectionStatus("disconnected")
     setNetworkError(null)
     audioChunksRef.current = []
     lastTranscriptRef.current = ""
@@ -625,7 +620,6 @@ export default function VoiceCallDialog({
     setIsMicMuted(next)
 
     const rec = mediaRecorderRef.current
-
     if (!rec) return
 
     if (next) {
@@ -704,21 +698,7 @@ export default function VoiceCallDialog({
                 </DialogDescription>
               </div>
 
-              <div className="flex flex-col items-end gap-1 text-[11px] text-indigo-100">
-                <div className="flex items-center gap-1">
-                  {connectionStatus === "connected" ? (
-                    <>
-                      <Wifi className="h-3 w-3 text-emerald-200" />
-                      {t("Connected")}
-                    </>
-                  ) : (
-                    <>
-                      <WifiOff className="h-3 w-3 text-rose-200" />
-                      {t("Disconnected")}
-                    </>
-                  )}
-                </div>
-              </div>
+              {/* УБРАЛИ статус Connected/Disconnected как ты просил */}
             </div>
           </DialogHeader>
 
