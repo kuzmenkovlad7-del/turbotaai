@@ -134,7 +134,11 @@ export default function VideoCallDialog({
 
   const userVideoRef = useRef<HTMLVideoElement | null>(null)
 
+  // full stream for preview (video+audio)
   const streamRef = useRef<MediaStream | null>(null)
+  // audio-only stream for STT recorder
+  const audioOnlyStreamRef = useRef<MediaStream | null>(null)
+
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const sttBusyRef = useRef(false)
@@ -180,6 +184,29 @@ export default function VideoCallDialog({
     return "en-US"
   }
 
+  async function ensureVideoAttached(stream: MediaStream) {
+    // важно: в Dialog видео-элемент может появиться чуть позже, поэтому ретраи
+    for (let i = 0; i < 30; i++) {
+      const el = userVideoRef.current
+      if (el) {
+        try {
+          el.srcObject = stream
+        } catch {
+          // ignore
+        }
+
+        // принудительно пытаемся проиграть (на iOS может зареджектиться)
+        try {
+          await el.play()
+        } catch {
+          // autoplay может быть запрещён, но srcObject уже установлен
+        }
+        return
+      }
+      await new Promise((r) => setTimeout(r, 50))
+    }
+  }
+
   async function maybeSendStt() {
     if (!activeRef.current) return
     if (sttBusyRef.current) return
@@ -218,7 +245,7 @@ export default function VideoCallDialog({
         return
       }
 
-      // если к моменту ответа ассистент говорит — игнор
+      // если к моменту ответа ассистент говорит / микрофон выключен — игнор
       if (aiSpeakingRef.current || micMutedRef.current) return
 
       const fullText = (data.text || "").toString().trim()
@@ -232,8 +259,8 @@ export default function VideoCallDialog({
 
       setMessages((m) => [...m, { id: `${Date.now()}-u`, role: "user", text: delta }])
       await handleUserText(delta)
-    } catch (e) {
-      // молча
+    } catch {
+      // ignore
     } finally {
       sttBusyRef.current = false
     }
@@ -304,7 +331,12 @@ export default function VideoCallDialog({
       setIsAiSpeaking(false)
 
       const rec = recorderRef.current
-      if (rec && rec.state === "paused" && activeRef.current && !micMutedRef.current) {
+      if (
+        rec &&
+        rec.state === "paused" &&
+        activeRef.current &&
+        !micMutedRef.current
+      ) {
         try {
           rec.resume()
         } catch {}
@@ -368,6 +400,14 @@ export default function VideoCallDialog({
     })()
   }
 
+  function pickRecorderMime(): string | undefined {
+    if (typeof MediaRecorder === "undefined") return undefined
+    if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) return "audio/webm;codecs=opus"
+    if (MediaRecorder.isTypeSupported("audio/webm")) return "audio/webm"
+    if (MediaRecorder.isTypeSupported("audio/mp4")) return "audio/mp4"
+    return undefined
+  }
+
   async function startSession() {
     setIsConnecting(true)
     setNetworkError(null)
@@ -392,34 +432,31 @@ export default function VideoCallDialog({
         video: { facingMode: "user" },
       })
 
+      // гарантируем что всё включено сразу
+      stream.getAudioTracks().forEach((tr) => (tr.enabled = true))
+      stream.getVideoTracks().forEach((tr) => (tr.enabled = true))
+      setIsMicMuted(false)
+      setIsCamOff(false)
+
       streamRef.current = stream
       activeRef.current = true
       setIsActive(true)
 
-      // Привязываем видео
-      if (userVideoRef.current) {
-        userVideoRef.current.srcObject = stream
-        try {
-          await userVideoRef.current.play()
-        } catch {
-          // play может зареджектиться — не критично, srcObject уже установлен
-        }
-      }
+      // Привязываем видео (с ретраями, чтобы не было бага “появилось после toggle”)
+      await ensureVideoAttached(stream)
 
-      // Настраиваем MediaRecorder (для STT пишем аудио дорожку)
+      // audio-only stream для MediaRecorder (STT)
+      const aTracks = stream.getAudioTracks()
+      const audioOnly = new MediaStream(aTracks)
+      audioOnlyStreamRef.current = audioOnly
+
+      const mimeType = pickRecorderMime()
       const options: MediaRecorderOptions = {}
-      if (typeof MediaRecorder !== "undefined") {
-        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-          options.mimeType = "audio/webm;codecs=opus"
-        } else if (MediaRecorder.isTypeSupported("audio/webm")) {
-          options.mimeType = "audio/webm"
-        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
-          options.mimeType = "audio/mp4"
-        }
-      }
+      if (mimeType) options.mimeType = mimeType
 
-      const rec = new MediaRecorder(stream, options)
+      const rec = new MediaRecorder(audioOnly, options)
       recorderRef.current = rec
+
       chunksRef.current = []
       sttBusyRef.current = false
       lastTranscriptRef.current = ""
@@ -433,6 +470,7 @@ export default function VideoCallDialog({
         }
       }
 
+      // стартуем запись сразу (как в голосовом)
       rec.start(4000)
 
       setIsConnecting(false)
@@ -444,6 +482,8 @@ export default function VideoCallDialog({
             "Microphone/Camera is blocked for this site in the browser. Please allow access in the address bar and reload the page.",
           ),
         )
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setNetworkError(t("No camera/microphone was found on this device. Please check your hardware."))
       } else {
         setNetworkError(
           t(
@@ -451,6 +491,7 @@ export default function VideoCallDialog({
           ),
         )
       }
+
       setIsConnecting(false)
       activeRef.current = false
       setIsActive(false)
@@ -460,6 +501,8 @@ export default function VideoCallDialog({
 
   function stopSession() {
     activeRef.current = false
+    aiSpeakingRef.current = false
+
     setIsActive(false)
     setIsConnecting(false)
     setIsListening(false)
@@ -484,19 +527,25 @@ export default function VideoCallDialog({
     }
     recorderRef.current = null
 
+    if (audioOnlyStreamRef.current) {
+      audioOnlyStreamRef.current.getTracks().forEach((tr) => {
+        try { tr.stop() } catch {}
+      })
+    }
+    audioOnlyStreamRef.current = null
+
     const s = streamRef.current
     if (s) {
       s.getTracks().forEach((tr) => {
-        try {
-          tr.stop()
-        } catch {}
+        try { tr.stop() } catch {}
       })
     }
     streamRef.current = null
 
-    if (userVideoRef.current) {
+    const el = userVideoRef.current
+    if (el) {
       try {
-        userVideoRef.current.srcObject = null
+        el.srcObject = null
       } catch {}
     }
   }
@@ -517,20 +566,16 @@ export default function VideoCallDialog({
 
     if (next) {
       if (rec.state === "recording") {
-        try {
-          rec.pause()
-        } catch {}
+        try { rec.pause() } catch {}
       }
     } else {
       if (rec.state === "paused" && activeRef.current && !aiSpeakingRef.current) {
-        try {
-          rec.resume()
-        } catch {}
+        try { rec.resume() } catch {}
       }
     }
   }
 
-  function toggleCamera() {
+  async function toggleCamera() {
     const next = !isCamOff
     setIsCamOff(next)
 
@@ -539,10 +584,14 @@ export default function VideoCallDialog({
       s.getVideoTracks().forEach((tr) => {
         tr.enabled = !next
       })
+      // когда включаем обратно — ещё раз попробуем play(), чтобы на мобилках не оставалось “чёрным”
+      if (!next) {
+        await ensureVideoAttached(s)
+      }
     }
   }
 
-  // авто-попытка стартануть при открытии (но без вечных повторов)
+  // авто-старт при открытии (одна попытка). Если браузер требует жест — будет кнопка "Start".
   const didAutoStartRef = useRef(false)
   useEffect(() => {
     if (!isOpen) {
@@ -555,7 +604,6 @@ export default function VideoCallDialog({
 
     if (isOpen && !didAutoStartRef.current) {
       didAutoStartRef.current = true
-      // Важно: стартуем асинхронно, а если iOS потребует жест — будет кнопка “Start”
       void startSession()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -670,13 +718,17 @@ export default function VideoCallDialog({
                           : "border-slate-200 bg-slate-900 text-white hover:bg-slate-800"
                       }`}
                     >
-                      {isMicMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                      {isMicMuted ? (
+                        <MicOff className="h-4 w-4" />
+                      ) : (
+                        <Mic className="h-4 w-4" />
+                      )}
                     </Button>
 
                     <Button
                       type="button"
                       size="icon"
-                      onClick={toggleCamera}
+                      onClick={() => void toggleCamera()}
                       className={`h-9 w-9 rounded-full border ${
                         isCamOff
                           ? "border-rose-200 bg-rose-50 text-rose-600"
@@ -716,9 +768,7 @@ export default function VideoCallDialog({
                     <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-slate-700">
                       <p className="mb-1 font-medium text-slate-900">{t("How it works")}</p>
                       <p>
-                        {t(
-                          "Allow camera and microphone. The assistant will listen, answer and voice the reply.",
-                        )}
+                        {t("Allow camera and microphone. The assistant will listen, answer and voice the reply.")}
                       </p>
                     </div>
                   )}
