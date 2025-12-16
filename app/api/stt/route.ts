@@ -1,76 +1,62 @@
+import { NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
-import { NextResponse } from "next/server"
 
 export const runtime = "nodejs"
-export const dynamic = "force-dynamic"
 
-function extFromContentType(contentType: string): string {
-  const ct = (contentType || "").split(";")[0].trim().toLowerCase()
-
+function extFromContentType(mime: string | null | undefined): string {
+  const ct = String(mime || "").toLowerCase()
+  if (ct.includes("mp4")) return "mp4"
+  if (ct.includes("mpeg")) return "mp3"
+  if (ct.includes("wav")) return "wav"
   if (ct.includes("webm")) return "webm"
   if (ct.includes("ogg")) return "ogg"
-  if (ct.includes("mp4") || ct.includes("m4a")) return "mp4"
-  if (ct.includes("wav") || ct.includes("x-wav")) return "wav"
-  if (ct.includes("mpeg") || ct.includes("mp3")) return "mp3"
-
-  // дефолт — чтобы не падать
   return "webm"
 }
 
-function langFromHeaders(xLang: string | null, acceptLang: string | null): string | undefined {
-  const s = (xLang || acceptLang || "").toLowerCase().trim()
-  if (s.startswith?.("uk") or s.startswith?.("ua")) return "uk"
-  if (s.startswith?.("ru")) return "ru"
-  if (s.startswith?.("en")) return "en"
+function normalizeWhisperLanguage(value: string | null): string | undefined {
+  if (!value) return undefined
+  const v = value.toLowerCase().trim()
+  if (!v) return undefined
 
-  // если заголовок длинный "uk-UA,uk;q=0.9" — берём первые 2 буквы
-  if (len(s) >= 2):
-    pass
-  return undefined
+  // поддержка форматов типа "uk-UA", "ru-RU"
+  if (v.startswith("uk")) return "uk"
+  if (v.startswith("ru")) return "ru"
+  if (v.startswith("en")) return "en"
+  // если пришло что-то экзотическое — отдаём как есть (Whisper может проигнорировать)
+  return v
 }
 
-// TS-friendly startsWith fallback (python-like guard above не подходит в TS) — поэтому ещё раз:
-function normalizeLang(xLang: string | null, acceptLang: string | null): string | undefined {
-  const s = (xLang || acceptLang || "").toLowerCase().trim()
-  if (s.startsWith("uk") || s.startsWith("ua")) return "uk"
-  if (s.startsWith("ru")) return "ru"
-  if (s.startsWith("en")) return "en"
-  const two = s.slice(0, 2)
-  if (two === "uk" || two === "ru" || two === "en") return two
-  return undefined
-}
-
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { success: false, error: "OPENAI_API_KEY is not set" },
-        { status: 500 },
-      )
-    }
+    const ctHeader = req.headers.get("content-type") || ""
+    const mime = ctHeader.split(";")[0].trim()
 
-    const contentTypeRaw = (req.headers.get("content-type") || "").toString()
-    const acceptLang = req.headers.get("accept-language")
-    const xLang = req.headers.get("x-lang")
-    const language = normalizeLang(xLang, acceptLang)
+    const languageFromHeader =
+      req.headers.get("x-lang") ||
+      req.nextUrl.searchParams.get("lang") ||
+      req.nextUrl.searchParams.get("language")
 
-    let file: File
-    let mime = contentTypeRaw || "application/octet-stream"
+    const language = normalizeWhisperLanguage(languageFromHeader)
 
-    // 1) Если прислали multipart/form-data — берём file из formData
-    if (mime.toLowerCase().includes("multipart/form-data")) {
+    let file: File | null = null
+    let usedMime = mime
+
+    // 1) form-data: ожидаем key "file"
+    if (ctHeader.toLowerCase().includes("multipart/form-data")) {
       const form = await req.formData()
       const f = form.get("file")
-      if (!(f instanceof File)) {
+
+      if (!f || !(f instanceof File)) {
         return NextResponse.json(
           { success: false, error: "No file provided in form-data under key 'file'" },
           { status: 400 },
         )
       }
+
       file = f
-      mime = f.type || mime
+      usedMime = f.type || usedMime
     } else {
-      // 2) Если прислали raw audio (как у тебя из MediaRecorder)
+      // 2) raw audio: MediaRecorder присылает просто bytes
       const ab = await req.arrayBuffer()
       if (!ab || ab.byteLength < 4000) {
         return NextResponse.json(
@@ -79,11 +65,11 @@ export async function POST(req: Request) {
         )
       }
 
-      const ext = extFromContentType(mime)
       const bytes = new Uint8Array(ab)
-
-      // В Node/Next обычно File доступен как Web API
-      file = new File([bytes], `speech.${ext}`, { type: mime || "application/octet-stream" })
+      const ext = extFromContentType(usedMime)
+      file = new File([bytes], `speech.${ext}`, {
+        type: usedMime || "application/octet-stream",
+      })
     }
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -97,7 +83,6 @@ export async function POST(req: Request) {
     })
 
     const text = ((result as any)?.text || "").toString().trim()
-
     return NextResponse.json({ success: true, text })
   } catch (err: any) {
     console.error("[/api/stt] error:", err)
