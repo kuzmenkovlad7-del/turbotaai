@@ -84,7 +84,7 @@ export default function Home() {
             <div className="rounded-[28px] bg-white/95 px-6 py-8 md:px-10 md:py-10 lg:px-12 lg:py-12">
               <div className="mb-10 text-center">
                 <p className="mb-3 inline-flex items-center rounded-full bg-slate-50 px-4 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
-                  💬<MessageCircle className="h-4 w-4" /> {t("Choose how you want to talk")}
+                  {t("Choose how you want to talk")}
                 </p>
                 <h2 className="mb-3 text-3xl font-semibold text-slate-900 md:text-4xl">
                   {t("How would you like to contact us?")}

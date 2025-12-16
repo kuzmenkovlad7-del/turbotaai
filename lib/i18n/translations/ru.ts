@@ -172,7 +172,7 @@ export const ru: Record<string, string> = {
   "Your Name": "Ваше имя",
   "Email Address": "Электронная почта",
   Subject: "Тема",
-  "Your Message": "Ваше сообщение",
+  "Your message": "Ваше сообщение",
   "Message is required": "Нужно ввести сообщение",
   "Message must be at least 10 characters":
     "Сообщение должно содержать минимум 10 символов",
