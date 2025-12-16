@@ -34,17 +34,16 @@ const TURBOTA_AGENT_WEBHOOK_URL =
 
 const FALLBACK_CHAT_API = "/api/chat"
 
-/**
- * Настройки “дослушивания”
- * SILENCE_MS — сколько тишины считаем концом фразы (паузы внутри фразы можно)
- * MAX_UTTERANCE_MS — максимум длины одной фразы (длинные монологи режем)
- */
-const VAD_THRESHOLD = 0.012 // если у кого-то очень тихий микрофон -> 0.009
+// Настройки “дослушивания”
 const VOICE_START_MS = 140
 const SILENCE_MS = 2800
 const MIN_UTTERANCE_MS = 700
 const MAX_UTTERANCE_MS = 20000
 const MIN_BLOB_BYTES = 7000
+
+// ВАЖНО: порог теперь будет автокалиброваться, но базу задаём разную для desktop/mobile
+const BASE_THRESHOLD_DESKTOP = 0.0045
+const BASE_THRESHOLD_MOBILE = 0.010
 
 function extractAnswer(data: any): string {
   if (!data) return ""
@@ -99,6 +98,46 @@ function mapShortToTts(lang: string): string {
   return "en-US"
 }
 
+function isMobileUA(): boolean {
+  if (typeof navigator === "undefined") return false
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "")
+}
+
+function getDebugFlag(): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    const p = new URLSearchParams(window.location.search)
+    return p.get("debug") === "1" || localStorage.getItem("turbota_debug") === "1"
+  } catch {
+    return false
+  }
+}
+
+function getRms(analyser: AnalyserNode): number {
+  // Chrome/Edge: getFloatTimeDomainData есть
+  // Если вдруг нет — fallback на byte
+  const anyA: any = analyser as any
+  if (typeof anyA.getFloatTimeDomainData === "function") {
+    const data = new Float32Array(analyser.fftSize)
+    anyA.getFloatTimeDomainData(data)
+    let sum = 0
+    for (let i = 0; i < data.length; i++) {
+      const v = data[i]
+      sum += v * v
+    }
+    return Math.sqrt(sum / data.length)
+  }
+
+  const data = new Uint8Array(analyser.fftSize)
+  analyser.getByteTimeDomainData(data)
+  let sum = 0
+  for (let i = 0; i < data.length; i++) {
+    const v = (data[i] - 128) / 128
+    sum += v * v
+  }
+  return Math.sqrt(sum / data.length)
+}
+
 export default function VoiceCallDialog({
   isOpen,
   onClose,
@@ -120,7 +159,7 @@ export default function VoiceCallDialog({
   const voiceGenderRef = useRef<"female" | "male">("female")
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
-  // ---- refs (чтобы не было “устаревших” state в обработчиках) ----
+  // refs чтобы state не “устаревал”
   const isCallActiveRef = useRef(false)
   const isMicMutedRef = useRef(false)
   const isAiSpeakingRef = useRef(false)
@@ -142,6 +181,12 @@ export default function VoiceCallDialog({
   const lastVoiceAtRef = useRef(0)
   const utteranceStartAtRef = useRef(0)
 
+  // автокалибровка порога
+  const noiseFloorRef = useRef(0.002)
+  const lastDebugLogAtRef = useRef(0)
+  const everHadVoiceRef = useRef(false)
+  const noVoiceWarnedRef = useRef(false)
+
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -154,7 +199,6 @@ export default function VoiceCallDialog({
   }, [isAiSpeaking])
 
   useEffect(() => {
-    // на открытие диалога привязываем “базовый язык” с UI
     const lang =
       typeof (currentLanguage as any) === "string"
         ? ((currentLanguage as any) as string)
@@ -249,8 +293,7 @@ export default function VoiceCallDialog({
         return ""
       }
 
-      const text = (data.text || "").toString().trim()
-      return text
+      return (data.text || "").toString().trim()
     } catch (e) {
       console.error("[STT] fatal", e)
       return ""
@@ -323,12 +366,11 @@ export default function VoiceCallDialog({
     const cleanText = (text || "").trim()
     if (!cleanText) return
 
-    // Пока ассистент говорит — микрофон “не слушает”
     setIsAiSpeaking(true)
     isAiSpeakingRef.current = true
     setIsListening(false)
 
-    // если сейчас писали фразу — стопаем сегмент (чтобы не смешивалось)
+    // если сейчас писали — оборвём сегмент, чтобы не смешивать
     cleanupRecorder()
 
     const language = getAgentLangCode()
@@ -397,7 +439,6 @@ export default function VoiceCallDialog({
     const options: MediaRecorderOptions = {}
     if (typeof MediaRecorder === "undefined") return options
 
-    // Chrome/Android — webm opus; Safari/iOS — часто mp4
     if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
       options.mimeType = "audio/webm;codecs=opus"
     } else if (MediaRecorder.isTypeSupported("audio/webm")) {
@@ -435,7 +476,6 @@ export default function VoiceCallDialog({
       const blob = new Blob(chunksRef.current, { type: blobType })
       chunksRef.current = []
 
-      // слишком короткие/тихие — игнор
       if (duration < MIN_UTTERANCE_MS) return
       if (blob.size < MIN_BLOB_BYTES) return
       if (!isCallActiveRef.current) return
@@ -446,7 +486,6 @@ export default function VoiceCallDialog({
       const clean = (text || "").trim()
       if (!clean) return
 
-      // авто-детект uk/ru по буквам, чтобы Ольга говорила укр — и оно отвечало укр
       const detected = detectLangFromText(clean)
       if (detected) sessionLangRef.current = detected
 
@@ -460,7 +499,6 @@ export default function VoiceCallDialog({
       await handleUserText(clean)
     }
 
-    // мелкие чанки для стабильности, но отправляем только когда “дослушали”
     rec.start(250)
   }
 
@@ -479,14 +517,22 @@ export default function VoiceCallDialog({
 
   function monitorVadLoop() {
     const analyser = analyserRef.current
-    if (!analyser) return
+    const ctx = audioCtxRef.current
+    if (!analyser || !ctx) return
 
-    const data = new Float32Array(analyser.fftSize)
+    const DEBUG = getDebugFlag()
+    const base = isMobileUA() ? BASE_THRESHOLD_MOBILE : BASE_THRESHOLD_DESKTOP
+    const startedAt = Date.now()
 
     const tick = () => {
       if (!isCallActiveRef.current) return
 
-      // если микрофон выключен или ассистент говорит — стопаем запись и просто ждём
+      // если AudioContext заморожен — пробуем резюм
+      if (ctx.state === "suspended") {
+        ctx.resume().catch(() => {})
+      }
+
+      // если микрофон выключен или ассистент говорит — стопаем запись и ждём
       if (isMicMutedRef.current || isAiSpeakingRef.current) {
         if (recordingRef.current) stopUtteranceRecorder()
         voiceActiveMsRef.current = 0
@@ -495,36 +541,37 @@ export default function VoiceCallDialog({
         return
       }
 
-      analyser.getFloatTimeDomainData(data)
+      const rms = getRms(analyser)
 
-      let sum = 0
-      for (let i = 0; i < data.length; i++) {
-        const v = data[i]
-        sum += v * v
-      }
-      const rms = Math.sqrt(sum / data.length)
+      // автокалибровка noise floor (когда “тишина”)
+      // чем ниже mic на ПК — тем ниже noise floor → тем ниже threshold
+      const nf = noiseFloorRef.current
+      const nf2 = nf * 0.96 + rms * 0.04
+      noiseFloorRef.current = Math.min(Math.max(nf2, 0.0005), 0.05)
+
+      const dynamicThreshold = Math.max(base, noiseFloorRef.current * 4 + 0.0015)
       const now = Date.now()
 
-      const isVoice = rms > VAD_THRESHOLD
+      const isVoice = rms > dynamicThreshold
+
       if (isVoice) {
+        everHadVoiceRef.current = true
         if (!lastVoiceAtRef.current) lastVoiceAtRef.current = now
         lastVoiceAtRef.current = now
-        voiceActiveMsRef.current += 16 // грубо под raf
+        voiceActiveMsRef.current += 16
       } else {
         voiceActiveMsRef.current = Math.max(0, voiceActiveMsRef.current - 10)
       }
 
-      // старт записи только когда речь стабильно есть чуть-чуть
+      // старт записи, когда голос стабильно появился
       if (!recordingRef.current && isVoice && voiceActiveMsRef.current >= VOICE_START_MS) {
         startNewUtteranceRecorder(mediaStreamRef.current!)
         setIsListening(true)
       }
 
-      // если пишем — проверяем “тишину” и “макс длительность”
       if (recordingRef.current) {
         const started = utteranceStartAtRef.current || now
         const dur = now - started
-
         const sinceVoice = lastVoiceAtRef.current ? now - lastVoiceAtRef.current : 0
 
         if (dur >= MAX_UTTERANCE_MS) {
@@ -532,6 +579,29 @@ export default function VoiceCallDialog({
         } else if (lastVoiceAtRef.current && sinceVoice >= SILENCE_MS && dur >= MIN_UTTERANCE_MS) {
           stopUtteranceRecorder()
         }
+      }
+
+      // если на ПК вообще нет энергии (или выбран не тот input) — покажем подсказку
+      if (!noVoiceWarnedRef.current) {
+        const elapsed = now - startedAt
+        if (elapsed > 4500 && !everHadVoiceRef.current) {
+          noVoiceWarnedRef.current = true
+          setNetworkError(
+            "На ПК не вижу сигнал микрофона. Проверь: разрешение микрофона в адресной строке, выбранный input в системе/браузере, и что микрофон не занят другим приложением. Для логов открой страницу с ?debug=1.",
+          )
+        }
+      }
+
+      if (DEBUG && now - lastDebugLogAtRef.current > 1000) {
+        lastDebugLogAtRef.current = now
+        // eslint-disable-next-line no-console
+        console.log("[VAD]", {
+          rms: Number(rms.toFixed(5)),
+          noise: Number(noiseFloorRef.current.toFixed(5)),
+          thr: Number(dynamicThreshold.toFixed(5)),
+          ctx: ctx.state,
+          rec: recorderRef.current?.state || "none",
+        })
       }
 
       rafRef.current = requestAnimationFrame(tick)
@@ -545,6 +615,12 @@ export default function VoiceCallDialog({
 
     setIsConnecting(true)
     setNetworkError(null)
+
+    // reset diagnostics
+    noiseFloorRef.current = 0.002
+    lastDebugLogAtRef.current = 0
+    everHadVoiceRef.current = false
+    noVoiceWarnedRef.current = false
 
     try {
       if (
@@ -561,10 +637,16 @@ export default function VoiceCallDialog({
         return
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        } as any,
+      })
+
       mediaStreamRef.current = stream
 
-      // аудиограф для VAD
       const AudioCtx = (window.AudioContext ||
         (window as any).webkitAudioContext) as typeof AudioContext
       const ctx = new AudioCtx()
@@ -583,7 +665,6 @@ export default function VoiceCallDialog({
 
       source.connect(analyser)
 
-      // сброс VAD состояния
       cleanupRecorder()
       voiceActiveMsRef.current = 0
       lastVoiceAtRef.current = 0
@@ -599,7 +680,6 @@ export default function VoiceCallDialog({
 
       setIsListening(true)
 
-      // старт мониторинга
       stopMonitoring()
       monitorVadLoop()
 
