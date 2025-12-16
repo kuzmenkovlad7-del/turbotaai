@@ -3,91 +3,69 @@ import OpenAI from "openai"
 
 export const runtime = "nodejs"
 
-function extFromContentType(mime: string | null | undefined): string {
-  const ct = String(mime || "").toLowerCase()
-  if (ct.includes("mp4")) return "mp4"
-  if (ct.includes("mpeg")) return "mp3"
-  if (ct.includes("wav")) return "wav"
-  if (ct.includes("webm")) return "webm"
-  if (ct.includes("ogg")) return "ogg"
-  return "webm"
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+})
+
+function pickFilename(contentType: string): string {
+  const ct = String(contentType || "").toLowerCase()
+
+  // iOS/Safari MediaRecorder чаще всего отдаёт audio/mp4
+  if (ct.includes("mp4") || ct.includes("m4a")) return "speech.mp4"
+
+  // иногда встречается mpeg/mp3
+  if (ct.includes("mpeg") || ct.includes("mp3")) return "speech.mp3"
+
+  if (ct.includes("wav")) return "speech.wav"
+  if (ct.includes("ogg")) return "speech.ogg"
+
+  // дефолт под Chrome/Android
+  if (ct.includes("webm")) return "speech.webm"
+
+  // запасной вариант
+  return "speech.audio"
 }
 
-function normalizeWhisperLanguage(value: string | null): string | undefined {
-  if (!value) return undefined
-  const v = value.toLowerCase().trim()
-  if (!v) return undefined
-
-  // поддержка форматов типа "uk-UA", "ru-RU"
-  if (v.startsWith("uk")) return "uk"
-  if (v.startsWith("ru")) return "ru"
-  if (v.startsWith("en")) return "en"
-  // если пришло что-то экзотическое — отдаём как есть (Whisper может проигнорировать)
-  return v
+function pickLanguage(req: NextRequest): string | undefined {
+  const raw = (req.headers.get("x-lang") || "").toLowerCase()
+  if (raw.startsWith("uk")) return "uk"
+  if (raw.startsWith("ru")) return "ru"
+  if (raw.startsWith("en")) return "en"
+  return undefined // пусть Whisper сам детектит
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const ctHeader = req.headers.get("content-type") || ""
-    const mime = ctHeader.split(";")[0].trim()
+    const contentType =
+      req.headers.get("content-type") || "application/octet-stream"
 
-    const languageFromHeader =
-      req.headers.get("x-lang") ||
-      req.nextUrl.searchParams.get("lang") ||
-      req.nextUrl.searchParams.get("language")
+    const arrayBuffer = await req.arrayBuffer()
+    const byteLength = arrayBuffer?.byteLength ?? 0
 
-    const language = normalizeWhisperLanguage(languageFromHeader)
-
-    let file: File | null = null
-    let usedMime = mime
-
-    // 1) form-data: ожидаем key "file"
-    if (ctHeader.toLowerCase().includes("multipart/form-data")) {
-      const form = await req.formData()
-      const f = form.get("file")
-
-      if (!f || !(f instanceof File)) {
-        return NextResponse.json(
-          { success: false, error: "No file provided in form-data under key 'file'" },
-          { status: 400 },
-        )
-      }
-
-      file = f
-      usedMime = f.type || usedMime
-    } else {
-      // 2) raw audio: MediaRecorder присылает просто bytes
-      const ab = await req.arrayBuffer()
-      if (!ab || ab.byteLength < 4000) {
-        return NextResponse.json(
-          { success: false, error: "Audio payload is too small" },
-          { status: 400 },
-        )
-      }
-
-      const bytes = new Uint8Array(ab)
-      const ext = extFromContentType(usedMime)
-      file = new File([bytes], `speech.${ext}`, {
-        type: usedMime || "application/octet-stream",
-      })
+    // слишком маленький фрагмент — считаем тишиной
+    if (!arrayBuffer || byteLength < 2000) {
+      return NextResponse.json({ success: true, text: "" }, { status: 200 })
     }
 
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const buffer = Buffer.from(arrayBuffer)
+    const filename = pickFilename(contentType)
+    const language = pickLanguage(req)
 
-    const model = process.env.OPENAI_STT_MODEL || "whisper-1"
+    // Node 18+ / Next.js route handler: File доступен глобально
+    const file = new File([buffer], filename, { type: contentType })
 
-    const result = await client.audio.transcriptions.create({
+    const transcription = await openai.audio.transcriptions.create({
       file,
-      model,
+      model: "whisper-1",
       ...(language ? { language } : {}),
     })
 
-    const text = ((result as any)?.text || "").toString().trim()
-    return NextResponse.json({ success: true, text })
-  } catch (err: any) {
-    console.error("[/api/stt] error:", err)
+    const text = (transcription.text ?? "").trim()
+    return NextResponse.json({ success: true, text }, { status: 200 })
+  } catch (error) {
+    console.error("[/api/stt] error:", error)
     return NextResponse.json(
-      { success: false, error: err?.message || "STT error" },
+      { success: false, error: "Audio file might be corrupted or unsupported" },
       { status: 500 },
     )
   }
