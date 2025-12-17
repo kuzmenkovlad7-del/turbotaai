@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,7 @@ const FALLBACK_CHAT_API = "/api/chat"
 
 function extractAnswer(data: any): string {
   if (!data) return ""
+
   if (typeof data === "string") return data.trim()
 
   if (Array.isArray(data) && data.length > 0) {
@@ -70,41 +71,6 @@ function extractAnswer(data: any): string {
   return ""
 }
 
-function diffTranscript(prev: string, full: string): string {
-  const normalize = (s: string) =>
-    s
-      .toLowerCase()
-      .replace(/[.,!?;:«»"“”‚‘’…]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-
-  full = full.trim()
-  if (!full) return ""
-  if (!prev) return full
-
-  const prevNorm = normalize(prev)
-  const fullNorm = normalize(full)
-
-  if (!prevNorm || !fullNorm) return full
-
-  const prevWords = prevNorm.split(" ")
-  const fullWords = fullNorm.split(" ")
-
-  const maxCommon = Math.min(prevWords.length, fullWords.length)
-  let common = 0
-
-  while (common < maxCommon && prevWords[common] === fullWords[common]) {
-    common++
-  }
-
-  if (common === 0) return full
-
-  const rawTokens = full.split(/\s+/)
-  if (common >= rawTokens.length) return ""
-
-  return rawTokens.slice(common).join(" ").trim()
-}
-
 export default function VoiceCallDialog({
   isOpen,
   onClose,
@@ -117,35 +83,40 @@ export default function VoiceCallDialog({
 
   const [isCallActive, setIsCallActive] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
-  const [isListening, setIsListening] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
+  const [isListening, setIsListening] = useState(false)
   const [messages, setMessages] = useState<VoiceMessage[]>([])
   const [networkError, setNetworkError] = useState<string | null>(null)
 
-  const voiceGenderRef = useRef<"female" | "male">("female")
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
+  const voiceGenderRef = useRef<"female" | "male">("female")
 
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
+  const pendingStopSendRef = useRef(false)
   const isSttBusyRef = useRef(false)
-  const lastTranscriptRef = useRef("")
-  const isCallActiveRef = useRef(false)
 
-  const isMicMutedRef = useRef(false)
+  const isCallActiveRef = useRef(false)
   const isAiSpeakingRef = useRef(false)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  useEffect(() => {
-    isMicMutedRef.current = isMicMuted
-  }, [isMicMuted])
+  // endpointing (тишина)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const analyserDataRef = useRef<Uint8Array | null>(null)
+  const rafRef = useRef<number | null>(null)
 
-  useEffect(() => {
-    isAiSpeakingRef.current = isAiSpeaking
-  }, [isAiSpeaking])
+  const lastVoiceAtRef = useRef<number>(0)
+  const segmentStartAtRef = useRef<number>(0)
+  const hasSpeechRef = useRef(false)
+
+  const END_SILENCE_MS = 2000
+  const MAX_SEGMENT_MS = 45000
+  const RMS_THRESHOLD = 0.015
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -170,44 +141,28 @@ export default function VoiceCallDialog({
   }
 
   function getCurrentGender(): "MALE" | "FEMALE" {
-    const g = voiceGenderRef.current || "female"
-    return g === "male" ? "MALE" : "FEMALE"
+    return voiceGenderRef.current === "male" ? "MALE" : "FEMALE"
   }
 
-  function setAudioTrackEnabled(enabled: boolean) {
-    const stream = mediaStreamRef.current
-    if (!stream) return
-    const track = stream.getAudioTracks?.()?.[0]
-    if (!track) return
-    try {
-      track.enabled = enabled
-    } catch (e) {
-      console.error("Audio track enable error", e)
+  useEffect(() => {
+    if (!isCallActive) {
+      setIsListening(false)
+      return
     }
-  }
+    setIsListening(!isMicMuted && !isAiSpeaking)
+  }, [isCallActive, isMicMuted, isAiSpeaking])
 
-  async function maybeSendStt() {
+  async function sendSttBlob(blob: Blob) {
     if (!isCallActiveRef.current) return
-    if (isMicMutedRef.current) return
-    if (isAiSpeakingRef.current) return
-
     if (isSttBusyRef.current) return
-    if (!audioChunksRef.current.length) return
 
-    const recMime = mediaRecorderRef.current?.mimeType || ""
-    const firstChunkMime = audioChunksRef.current[0]?.type || ""
-    const rawMime = (recMime || firstChunkMime || "audio/webm").toString()
-
-    // убираем ";codecs=opus"
-    const baseMime = rawMime.split(";")[0].trim() || "audio/webm"
-
-    const blob = new Blob(audioChunksRef.current, { type: baseMime })
-
-    if (blob.size < 8000) return
+    // защита от пустых/крошечных блобов
+    if (!blob || blob.size < 1200) return
 
     try {
       isSttBusyRef.current = true
-      logDebug("[STT] sending audio blob size=", blob.size, "type=", blob.type)
+
+      logDebug("[STT] send blob size=", blob.size, "type=", blob.type || "")
 
       const res = await fetch("/api/stt", {
         method: "POST",
@@ -227,141 +182,30 @@ export default function VoiceCallDialog({
       }
 
       if (!res.ok || !data || data.success === false) {
-        console.error("[STT] error response:", res.status, raw)
-        setNetworkError(t("Connection error. Please try again."))
+        console.error("[STT] error:", res.status, raw)
         return
       }
 
-      setNetworkError(null)
+      const text = String(data.text || "").trim()
+      logDebug('[STT] text="' + text + '"')
 
-      const fullText = (data.text || "").toString().trim()
-      logDebug('[STT] transcript full="' + fullText + '"')
-
-      if (!fullText) return
-
-      const prev = lastTranscriptRef.current
-      const delta = diffTranscript(prev, fullText)
-      lastTranscriptRef.current = fullText
-
-      if (!delta) return
+      if (!text) return
+      if (isAiSpeakingRef.current) return
+      if (isMicMuted) return
 
       const userMsg: VoiceMessage = {
         id: `${Date.now()}-user`,
         role: "user",
-        text: delta,
+        text,
       }
 
-      setMessages((prevMsgs) => [...prevMsgs, userMsg])
-      await handleUserText(delta)
-    } catch (error: any) {
-      console.error("[STT] fatal error", error)
-      setNetworkError(t("Connection error. Please try again."))
+      setMessages((prev) => [...prev, userMsg])
+      await handleUserText(text)
+    } catch (e) {
+      console.error("[STT] fatal:", e)
     } finally {
       isSttBusyRef.current = false
     }
-  }
-
-  function speakText(text: string) {
-    if (typeof window === "undefined") return
-
-    const cleanText = text?.trim()
-    if (!cleanText) return
-
-    const langCode = computeLangCode()
-    const gender = getCurrentGender()
-
-    const beginSpeaking = () => {
-      setIsAiSpeaking(true)
-      setIsListening(false)
-
-      // максимально надёжно: выключаем трек микрофона + пауза рекордера
-      setAudioTrackEnabled(false)
-
-      const rec = mediaRecorderRef.current
-      if (rec && rec.state === "recording") {
-        try {
-          rec.pause()
-        } catch (e) {
-          console.error("Recorder pause error", e)
-        }
-      }
-    }
-
-    const finishSpeaking = () => {
-      setIsAiSpeaking(false)
-
-      // возвращаем микрофон только если пользователь сам не выключил
-      setAudioTrackEnabled(!isMicMutedRef.current)
-
-      const rec = mediaRecorderRef.current
-      if (rec && rec.state === "paused" && isCallActiveRef.current && !isMicMutedRef.current) {
-        try {
-          rec.resume()
-        } catch (e) {
-          console.error("Recorder resume error", e)
-        }
-      }
-
-      // слушаем только когда реально можно слушать
-      if (isCallActiveRef.current && !isMicMutedRef.current) {
-        setIsListening(true)
-      }
-    }
-
-    ;(async () => {
-      try {
-        const res = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: cleanText, language: langCode, gender }),
-        })
-
-        const raw = await res.text()
-        let data: any = null
-        try {
-          data = raw ? JSON.parse(raw) : null
-        } catch {
-          data = null
-        }
-
-        if (!res.ok || !data || data.success === false || !data.audioContent) {
-          console.error("[TTS] API error", data || raw)
-          finishSpeaking()
-          return
-        }
-
-        const audioUrl = `data:audio/mp3;base64,${data.audioContent}`
-
-        if (audioRef.current) {
-          audioRef.current.pause()
-          audioRef.current = null
-        }
-
-        const audio = new Audio(audioUrl)
-        audioRef.current = audio
-
-        audio.onplay = () => beginSpeaking()
-        audio.onended = () => {
-          finishSpeaking()
-          audioRef.current = null
-        }
-        audio.onerror = (e) => {
-          console.error("[TTS] audio playback error", e)
-          finishSpeaking()
-          audioRef.current = null
-        }
-
-        try {
-          await audio.play()
-        } catch (e) {
-          console.error("[TTS] play() rejected", e)
-          finishSpeaking()
-        }
-      } catch (error) {
-        console.error("[TTS] fetch error:", error)
-        finishSpeaking()
-      }
-    })()
   }
 
   async function handleUserText(text: string) {
@@ -374,6 +218,8 @@ export default function VoiceCallDialog({
       (webhookUrl && webhookUrl.trim()) ||
       TURBOTA_AGENT_WEBHOOK_URL.trim() ||
       FALLBACK_CHAT_API
+
+    logDebug("[CHAT] ->", resolvedWebhook, "lang=", langCode)
 
     try {
       const res = await fetch(resolvedWebhook, {
@@ -420,21 +266,288 @@ export default function VoiceCallDialog({
     }
   }
 
+  function cleanupAnalyser() {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    analyserRef.current = null
+    analyserDataRef.current = null
+
+    if (audioCtxRef.current) {
+      try {
+        audioCtxRef.current.close()
+      } catch {}
+      audioCtxRef.current = null
+    }
+  }
+
+  function stopRecorder(reason: "silence" | "end") {
+    const rec = mediaRecorderRef.current
+    if (!rec) return
+    if (rec.state === "inactive") return
+
+    pendingStopSendRef.current = reason === "silence"
+
+    try {
+      rec.stop()
+    } catch (e) {
+      console.error("Recorder stop error", e)
+    }
+  }
+
+  function createRecorder(stream: MediaStream) {
+    const options: MediaRecorderOptions = {}
+
+    if (typeof MediaRecorder !== "undefined") {
+      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+        options.mimeType = "audio/webm;codecs=opus"
+      } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+        options.mimeType = "audio/webm"
+      } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+        options.mimeType = "audio/mp4"
+      }
+    }
+
+    const recorder = new MediaRecorder(stream, options)
+
+    recorder.onstart = () => {
+      logDebug("[Recorder] onstart mime=", recorder.mimeType || "")
+    }
+
+    recorder.ondataavailable = (event: BlobEvent) => {
+      if (event.data && event.data.size > 0) {
+        audioChunksRef.current.push(event.data)
+        logDebug("[Recorder] data size=", event.data.size, "chunks=", audioChunksRef.current.length)
+      }
+    }
+
+    recorder.onstop = () => {
+      logDebug("[Recorder] onstop pendingSend=", pendingStopSendRef.current)
+
+      const shouldSend = pendingStopSendRef.current
+      pendingStopSendRef.current = false
+
+      const mime = recorder.mimeType || audioChunksRef.current[0]?.type || "audio/webm"
+      const blob = new Blob(audioChunksRef.current, { type: mime })
+      audioChunksRef.current = []
+      hasSpeechRef.current = false
+      segmentStartAtRef.current = Date.now()
+      lastVoiceAtRef.current = Date.now()
+
+      if (shouldSend && blob.size >= 1200 && !isAiSpeakingRef.current) {
+        void sendSttBlob(blob)
+      }
+
+      // перезапуск сегмента, если звонок ещё активен
+      if (isCallActiveRef.current) {
+        try {
+          const next = createRecorder(stream)
+          mediaRecorderRef.current = next
+          next.start(250) // частые маленькие куски — стабильно на разных девайсах
+          if (isMicMuted || isAiSpeakingRef.current) {
+            try {
+              next.pause()
+            } catch {}
+          }
+        } catch (e) {
+          console.error("[Recorder] restart error", e)
+        }
+      }
+    }
+
+    recorder.onerror = (event: any) => {
+      console.error("[Recorder] error", event)
+    }
+
+    return recorder
+  }
+
+  function startAnalyser(stream: MediaStream) {
+    try {
+      const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext
+      if (!AC) return
+
+      const ctx: AudioContext = new AC()
+      audioCtxRef.current = ctx
+
+      const src = ctx.createMediaStreamSource(stream)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 2048
+      src.connect(analyser)
+
+      const data = new Uint8Array(analyser.fftSize)
+      analyserRef.current = analyser
+      analyserDataRef.current = data
+
+      lastVoiceAtRef.current = Date.now()
+      segmentStartAtRef.current = Date.now()
+      hasSpeechRef.current = false
+
+      const tick = () => {
+        if (!isCallActiveRef.current) return
+
+        const an = analyserRef.current
+        const arr = analyserDataRef.current
+        if (an && arr) {
+          an.getByteTimeDomainData(arr)
+
+          let sum = 0
+          for (let i = 0; i < arr.length; i++) {
+            const v = (arr[i] - 128) / 128
+            sum += v * v
+          }
+          const rms = Math.sqrt(sum / arr.length)
+
+          const now = Date.now()
+
+          if (!isAiSpeakingRef.current && !isMicMuted) {
+            if (rms > RMS_THRESHOLD) {
+              hasSpeechRef.current = true
+              lastVoiceAtRef.current = now
+            }
+
+            // если была речь и наступила тишина — закрываем сегмент и отправляем
+            if (
+              hasSpeechRef.current &&
+              now - lastVoiceAtRef.current > END_SILENCE_MS &&
+              mediaRecorderRef.current &&
+              mediaRecorderRef.current.state === "recording"
+            ) {
+              logDebug("[VAD] silence -> stop segment")
+              stopRecorder("silence")
+            }
+
+            // защита от слишком длинного сегмента
+            if (
+              hasSpeechRef.current &&
+              now - segmentStartAtRef.current > MAX_SEGMENT_MS &&
+              mediaRecorderRef.current &&
+              mediaRecorderRef.current.state === "recording"
+            ) {
+              logDebug("[VAD] max segment -> stop segment")
+              stopRecorder("silence")
+            }
+          }
+        }
+
+        rafRef.current = requestAnimationFrame(tick)
+      }
+
+      rafRef.current = requestAnimationFrame(tick)
+
+      // иногда контекст стартует suspended
+      if (ctx.state === "suspended") {
+        void ctx.resume().catch(() => {})
+      }
+    } catch (e) {
+      console.error("[VAD] init error", e)
+    }
+  }
+
+  function speakText(text: string) {
+    if (typeof window === "undefined") return
+
+    const cleanText = String(text || "").trim()
+    if (!cleanText) return
+
+    const langCode = computeLangCode()
+    const gender = getCurrentGender()
+
+    const beginSpeaking = () => {
+      isAiSpeakingRef.current = true
+      setIsAiSpeaking(true)
+
+      // во время TTS не слушаем и не буферим пользовательскую речь
+      hasSpeechRef.current = false
+      audioChunksRef.current = []
+
+      const rec = mediaRecorderRef.current
+      if (rec && rec.state === "recording") {
+        try {
+          rec.pause()
+        } catch {}
+      }
+    }
+
+    const finishSpeaking = () => {
+      isAiSpeakingRef.current = false
+      setIsAiSpeaking(false)
+
+      const rec = mediaRecorderRef.current
+      if (rec && rec.state === "paused" && isCallActiveRef.current && !isMicMuted) {
+        try {
+          rec.resume()
+        } catch {}
+      }
+
+      lastVoiceAtRef.current = Date.now()
+      segmentStartAtRef.current = Date.now()
+      hasSpeechRef.current = false
+    }
+
+    ;(async () => {
+      try {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: cleanText, language: langCode, gender }),
+        })
+
+        const raw = await res.text()
+        let data: any = null
+        try {
+          data = raw ? JSON.parse(raw) : null
+        } catch {
+          data = null
+        }
+
+        if (!res.ok || !data || data.success === false || !data.audioContent) {
+          console.error("[TTS] API error", data || raw)
+          return
+        }
+
+        const audioUrl = `data:audio/mp3;base64,${data.audioContent}`
+
+        if (audioRef.current) {
+          audioRef.current.pause()
+          audioRef.current = null
+        }
+
+        const audio = new Audio(audioUrl)
+        audioRef.current = audio
+
+        audio.onended = () => {
+          finishSpeaking()
+          audioRef.current = null
+        }
+        audio.onerror = () => {
+          finishSpeaking()
+          audioRef.current = null
+        }
+
+        beginSpeaking()
+
+        try {
+          await audio.play()
+        } catch (e) {
+          console.error("[TTS] play() rejected", e)
+          finishSpeaking()
+        }
+      } catch (e) {
+        console.error("[TTS] fetch error", e)
+      }
+    })()
+  }
+
   const startCall = async (gender: "female" | "male") => {
     voiceGenderRef.current = gender
 
     setIsConnecting(true)
     setNetworkError(null)
-    setIsMicMuted(false)
-    setIsAiSpeaking(false)
-    setIsListening(false)
 
     try {
-      if (
-        typeof navigator === "undefined" ||
-        !navigator.mediaDevices ||
-        !navigator.mediaDevices.getUserMedia
-      ) {
+      if (!navigator?.mediaDevices?.getUserMedia) {
         setNetworkError(
           t("Microphone access is not supported in this browser. Please use the latest version of Chrome, Edge or Safari."),
         )
@@ -445,53 +558,26 @@ export default function VoiceCallDialog({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       mediaStreamRef.current = stream
 
-      // трек включаем сразу
-      setAudioTrackEnabled(true)
-
-      const options: MediaRecorderOptions = {}
-      if (typeof MediaRecorder !== "undefined") {
-        // ВАЖНО: на десктопе Chrome не шлём "audio/webm;codecs=opus" в mimeType — оставляем "audio/webm"
-        if (MediaRecorder.isTypeSupported("audio/webm")) {
-          options.mimeType = "audio/webm"
-        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
-          options.mimeType = "audio/mp4"
-        }
-      }
-
-      const recorder = new MediaRecorder(stream, options)
-      mediaRecorderRef.current = recorder
-
-      audioChunksRef.current = []
-      isSttBusyRef.current = false
-      lastTranscriptRef.current = ""
-
-      recorder.onstart = () => {
-        setIsListening(true)
-      }
-
-      recorder.ondataavailable = (event: BlobEvent) => {
-        if (event.data && event.data.size > 0) {
-          audioChunksRef.current.push(event.data)
-          void maybeSendStt()
-        }
-      }
-
-      recorder.onstop = () => {
-        setIsListening(false)
-      }
-
-      recorder.onerror = (event: any) => {
-        console.error("[Recorder] error", event)
-        setNetworkError(t("Connection error. Please try again."))
-      }
-
-      recorder.start(4000)
-
       isCallActiveRef.current = true
       setIsCallActive(true)
+
+      // рекордер-сегменты
+      audioChunksRef.current = []
+      pendingStopSendRef.current = false
+      isSttBusyRef.current = false
+
+      const recorder = createRecorder(stream)
+      mediaRecorderRef.current = recorder
+      recorder.start(250)
+
+      // анализатор тишины (чтобы не “не дослушивает”)
+      startAnalyser(stream)
+
       setIsConnecting(false)
+
+      logDebug("[CALL] started gender=", gender)
     } catch (error: any) {
-      console.error("[Recorder] getUserMedia error:", error)
+      console.error("[CALL] getUserMedia error:", error)
 
       const name = error?.name
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
@@ -509,39 +595,37 @@ export default function VoiceCallDialog({
       setIsConnecting(false)
       isCallActiveRef.current = false
       setIsCallActive(false)
-      setIsListening(false)
     }
   }
 
   const endCall = () => {
     isCallActiveRef.current = false
     setIsCallActive(false)
-    setIsListening(false)
     setIsMicMuted(false)
+    isAiSpeakingRef.current = false
     setIsAiSpeaking(false)
     setNetworkError(null)
+    setIsListening(false)
 
+    pendingStopSendRef.current = false
     audioChunksRef.current = []
-    lastTranscriptRef.current = ""
-    isSttBusyRef.current = false
+    hasSpeechRef.current = false
+
+    cleanupAnalyser()
 
     const rec = mediaRecorderRef.current
+    mediaRecorderRef.current = null
     if (rec && rec.state !== "inactive") {
       try {
         rec.stop()
-      } catch (e) {
-        console.error("Recorder stop error", e)
-      }
+      } catch {}
     }
-    mediaRecorderRef.current = null
 
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => {
         try {
           track.stop()
-        } catch (e) {
-          console.error("Track stop error", e)
-        }
+        } catch {}
       })
       mediaStreamRef.current = null
     }
@@ -550,42 +634,30 @@ export default function VoiceCallDialog({
       audioRef.current.pause()
       audioRef.current = null
     }
-
-    if (typeof window !== "undefined" && (window as any).speechSynthesis) {
-      ;(window as any).speechSynthesis.cancel()
-    }
   }
 
   const toggleMic = () => {
     const next = !isMicMuted
     setIsMicMuted(next)
 
-    // включаем/выключаем трек
-    setAudioTrackEnabled(!next)
-
     const rec = mediaRecorderRef.current
     if (!rec) return
 
     if (next) {
-      // mute
       if (rec.state === "recording") {
         try {
           rec.pause()
-        } catch (e) {
-          console.error("Recorder pause error", e)
-        }
+        } catch {}
       }
-      setIsListening(false)
     } else {
-      // unmute
       if (rec.state === "paused" && isCallActiveRef.current && !isAiSpeakingRef.current) {
         try {
           rec.resume()
-        } catch (e) {
-          console.error("Recorder resume error", e)
-        }
+        } catch {}
       }
-      if (isCallActiveRef.current && !isAiSpeakingRef.current) setIsListening(true)
+      lastVoiceAtRef.current = Date.now()
+      segmentStartAtRef.current = Date.now()
+      hasSpeechRef.current = false
     }
   }
 
@@ -626,19 +698,18 @@ export default function VoiceCallDialog({
     >
       <DialogContent className="max-w-xl border-none bg-transparent p-0">
         <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/10">
-          {/* padding справа чтобы заголовок не залезал под крестик DialogContent на мобилках */}
-          <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 pr-14 text-white">
-            <div className="flex min-w-0 items-start justify-between gap-3">
+          <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <DialogTitle className="flex min-w-0 items-center gap-2 text-lg font-semibold">
-                  <span className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-full bg-white/10">
+                <DialogTitle className="flex items-center gap-2 pr-10 text-base font-semibold sm:text-lg">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10">
                     <Phone className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 break-words">
                     {t("Voice session with AI-psychologist")}
                   </span>
                 </DialogTitle>
-                <DialogDescription className="mt-1 pr-2 text-xs text-indigo-100">
+                <DialogDescription className="mt-1 text-xs text-indigo-100">
                   {t("You can talk out loud, the assistant will listen, answer and voice the reply.")}
                 </DialogDescription>
               </div>
@@ -646,7 +717,7 @@ export default function VoiceCallDialog({
           </DialogHeader>
 
           <div className="flex h-[500px] flex-col md:h-[540px]">
-            <ScrollArea className="flex-1 px-5 pt-4 pb-2">
+            <ScrollArea className="flex-1 px-5 pb-2 pt-4">
               <div ref={scrollRef} className="max-h-full space-y-3 pr-1 text-xs md:text-sm">
                 {!isCallActive && messages.length === 0 && (
                   <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-slate-700">
