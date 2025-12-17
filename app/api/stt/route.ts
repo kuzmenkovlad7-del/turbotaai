@@ -1,49 +1,61 @@
-import { NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
 
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
+  apiKey: process.env.OPENAI_API_KEY,
 })
 
-function pickExt(contentType: string) {
-  const ct = (contentType || "").toLowerCase()
-  if (ct.includes("mp4") || ct.includes("m4a")) return "mp4"
-  if (ct.includes("mpeg") || ct.includes("mp3")) return "mp3"
-  if (ct.includes("wav")) return "wav"
-  if (ct.includes("webm")) return "webm"
-  return "webm"
+function pickFilename(ctRaw: string | null): string {
+  const ct = (ctRaw || "").toLowerCase()
+  if (ct.includes("webm")) return "speech.webm"
+  if (ct.includes("mp4")) return "speech.mp4"
+  if (ct.includes("mpeg") || ct.includes("mp3")) return "speech.mp3"
+  if (ct.includes("wav")) return "speech.wav"
+  if (ct.includes("ogg")) return "speech.ogg"
+  return "speech.audio"
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const contentType =
-      req.headers.get("content-type") || "application/octet-stream"
-
-    const arrayBuffer = await req.arrayBuffer()
-    const size = arrayBuffer?.byteLength ?? 0
-
-    // очень маленькие куски — это тишина/шум
-    if (!arrayBuffer || size < 1200) {
-      return NextResponse.json({ success: true, text: "" }, { status: 200 })
+    if (!process.env.OPENAI_API_KEY) {
+      return Response.json(
+        { success: false, error: "OPENAI_API_KEY is not set" },
+        { status: 500 },
+      )
     }
 
-    const buffer = Buffer.from(arrayBuffer)
-    const ext = pickExt(contentType)
-    const file = new File([buffer], `speech.${ext}`, { type: contentType })
+    const ct = req.headers.get("content-type")
+    const ab = await req.arrayBuffer()
+    if (!ab || ab.byteLength === 0) {
+      return Response.json(
+        { success: false, error: "Empty audio body" },
+        { status: 400 },
+      )
+    }
 
-    const transcription = await openai.audio.transcriptions.create({
-      file,
-      model: "whisper-1",
+    const url = new URL(req.url)
+    const lang = (url.searchParams.get("lang") || "").toLowerCase()
+    const language =
+      lang === "uk" || lang === "ru" || lang === "en" ? (lang as any) : undefined
+
+    const bytes = new Uint8Array(ab)
+    const blob = new Blob([bytes], { type: ct || "application/octet-stream" })
+    const file = new File([blob], pickFilename(ct), {
+      type: ct || "application/octet-stream",
     })
 
-    const text = (transcription.text ?? "").trim()
-    return NextResponse.json({ success: true, text }, { status: 200 })
-  } catch (error) {
-    console.error("[/api/stt] error:", error)
-    return NextResponse.json(
-      { success: false, error: "Audio file might be corrupted or unsupported" },
+    const tr = await openai.audio.transcriptions.create({
+      file,
+      model: "whisper-1",
+      language,
+    })
+
+    return Response.json({ success: true, text: tr.text || "" })
+  } catch (e: any) {
+    return Response.json(
+      { success: false, error: e?.message || "STT error" },
       { status: 500 },
     )
   }
