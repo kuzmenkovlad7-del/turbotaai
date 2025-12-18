@@ -103,6 +103,24 @@ function diffTranscript(prev: string, full: string): string {
   return rawTokens.slice(common).join(" ").trim()
 }
 
+
+function stripGreetingAndDedupe(raw: string, lastNorm: string) {
+  const t = (raw || "").trim()
+  if (!t) return { text: "", norm: lastNorm }
+
+  // типичная галлюцинация/эхо в начале сегмента
+  const cleaned = t.replace(/^(вітаю|привіт|привет|hello|hi)\s*[!.,—-]*\s*/i, "").trim()
+
+  const norm = cleaned
+    .toLowerCase()
+    .replace(/[.,!?;:«»"“”‚‘’…]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  if (!norm || norm === lastNorm) return { text: "", norm: lastNorm }
+  return { text: cleaned, norm }
+}
+
 export default function VoiceCallDialog({
   isOpen,
   onClose,
@@ -310,10 +328,11 @@ export default function VoiceCallDialog({
       isSttBusyRef.current = true
       log("[STT] send", { reason, size: blob.size, sentIdx, totalChunks: chunks.length, type: blob.type })
 
-      const res = await fetch("/api/stt", {
+      const res = await fetch("/api/stt?lang=uk", {
         method: "POST",
         headers: {
           "Content-Type": blob.type || "application/octet-stream",
+          "x-stt-language": "uk",
           "X-STT-Lang": computeLangCode(),
         } as any,
         body: blob,
@@ -339,11 +358,7 @@ export default function VoiceCallDialog({
       log('[STT] transcript full="' + fullText + '"')
       if (!fullText) return
 
-      const prev = lastTranscriptRef.current
-      const delta = diffTranscript(prev, fullText)
-      lastTranscriptRef.current = fullText
-
-      if (!delta) {
+      const delta = cleanedTextif (!delta) {
         log("[STT] no delta")
         return
       }
@@ -523,7 +538,7 @@ export default function VoiceCallDialog({
     })()
 
     const hangoverMs = isMobile ? 2080 : 1200
-    const maxUtteranceMs = 8000
+    const maxUtteranceMs = 25000
 
     const tick = () => {
       analyser.getByteTimeDomainData(data)
