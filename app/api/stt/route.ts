@@ -48,7 +48,8 @@ export async function POST(req: NextRequest) {
     const transcription = await openai.audio.transcriptions.create({
       file,
       model: "whisper-1",
-      ...(lang ? { language: lang } : {}),
+      language: (lang ?? "uk"),
+      prompt: "Transcribe in Ukrainian (uk). Do not add words that were not spoken.",
     })
 
     const text = (transcription.text ?? "").trim()
