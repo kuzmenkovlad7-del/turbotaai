@@ -441,12 +441,6 @@ async function maybeSendStt(reason: string) {
       audioChunksRef.current = []
       sentIdxRef.current = 0
       setIsAiSpeaking(true)
-      const rec = mediaRecorderRef.current
-      if (rec && rec.state === "recording") {
-        try {
-          rec.pause()
-        } catch {}
-      }
     }
 
     const finish = () => {
@@ -456,12 +450,6 @@ async function maybeSendStt(reason: string) {
       audioChunksRef.current = []
       sentIdxRef.current = 0
       setIsAiSpeaking(false)
-      const rec = mediaRecorderRef.current
-      if (rec && rec.state === "paused" && isCallActiveRef.current && !isMicMutedRef.current) {
-        try {
-          rec.resume()
-        } catch {}
-      }
     }
 
     ;(async () => {
@@ -918,7 +906,7 @@ async function maybeSendStt(reason: string) {
                 )}
 
                 {!isCallActive && messages.length === 0 && (
-                  <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-slate-700">
+                  <div data-no-translate="true" translate="no" className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-slate-700">
                     <p className="mb-1 font-medium text-slate-900">{t("How it works")}</p>
                     <p className="mb-2">
                       {t("Choose a voice and start the session. The assistant will listen to you and answer like a real psychologist.")}
