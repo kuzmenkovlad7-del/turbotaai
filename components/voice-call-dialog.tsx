@@ -438,8 +438,7 @@ async function maybeSendStt(reason: string) {
       // prevent echo: ignore recorder chunks while assistant is speaking (mobile-safe)
       dropAudioRef.current = true
       dropAudioUntilTsRef.current = 0
-      audioChunksRef.current = []
-      sentIdxRef.current = 0
+      audioChunksRef.current.length = 0sentIdxRef.current = 0
       setIsAiSpeaking(true)
     }
 
@@ -447,8 +446,7 @@ async function maybeSendStt(reason: string) {
       // short grace period after TTS to avoid tail echo
       dropAudioRef.current = false
       dropAudioUntilTsRef.current = Date.now() + 900
-      audioChunksRef.current = []
-      sentIdxRef.current = 0
+      audioChunksRef.current.length = 0sentIdxRef.current = 0
       setIsAiSpeaking(false)
     }
 
@@ -691,8 +689,7 @@ async function maybeSendStt(reason: string) {
       bridgedStreamRef.current = bridged
 
       // reset state
-      audioChunksRef.current = []
-      sentIdxRef.current = 1 // первый чанк (header) всегда оставляем как “0”
+      audioChunksRef.current.length = 0sentIdxRef.current = 1 // первый чанк (header) всегда оставляем как “0”
       isSttBusyRef.current = false
       lastTranscriptRef.current = ""
       vad.current = {
@@ -811,8 +808,7 @@ async function maybeSendStt(reason: string) {
     stopStreams()
     stopTtsAudio()
 
-    audioChunksRef.current = []
-    sentIdxRef.current = 0
+    audioChunksRef.current.length = 0sentIdxRef.current = 0
     lastTranscriptRef.current = ""
     isSttBusyRef.current = false
   }
