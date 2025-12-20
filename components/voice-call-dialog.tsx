@@ -868,7 +868,7 @@ async function maybeSendStt(reason: string) {
     ? `stt=${debugParams.stt || "auto"} rms=${vad.current.rms.toFixed(5)} thr=${vad.current.thr.toFixed(5)} nf=${vad.current.noiseFloor.toFixed(5)} voice=${vad.current.voice ? 1 : 0} chunks=${audioChunksRef.current.length} sentIdx=${sentIdxRef.current}`
     : null
 
-  // ANDROID_ONE_SHOT_V3: server logs + watchdog (только мобилки). Логи в терминал через /api/client-log при ?serverLog=1
+  // ANDROID_ONE_SHOT_V4: server logs + watchdog (только мобилки). Логи в терминал через /api/client-log при ?serverLog=1
   function __serverLog(event: string, data: any = {}) {
     try {
       if (typeof window === "undefined") return
@@ -904,7 +904,7 @@ async function maybeSendStt(reason: string) {
         const rec: any = mediaRecorderRef.current
         const state = rec?.state || "null"
 
-        const chunksLen = (chunksRef as any)?.current?.length
+        const chunksLen = (audioChunksRef as any)?.current?.length
         const sentIdx = (sentIdxRef as any)?.current
         const sttBusy = (isSttBusyRef as any)?.current
         const micMuted = (isMicMutedRef as any)?.current
@@ -916,19 +916,19 @@ async function maybeSendStt(reason: string) {
           __serverLog("mobile_state", { state, chunksLen, sentIdx, sttBusy, micMuted })
         }
 
-        // ключевой фикс: если Android "обнулил" chunks, а sentIdx остался большим — всё залипает на втором сообщении
+        // если чанки обнулились, а sentIdx остался большим — сбрасываем
         if (typeof chunksLen === "number" && typeof sentIdx === "number" && sentIdx > chunksLen) {
           try { (sentIdxRef as any).current = 0 } catch {}
           try { (lastTranscriptRef as any).current = "" } catch {}
           __serverLog("sentIdx_reset", { sentIdx, chunksLen })
         }
 
-        // если запись идёт, но Android иногда не отдаёт чанки — принудительно просим data
+        // если запись идёт — иногда Android не отдаёт чанки, принудительно просим data
         if (!micMuted && rec && state === "recording" && tick % 2 === 0) {
           try { rec.requestData?.() } catch {}
         }
 
-        // если рекордер подвис на paused/inactive — пробуем оживить
+        // если рекордер подвис — оживляем
         if (!micMuted && rec) {
           if (state === "paused") {
             try { rec.resume() } catch {}
@@ -946,6 +946,9 @@ async function maybeSendStt(reason: string) {
     return () => window.clearInterval(id)
   }, [isCallActive, isMicMuted])
 
+
+
+  
 
 
   return (
