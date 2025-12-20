@@ -135,6 +135,8 @@ export default function VoiceCallDialog({
   const keepAudioElRef = useRef<HTMLAudioElement | null>(null)
 
   const audioChunksRef = useRef<Blob[]>([])
+  const dropAudioRef = useRef(false)
+  const dropAudioUntilTsRef = useRef(0)
   const sentIdxRef = useRef(0)
   const isSttBusyRef = useRef(false)
   const lastTranscriptRef = useRef("")
@@ -309,7 +311,41 @@ const isCallActiveRef = useRef(false)
     }
   }
 
-  async function maybeSendStt(reason: string) {
+    // server log (видно в терминале/логах сервера). Включается через ?serverLog=1
+  const serverLogEnabledRef = useRef(false)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      serverLogEnabledRef.current = sp.get("serverLog") === "1"
+    } catch {}
+  }, [])
+
+  function serverLog(tag: string, data?: any) {
+    if (!serverLogEnabledRef.current) return
+    try {
+      const payload = {
+        t: Date.now(),
+        tag,
+        data: data ?? null,
+        ua: typeof navigator !== "undefined" ? navigator.userAgent : "",
+      }
+      const body = JSON.stringify(payload)
+      // sendBeacon предпочтительнее (не блочит)
+      const ok = typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function"
+        ? navigator.sendBeacon("/api/client-log", new Blob([body], { type: "application/json" }))
+        : false
+      if (!ok) {
+        void fetch("/api/client-log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        }).catch(() => {})
+      }
+    } catch {}
+  }
+
+async function maybeSendStt(reason: string) {
     if (!isCallActiveRef.current) return
     if (isAiSpeakingRef.current) return
     if (isMicMutedRef.current) return
@@ -336,13 +372,12 @@ const isCallActiveRef = useRef(false)
       isSttBusyRef.current = true
       log("[STT] send", { reason, size: blob.size, sentIdx, totalChunks: chunks.length, type: blob.type })
 
+      serverLog("stt_send", { reason, size: blob.size, sentIdx, totalChunks: chunks.length, type: blob.type })
       const res = await fetch("/api/stt", {
         method: "POST",
         headers: {
           "Content-Type": blob.type || "application/octet-stream",
-          "X-STT-Hint": (lastSttHintRef.current || computeHint3()),
           "X-STT-Lang": "auto",
-          "X-STT-UI": computeLangCode(),
         } as any,
         body: blob,
       })
@@ -365,6 +400,7 @@ const isCallActiveRef = useRef(false)
 
       const fullText = (data.text || "").toString().trim()
       log('[STT] transcript full="' + fullText + '"')
+      serverLog("stt_full", { fullText })
       if (!fullText) return
 
       const prev = lastTranscriptRef.current
@@ -399,6 +435,11 @@ const isCallActiveRef = useRef(false)
     const gender = getCurrentGender()
 
     const begin = () => {
+      // prevent echo: ignore recorder chunks while assistant is speaking (mobile-safe)
+      dropAudioRef.current = true
+      dropAudioUntilTsRef.current = 0
+      audioChunksRef.current = []
+      sentIdxRef.current = 0
       setIsAiSpeaking(true)
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "recording") {
@@ -409,6 +450,11 @@ const isCallActiveRef = useRef(false)
     }
 
     const finish = () => {
+      // short grace period after TTS to avoid tail echo
+      dropAudioRef.current = false
+      dropAudioUntilTsRef.current = Date.now() + 900
+      audioChunksRef.current = []
+      sentIdxRef.current = 0
       setIsAiSpeaking(false)
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "paused" && isCallActiveRef.current && !isMicMutedRef.current) {
@@ -684,6 +730,9 @@ const isCallActiveRef = useRef(false)
       }
 
       rec.ondataavailable = (ev: BlobEvent) => {
+      const now = Date.now()
+      if (dropAudioRef.current || now < dropAudioUntilTsRef.current) return
+
         const b = ev.data
         const size = b?.size || 0
         if (debugParams.debug) {
