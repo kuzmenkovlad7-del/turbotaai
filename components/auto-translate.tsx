@@ -28,6 +28,13 @@ export function AutoTranslate({ children, className = "", enabled = true, exclud
     const translateContent = async () => {
       if (!containerRef.current) return
 
+      const combinedExcludes = [
+        "[data-notranslate]",
+        ".notranslate",
+        ".no-translate",
+        ...excludeSelectors,
+      ]
+
       try {
         // Skip if this is the first load and already in target language
         if (!lastLanguageRef.current && currentLanguage.code === "en") {
@@ -42,7 +49,7 @@ export function AutoTranslate({ children, className = "", enabled = true, exclud
 
         for (const element of Array.from(elementsToTranslate)) {
           // Skip excluded elements
-          if (excludeSelectors.some((selector) => element.matches(selector))) {
+          if (combinedExcludes.some((selector) => element.matches(selector))) {
             continue
           }
 
@@ -50,7 +57,9 @@ export function AutoTranslate({ children, className = "", enabled = true, exclud
           if (
             element.tagName.toLowerCase() === "code" ||
             element.tagName.toLowerCase() === "pre" ||
-            element.classList.contains("no-translate")
+            element.classList.contains("no-translate") ||
+            element.classList.contains("notranslate") ||
+            element.getAttribute("data-notranslate") !== null
           ) {
             continue
           }

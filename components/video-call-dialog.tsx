@@ -150,6 +150,8 @@ export default function VideoCallDialog({
   const audioChunksRef = useRef<Blob[]>([])
   const isSttBusyRef = useRef(false)
   const lastTranscriptRef = useRef("")
+  const [sessionLang, setSessionLang] = useState(() => computeLangCode())
+  const sessionLangRef = useRef(sessionLang)
   const isSessionActiveRef = useRef(false)
 
   // важное: чтобы НЕ захватывать речь/эхо когда ассистент говорит
@@ -167,6 +169,10 @@ export default function VideoCallDialog({
     }
   }, [messages])
 
+  useEffect(() => {
+    sessionLangRef.current = sessionLang
+  }, [sessionLang])
+
   function logDebug(...args: any[]) {
     // eslint-disable-next-line no-console
     console.log(...args)
@@ -183,15 +189,23 @@ export default function VideoCallDialog({
     return "en-US"
   }
 
+  function sttLangToLangCode(sttLang: any): string {
+    const l = (sttLang || "").toString().toLowerCase()
+    if (l.startsWith("ru")) return "ru-RU"
+    if (l.startsWith("en")) return "en-US"
+    return "uk-UA"
+  }
+
+  function langCodeToShort(langCode: string): "uk" | "ru" | "en" {
+    const lc = (langCode || "").toLowerCase()
+    if (lc.startsWith("ru")) return "ru"
+    if (lc.startsWith("en")) return "en"
+    return "uk"
+  }
+
   function getCurrentGender(): "MALE" | "FEMALE" {
     const g = voiceGenderRef.current || "female"
     return g === "male" ? "MALE" : "FEMALE"
-  }
-
-  function getLangShort(): string {
-    return typeof (currentLanguage as any) === "string"
-      ? ((currentLanguage as any) as string)
-      : (currentLanguage as any)?.code || "uk"
   }
 
   function attachUserVideo(stream: MediaStream) {
@@ -231,8 +245,7 @@ export default function VideoCallDialog({
   }
 
   // --------- STT: послать накопленный звук в /api/stt ---------
-  // ВАЖНО: НЕ чистим audioChunksRef, всегда шлём ВЕСЬ звук с начала сессии,
-  // чтобы backend видел корректный контейнер (особенно важно для Safari/iOS).
+  // После отправки очищаем буфер, чтобы каждый вопрос обрабатывался отдельным чанком и таймеры не застревали.
 
   async function maybeSendStt() {
     if (!isSessionActiveRef.current) return
@@ -258,7 +271,11 @@ export default function VideoCallDialog({
 
       const res = await fetch("/api/stt", {
         method: "POST",
-        headers: { "Content-Type": blob.type || "application/octet-stream" },
+        headers: {
+          "Content-Type": blob.type || "application/octet-stream",
+          "X-STT-Hint": "auto",
+          "X-STT-Lang": sessionLangRef.current || computeLangCode(),
+        },
         body: blob,
       })
 
@@ -273,6 +290,11 @@ export default function VideoCallDialog({
       if (!res.ok || !data || data.success === false) {
         console.error("[STT] error response:", res.status, raw)
         return
+      }
+
+      const detectedLangCode = sttLangToLangCode((data as any)?.lang)
+      if (detectedLangCode && detectedLangCode !== sessionLangRef.current) {
+        setSessionLang(detectedLangCode)
       }
 
       const fullText = (data.text || "").toString().trim()
@@ -292,7 +314,15 @@ export default function VideoCallDialog({
       }
 
       setMessages((prevMsgs) => [...prevMsgs, userMsg])
-      await handleUserText(delta)
+      await handleUserText(delta, detectedLangCode)
+      audioChunksRef.current = []
+      lastTranscriptRef.current = ""
+      const recorder = mediaRecorderRef.current
+      if (recorder && recorder.state === "recording") {
+        try {
+          recorder.requestData()
+        } catch {}
+      }
     } catch (e) {
       console.error("[STT] fatal error", e)
     } finally {
@@ -308,7 +338,7 @@ export default function VideoCallDialog({
     const cleanText = text?.trim()
     if (!cleanText) return
 
-    const langCode = computeLangCode()
+    const langCode = sessionLangRef.current || computeLangCode()
     const gender = getCurrentGender()
 
     const beginSpeaking = () => {
@@ -405,8 +435,13 @@ export default function VideoCallDialog({
 
   // --------- отправка текста в n8n / OpenAI ---------
 
-  async function handleUserText(text: string) {
-    const langShort = getLangShort()
+  async function handleUserText(text: string, langCodeOverride?: string) {
+    const voiceLangCode =
+      langCodeOverride || sessionLangRef.current || computeLangCode()
+    if (voiceLangCode !== sessionLangRef.current) {
+      setSessionLang(voiceLangCode)
+    }
+    const langShort = langCodeToShort(voiceLangCode)
     const resolvedWebhook =
       (webhookUrl && webhookUrl.trim()) ||
       TURBOTA_AGENT_WEBHOOK_URL.trim() ||
@@ -424,7 +459,7 @@ export default function VideoCallDialog({
           email: effectiveEmail,
           mode: "video",
           gender: voiceGenderRef.current,
-          voiceLanguage: computeLangCode(),
+          voiceLanguage: voiceLangCode,
         }),
       })
 
@@ -465,6 +500,7 @@ export default function VideoCallDialog({
     voiceGenderRef.current = gender
     setIsConnecting(true)
     setNetworkError(null)
+    setSessionLang(computeLangCode())
 
     // по умолчанию — всё включено
     setIsMicMuted(false)
@@ -622,6 +658,7 @@ export default function VideoCallDialog({
     isAiSpeakingRef.current = false
 
     setNetworkError(null)
+    setSessionLang(computeLangCode())
 
     audioChunksRef.current = []
     lastTranscriptRef.current = ""
@@ -898,6 +935,7 @@ export default function VideoCallDialog({
                 <div
                   ref={scrollRef}
                   className="max-h-full space-y-3 pr-1 text-xs md:text-sm"
+                  data-notranslate
                 >
                   {!isSessionActive && messages.length === 0 && (
                     <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-slate-700">

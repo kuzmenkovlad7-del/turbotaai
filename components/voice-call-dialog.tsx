@@ -138,11 +138,10 @@ export default function VoiceCallDialog({
   const sentIdxRef = useRef(0)
   const isSttBusyRef = useRef(false)
   const lastTranscriptRef = useRef("")
+  const [sessionLang, setSessionLang] = useState(() => computeLangCode())
+  const sessionLangRef = useRef(sessionLang)
 
-  
-
-  const lastSttHintRef = useRef<"uk" | "ru" | "en">("uk")
-const isCallActiveRef = useRef(false)
+  const isCallActiveRef = useRef(false)
   const isAiSpeakingRef = useRef(false)
   const isMicMutedRef = useRef(false)
 
@@ -180,6 +179,10 @@ const isCallActiveRef = useRef(false)
   useEffect(() => {
     isMicMutedRef.current = isMicMuted
   }, [isMicMuted])
+
+  useEffect(() => {
+    sessionLangRef.current = sessionLang
+  }, [sessionLang])
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -227,6 +230,13 @@ const isCallActiveRef = useRef(false)
     if (l.startsWith("ru")) return "ru-RU"
     if (l.startsWith("en")) return "en-US"
     return "uk-UA"
+  }
+
+  function langCodeToShort(langCode: string): "uk" | "ru" | "en" {
+    const lc = (langCode || "").toLowerCase()
+    if (lc.startsWith("ru")) return "ru"
+    if (lc.startsWith("en")) return "en"
+    return "uk"
   }
 
   function getCurrentGender(): "MALE" | "FEMALE" {
@@ -341,7 +351,7 @@ const isCallActiveRef = useRef(false)
         headers: {
           "Content-Type": blob.type || "application/octet-stream",
           "X-STT-Hint": "auto",
-          "X-STT-Lang": computeLangCode(),
+          "X-STT-Lang": sessionLangRef.current || computeLangCode(),
         } as any,
         body: blob,
       })
@@ -361,6 +371,11 @@ const isCallActiveRef = useRef(false)
 
       // важное: только после успешного ответа двигаем sentIdx
       sentIdxRef.current = chunks.length
+
+      const detectedLangCode = sttLangToLangCode((data as any)?.lang)
+      if (detectedLangCode && detectedLangCode !== sessionLangRef.current) {
+        setSessionLang(detectedLangCode)
+      }
 
       const fullText = (data.text || "").toString().trim()
       log('[STT] transcript full="' + fullText + '"')
@@ -382,7 +397,7 @@ const isCallActiveRef = useRef(false)
       }
 
       setMessages((prevMsgs) => [...prevMsgs, userMsg])
-      await handleUserText(delta, sttLangToLangCode((data as any)?.lang))
+      await handleUserText(delta, detectedLangCode)
     } catch (e: any) {
       console.error("[STT] fatal", e)
     } finally {
@@ -394,11 +409,12 @@ const isCallActiveRef = useRef(false)
     const cleanText = text?.trim()
     if (!cleanText) return
 
-    const langCode = (langCodeOverride || computeLangCode())
+    const langCode = langCodeOverride || sessionLangRef.current || computeLangCode()
     const gender = getCurrentGender()
 
     const begin = () => {
       setIsAiSpeaking(true)
+      isAiSpeakingRef.current = true
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "recording") {
         try {
@@ -409,6 +425,7 @@ const isCallActiveRef = useRef(false)
 
     const finish = () => {
       setIsAiSpeaking(false)
+      isAiSpeakingRef.current = false
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "paused" && isCallActiveRef.current && !isMicMutedRef.current) {
         try {
@@ -465,9 +482,11 @@ const isCallActiveRef = useRef(false)
   }
 
   async function handleUserText(text: string, langCodeOverride?: string) {
-    const voiceLangCode = langCodeOverride || computeLangCode()
-    const lc = voiceLangCode.toLowerCase()
-    const agentLang = lc.startsWith("ru") ? "ru" : lc.startsWith("en") ? "en" : "uk"
+    const voiceLangCode = langCodeOverride || sessionLangRef.current || computeLangCode()
+    if (voiceLangCode !== sessionLangRef.current) {
+      setSessionLang(voiceLangCode)
+    }
+    const agentLang = langCodeToShort(voiceLangCode)
 
     const resolvedWebhook =
       (webhookUrl && webhookUrl.trim()) ||
@@ -605,6 +624,7 @@ const isCallActiveRef = useRef(false)
     voiceGenderRef.current = gender
     setIsConnecting(true)
     setNetworkError(null)
+    setSessionLang(computeLangCode())
 
     try {
       if (!navigator?.mediaDevices?.getUserMedia) {
@@ -756,6 +776,7 @@ const isCallActiveRef = useRef(false)
     setIsMicMuted(false)
     setIsAiSpeaking(false)
     setNetworkError(null)
+    setSessionLang(computeLangCode())
 
     // stop recorder timer
     const rec: any = mediaRecorderRef.current
@@ -859,7 +880,11 @@ const isCallActiveRef = useRef(false)
 
           <div className="flex h-[500px] flex-col md:h-[540px]">
             <ScrollArea className="flex-1 px-5 pt-4 pb-2">
-              <div ref={scrollRef} className="max-h-full space-y-3 pr-1 text-xs md:text-sm">
+              <div
+                ref={scrollRef}
+                className="max-h-full space-y-3 pr-1 text-xs md:text-sm"
+                data-notranslate
+              >
                 {dbg && (
                   <div className="rounded-2xl bg-slate-900 px-3 py-2 text-[11px] text-white/90">
                     debugAudio=1 {dbg}
