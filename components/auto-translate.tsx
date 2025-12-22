@@ -1,11 +1,10 @@
-// @ts-nocheck
 "use client"
+// @ts-nocheck
 
 import type React from "react"
 
 import { useEffect, useRef } from "react"
 import { useLanguage } from "@/lib/i18n/language-context"
-import { translateElement } from "@/lib/i18n/translation-utils"
 
 interface AutoTranslateProps {
   children: React.ReactNode
@@ -43,6 +42,8 @@ export function AutoTranslate({ children, className = "", enabled = true, exclud
         }
 
         console.log(`🌐 Auto-translating content to ${currentLanguage.name}`)
+
+        const { translateElement } = await import("@/lib/i18n/translation-utils")
 
         // Get all elements that should be translated
         const elementsToTranslate = containerRef.current.querySelectorAll("*")
