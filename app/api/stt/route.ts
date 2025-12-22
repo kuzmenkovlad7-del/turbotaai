@@ -27,9 +27,9 @@ function now() {
 function cleanupStore(store: Map<string, ChunkEntry>) {
   const TTL_MS = 2 * 60 * 1000; // 2 min
   const t = now();
-  for (const [k, v] of store.entries()) {
+  store.forEach((v, k) => {
     if (t - v.createdAt > TTL_MS) store.delete(k);
-  }
+  });
 }
 
 function normalizeMime(mime: string) {
