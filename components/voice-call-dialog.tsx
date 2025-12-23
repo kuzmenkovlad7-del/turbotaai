@@ -662,8 +662,8 @@ async function maybeSendStt(reason: string) {
       return isMobile ? 0.010 : 0.008
     })()
 
-    const hangoverMs = isMobile ? 2080 : 1200
-    const maxUtteranceMs = 8000
+    const hangoverMs = 3500
+    const maxUtteranceMs = 20000
 
     const tick = () => {
       analyser.getByteTimeDomainData(data)

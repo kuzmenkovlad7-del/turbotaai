@@ -232,7 +232,7 @@ export default function VideoCallDialog({
 
   const VAD_POLL_MS = 120
   const VAD_THRESHOLD = 0.018
-  const SILENCE_MS_TO_STOP = 900
+  const SILENCE_MS_TO_STOP = 3500
   const MIN_BLOB_BYTES = 2500
   const MIN_RECORD_MS = 450
   const MAX_RECORD_MS = 20000
