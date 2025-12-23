@@ -127,6 +127,7 @@ export default function VoiceCallDialog({
   const rawStreamRef = useRef<MediaStream | null>(null)
   const bridgedStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+    const recorderCfgRef = useRef<{ mimeType: string; sliceMs: number } | null>(null)
 
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
@@ -148,6 +149,7 @@ export default function VoiceCallDialog({
 const isCallActiveRef = useRef(false)
   const isAiSpeakingRef = useRef(false)
   const isMicMutedRef = useRef(false)
+    const ttsCooldownUntilRef = useRef(0)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -312,23 +314,99 @@ const isCallActiveRef = useRef(false)
     }
   }
 
-  async function maybeSendStt(reason: string) {
+    async function rotateRecorder() {
+    if (!isCallActiveRef.current) return
+    const stream = bridgedStreamRef.current || rawStreamRef.current
+    if (!stream) return
+    const old: any = mediaRecorderRef.current
+    const mimeType =
+      recorderCfgRef.current?.mimeType || (old && old.mimeType) || "audio/webm;codecs=opus"
+    const sliceMs = recorderCfgRef.current?.sliceMs || 250
+  
+    // стопаем старый recorder, но НЕ трогаем stream (чтобы не рвать микрофон)
+    if (old) {
+      try {
+        old.onstop = null
+      } catch {}
+      try {
+        old._rotating = true
+        if (old.state !== "inactive") {
+          await new Promise<void>((resolve) => {
+            let done = false
+            const finish = () => {
+              if (done) return
+              done = true
+              resolve()
+            }
+            try {
+              old.addEventListener("stop", () => finish(), { once: true })
+            } catch {}
+            try {
+              old.stop()
+            } catch {
+              finish()
+            }
+            setTimeout(() => finish(), 600)
+          })
+        }
+      } catch {}
+    }
+  
+    // сбрасываем буферы (иначе первое слово будет "тянуться" в каждом новом запросе)
+    audioChunksRef.current = []
+    sentIdxRef.current = 0
+    lastTranscriptRef.current = ""
+    pendingSttReasonRef.current = null
+    if (pendingSttTimerRef.current) {
+      try {
+        window.clearTimeout(pendingSttTimerRef.current)
+      } catch {}
+      pendingSttTimerRef.current = null
+    }
+  
+    const rec = new MediaRecorder(stream, { mimeType })
+    rec.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data)
+    }
+    rec.onstop = () => {
+      if ((rec as any)._rotating) return
+      if (!isCallActiveRef.current) {
+        setIsListening(false)
+        try {
+          stream.getTracks().forEach((t) => t.stop())
+        } catch {}
+        bridgedStreamRef.current = null
+      }
+    }
+    mediaRecorderRef.current = rec
+    recorderCfgRef.current = { mimeType, sliceMs }
+    try {
+      rec.start(sliceMs)
+    } catch {
+      rec.start()
+    }
+  
+    if (isAiSpeakingRef.current) {
+      try {
+        rec.pause()
+      } catch {}
+    }
+  }
+
+async function maybeSendStt(reason: string) {
     if (!isCallActiveRef.current) return
     if (isAiSpeakingRef.current) return
+      if (Date.now() < ttsCooldownUntilRef.current) return
     if (isMicMutedRef.current) return
 
     const chunks = audioChunksRef.current
     if (!chunks.length) return
 
-    // отправляем НОВЫЕ чанки начиная с sentIdx, но чтобы контейнер был валидным — добавляем самый первый чанк (header)
-    // (это сильно уменьшает размер по сравнению с "весь звук с начала")
+        // отправляем чанки с последней отправки; после vad_end мы перезапускаем recorder, поэтому WebM всегда валидный
     const sentIdx = sentIdxRef.current
-    const take: Blob[] = []
+    const take = chunks.slice(Math.max(0, sentIdx))
 
-    if (chunks.length >= 1) {
-      take.push(chunks[0])
-      for (let i = Math.max(1, sentIdx); i < chunks.length; i++) take.push(chunks[i])
-    }
+    if (!take.length) return
 
     const blob = new Blob(take, { type: take[0]?.type || "audio/webm" })
 
@@ -385,7 +463,7 @@ const isCallActiveRef = useRef(false)
       }
 
       setMessages((prevMsgs) => [...prevMsgs, userMsg])
-      await handleUserText(delta, sttLangToLangCode((data as any)?.lang))
+      await handleUserText(delta, computeLangCode())
     } catch (e: any) {
       console.error("[STT] fatal", e)
     } finally {
@@ -426,6 +504,11 @@ const isCallActiveRef = useRef(false)
 
     const begin = () => {
       setIsAiSpeaking(true)
+      // не даём TTS попасть в STT (эхо / "сам себя слушает")
+      ttsCooldownUntilRef.current = Date.now() + 450
+      audioChunksRef.current = []
+      sentIdxRef.current = 0
+      lastTranscriptRef.current = ""
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "recording") {
         try {
@@ -435,12 +518,16 @@ const isCallActiveRef = useRef(false)
     }
 
     const finish = () => {
+      // чуть задерживаем возврат микрофона, чтобы хвост TTS не залетел в следующий VAD
+      ttsCooldownUntilRef.current = Date.now() + 450
       setIsAiSpeaking(false)
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "paused" && isCallActiveRef.current && !isMicMutedRef.current) {
-        try {
-          rec.resume()
-        } catch {}
+        window.setTimeout(() => {
+          try {
+            rec.resume()
+          } catch {}
+        }, 120)
       }
     }
 
