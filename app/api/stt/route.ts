@@ -71,8 +71,10 @@ async function whisperTranscribe(args: {
 
   const form = new FormData()
   const cleanMime = baseMime(mime) || "audio/webm"
-  const blob = new Blob([bytes], { type: cleanMime })
-  const filename = `audio.${extFromMime(cleanMime)}`
+  const ab = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(ab).set(bytes)
+  const blob = new Blob([ab], { type: cleanMime })
+const filename = `audio.${extFromMime(cleanMime)}`
   form.append("file", blob, filename)
   form.append("model", OPENAI_STT_MODEL)
   // Whisper expects ISO-639-1 (uk/ru/en)
