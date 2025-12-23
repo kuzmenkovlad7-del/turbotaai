@@ -1,216 +1,192 @@
 import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
+// Ensure we have Buffer / full Node APIs available for audio handling
 export const runtime = "nodejs"
 
 type Lang3 = "uk" | "ru" | "en"
-type Hint3 = Lang3 | "auto"
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const OPENAI_STT_MODEL = process.env.OPENAI_STT_MODEL || "whisper-1"
 
-type WhisperVerboseJson = {
-  text?: string
-  language?: string
-  segments?: Array<{
-    avg_logprob?: number
-    no_speech_prob?: number
-    compression_ratio?: number
-    temperature?: number
-    text?: string
-  }>
-}
-
-type ScoreMeta = {
-  avgLogprob?: number
-  noSpeechProb?: number
-  compressionRatio?: number
-  temperature?: number
-}
-
-function avg(nums: Array<number | undefined>): number | undefined {
-  const xs = nums.filter((n): n is number => typeof n === "number")
-  if (!xs.length) return undefined
-  return xs.reduce((a, b) => a + b, 0) / xs.length
-}
-
-function scoreFromVerboseJson(json: WhisperVerboseJson): ScoreMeta {
-  const segs = Array.isArray(json.segments) ? json.segments : []
-  return {
-    avgLogprob: avg(segs.map((s) => s.avg_logprob)),
-    noSpeechProb: avg(segs.map((s) => s.no_speech_prob)),
-    compressionRatio: avg(segs.map((s) => s.compression_ratio)),
-    temperature: avg(segs.map((s) => s.temperature)),
-  }
-}
-
-function lang3FromWhisper(language?: string): Lang3 {
-  const l = (language || "").toLowerCase()
-  if (l.startsWith("uk")) return "uk"
-  if (l.startsWith("ru")) return "ru"
+function asLang3(v: string | null | undefined): Lang3 {
+  const s = (v || "").toLowerCase().trim()
+  if (s.startsWith("uk")) return "uk"
+  if (s.startsWith("ru")) return "ru"
   return "en"
 }
 
-function normalizeHint(h?: string | null): Hint3 {
-  const s = String(h || "").trim().toLowerCase()
-  if (!s) return "uk" // default MVP
-  if (s === "auto") return "auto"
-  if (s.startsWith("uk")) return "uk"
-  if (s.startsWith("ru")) return "ru"
-  if (s.startsWith("en")) return "en"
-  return "uk"
+function baseMime(contentType: string): string {
+  return (contentType || "").split(";")[0].trim().toLowerCase()
 }
 
-function normalizeText(s: string): string {
-  return String(s || "")
-    .replace(/[\u0000-\u001F\u007F]/g, " ")
+function extFromMime(mime: string): string {
+  const m = baseMime(mime)
+  if (m.includes("webm")) return "webm"
+  if (m.includes("wav")) return "wav"
+  if (m.includes("mpeg") || m.includes("mp3")) return "mp3"
+  if (m.includes("mp4")) return "mp4"
+  if (m.includes("ogg")) return "ogg"
+  if (m.includes("flac")) return "flac"
+  return "webm"
+}
+
+/**
+ * MVP anti-hallucination filter:
+ * Whisper sometimes "hallucinates" common phrases on silence / noise.
+ * We drop those so UI doesn't show garbage text.
+ */
+function shouldDropAsGarbage(text: string): boolean {
+  const t = text
+    .toLowerCase()
     .replace(/\s+/g, " ")
+    .replace(/[“”"«»]/g, '"')
     .trim()
+
+  if (!t) return true
+  // Very short single filler tokens
+  if (t.length <= 1) return true
+
+  const patterns: RegExp[] = [
+    /^(thank(s| you).*)$/i,
+    /^thanks for (watching|listening).*$/i,
+    /^subscribe.*$/i,
+    /^(спасибо|дякую)(.*)$/i,
+    /спасибо за (просмотр|внимание)/i,
+    /дякую за (перегляд|увагу)/i,
+    /постав(ьте|те) лайк/i,
+    /подпис(ывайтесь|уйтесь)/i,
+    /see you next time/i,
+  ]
+
+  return patterns.some((re) => re.test(t))
 }
 
-const HALLUCINATION_PHRASES = [
-  // RU
-  "спасибо за просмотр",
-  "спасибо за внимание",
-  "ставьте лайк",
-  "подписывайтесь на канал",
-  "подписывайтесь",
-  "до новых встреч",
-  // UK
-  "дякую за перегляд",
-  "дякую за увагу",
-  "підписуйтеся на канал",
-  "підписуйтеся",
-  "ставте вподобайку",
-  "до зустрічі",
-  // EN
-  "thanks for watching",
-  "thanks for listening",
-  "like and subscribe",
-  "subscribe to the channel",
-  "see you next time",
-]
+async function whisperTranscribe(args: {
+  bytes: Uint8Array
+  mime: string
+  lang: Lang3
+}) {
+  const { bytes, mime, lang } = args
 
-function isLikelyHallucination(text: string): boolean {
-  const norm = normalizeText(text).toLowerCase()
-  if (!norm) return true
-  if (/^(\[?music\]?|\[?applause\]?|\(?music\)?|\(?applause\)?)$/.test(norm)) return true
-  if (norm.length <= 2) return true
+  const form = new FormData()
+  const cleanMime = baseMime(mime) || "audio/webm"
+  const blob = new Blob([bytes], { type: cleanMime })
+  const filename = `audio.${extFromMime(cleanMime)}`
+  form.append("file", blob, filename)
+  form.append("model", OPENAI_STT_MODEL)
+  // Whisper expects ISO-639-1 (uk/ru/en)
+  form.append("language", lang)
+  form.append("response_format", "verbose_json")
+  form.append("temperature", "0")
+  // Helps reduce hallucinations on noise/silence
+  form.append(
+    "prompt",
+    "Transcribe speech verbatim. If there is no clear speech, return an empty transcription."
+  )
 
-  for (const p of HALLUCINATION_PHRASES) {
-    if (norm === p) return true
-    if (norm.startsWith(p + " ")) return true
-    if (norm.endsWith(" " + p)) return true
-  }
-  return false
-}
-
-function shouldDropTranscript(text: string, meta: ScoreMeta): boolean {
-  const cleaned = normalizeText(text)
-  if (!cleaned) return true
-
-  const norm = cleaned.toLowerCase()
-  const noSpeech = meta.noSpeechProb ?? 0
-  const logp = meta.avgLogprob ?? 0
-
-  // If Whisper itself thinks it's "no speech", drop short-ish outputs.
-  if (noSpeech >= 0.7 && norm.length <= 80) return true
-
-  // Very low confidence + short output is usually garbage on silence/noise.
-  if (logp <= -1.2 && norm.length <= 80) return true
-
-  // Common hallucinated "outro" phrases.
-  if (isLikelyHallucination(norm) && (noSpeech >= 0.35 || norm.length <= 40)) return true
-
-  return false
-}
-
-async function callWhisper(audio: File, lang?: Lang3): Promise<{ text: string; whisperLang?: string; meta: ScoreMeta }> {
-  if (!OPENAI_API_KEY) {
-    throw new Error("Missing OPENAI_API_KEY")
-  }
-
-  const fd = new FormData()
-  fd.append("model", OPENAI_STT_MODEL)
-  fd.append("file", audio, audio.name || "audio.webm")
-  fd.append("response_format", "verbose_json")
-  if (lang) fd.append("language", lang)
-
-  const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+  const resp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
-    body: fd,
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: form,
   })
 
-  if (!r.ok) {
-    const errText = await r.text().catch(() => "")
-    throw new Error(`OpenAI STT failed: ${r.status} ${r.statusText} ${errText}`.slice(0, 800))
-  }
-
-  const raw = await r.text()
-  let json: WhisperVerboseJson = {}
+  const raw = await resp.text()
+  let json: any = null
   try {
     json = JSON.parse(raw)
   } catch {
-    // ignore, fall back to raw text
+    // ignore
   }
 
-  const text = normalizeText(json.text || raw || "")
-  const whisperLang = (json.language || "").toLowerCase() || undefined
-  const meta = scoreFromVerboseJson(json)
+  if (!resp.ok) {
+    const msg =
+      (json && (json.error?.message || json.message)) ||
+      raw ||
+      `OpenAI STT error: ${resp.status}`
+    throw new Error(msg)
+  }
 
-  return { text, whisperLang, meta }
+  return json as { text?: string; language?: string }
 }
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const formData = await req.formData()
-    const audio = formData.get("audio")
-    if (!(audio instanceof File)) {
-      return NextResponse.json({ success: false, error: "No audio file provided" }, { status: 400 })
+    if (!OPENAI_API_KEY) {
+      return NextResponse.json(
+        { success: false, error: "Missing OPENAI_API_KEY" },
+        { status: 500 }
+      )
     }
 
-    // We respect the UI language hint (MVP). VoiceCallDialog already sends X-STT-Hint.
-    const hintHeader = req.headers.get("x-stt-hint") || req.headers.get("x-stt-lang")
-    const hint3 = normalizeHint(hintHeader)
+    const lang = asLang3(
+      request.headers.get("x-stt-lang") ||
+        request.headers.get("x-lang") ||
+        request.headers.get("x-stt-hint") ||
+        "uk"
+    )
 
-    const res = await callWhisper(audio, hint3 === "auto" ? undefined : hint3)
-    const pickedLang: Lang3 = hint3 === "auto" ? lang3FromWhisper(res.whisperLang) : hint3
+    const contentType = request.headers.get("content-type") || ""
+    const isMultipart = contentType.toLowerCase().includes("multipart/form-data")
 
-    if (shouldDropTranscript(res.text, res.meta)) {
+    let bytes: Uint8Array
+    let mime = baseMime(contentType) || "audio/webm"
+
+    if (isMultipart) {
+      const fd = await request.formData()
+      const maybe =
+        fd.get("audio") || fd.get("file") || fd.get("blob") || fd.get("data")
+      if (!maybe || !(maybe instanceof Blob)) {
+        return NextResponse.json(
+          { success: false, error: "Missing audio file in multipart form-data" },
+          { status: 400 }
+        )
+      }
+      mime = baseMime((maybe as Blob).type) || mime
+      bytes = new Uint8Array(await (maybe as Blob).arrayBuffer())
+    } else {
+      const ab = await request.arrayBuffer()
+      bytes = new Uint8Array(ab)
+      // When client sends Content-Type like: audio/webm;codecs=opus
+      mime = baseMime(contentType) || "audio/webm"
+    }
+
+    // If chunk is extremely small, it's probably a click/noise; skip it.
+    if (!bytes || bytes.byteLength < 900) {
       return NextResponse.json({
         success: true,
         text: "",
-        lang: pickedLang,
-        debug: {
-          pickedBy: hint3 === "auto" ? "auto" : "hint",
-          hint3,
-          whisperLang: res.whisperLang,
-          meta: res.meta,
-          dropped: true,
-        },
+        lang,
+        debug: { dropped: "too_small", bytes: bytes?.byteLength || 0 },
+      })
+    }
+
+    const result = await whisperTranscribe({ bytes, mime, lang })
+    const text = (result?.text || "").trim()
+
+    if (!text || shouldDropAsGarbage(text)) {
+      return NextResponse.json({
+        success: true,
+        text: "",
+        lang,
+        debug: { dropped: true, reason: "garbage_or_empty" },
       })
     }
 
     return NextResponse.json({
       success: true,
-      text: res.text,
-      lang: pickedLang,
-      debug: {
-        pickedBy: hint3 === "auto" ? "auto" : "hint",
-        hint3,
-        whisperLang: res.whisperLang,
-        meta: res.meta,
-        dropped: false,
-      },
+      text,
+      lang,
+      debug: { pickedBy: "ui_lang_forced" },
     })
-  } catch (e: any) {
+  } catch (err: any) {
+    const message =
+      (err && (err.message || String(err))) || "Unknown error in /api/stt"
     return NextResponse.json(
-      {
-        success: false,
-        error: e?.message || "STT error",
-      },
-      { status: 500 },
+      { success: false, error: message },
+      { status: 500 }
     )
   }
 }
