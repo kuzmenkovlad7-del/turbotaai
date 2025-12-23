@@ -136,6 +136,9 @@ export default function VoiceCallDialog({
 
   const audioChunksRef = useRef<Blob[]>([])
   const sentIdxRef = useRef(0)
+  const pendingSttReasonRef = useRef<string | null>(null)
+  const pendingSttTimerRef = useRef<number | null>(null)
+  const MIN_UTTERANCE_MS = 450
   const isSttBusyRef = useRef(false)
   const lastTranscriptRef = useRef("")
 
@@ -389,6 +392,30 @@ const isCallActiveRef = useRef(false)
       isSttBusyRef.current = false
     }
   }
+  function flushAndSendStt(reason: string) {
+    // Flush last MediaRecorder chunk before STT send (prevents missing tail + Whisper hallucinations)
+    const rec: any = mediaRecorderRef.current
+    if (!rec || rec.state !== "recording" || typeof rec.requestData !== "function") {
+      void maybeSendStt(reason as any)
+      return
+    }
+
+    if (pendingSttReasonRef.current) return
+    pendingSttReasonRef.current = reason
+
+    try { rec.requestData() } catch {}
+
+    if (pendingSttTimerRef.current) window.clearTimeout(pendingSttTimerRef.current)
+    pendingSttTimerRef.current = window.setTimeout(() => {
+      if (!pendingSttReasonRef.current) return
+      const r = pendingSttReasonRef.current
+      pendingSttReasonRef.current = null
+      pendingSttTimerRef.current = null
+      void maybeSendStt(r as any)
+    }, 250)
+  }
+
+
 
   function speakText(text: string, langCodeOverride?: string) {
     const cleanText = text?.trim()
@@ -583,16 +610,19 @@ const isCallActiveRef = useRef(false)
         }
       } else {
         if (st.voice && now > st.voiceUntilTs) {
+          const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
           st.voice = false
           st.utteranceStartTs = 0
-          void maybeSendStt("vad_end")
+          if (voiceMs >= MIN_UTTERANCE_MS) {
+            void flushAndSendStt("vad_end")
+          }
         }
       }
 
       // длинная фраза — режем каждые maxUtteranceMs
       if (st.voice && st.utteranceStartTs && now - st.utteranceStartTs > maxUtteranceMs) {
         st.utteranceStartTs = now
-        void maybeSendStt("max_utt")
+        void flushAndSendStt("max_utt")
       }
 
       rafRef.current = requestAnimationFrame(tick)
@@ -690,7 +720,17 @@ const isCallActiveRef = useRef(false)
         if (size > 0) {
           audioChunksRef.current.push(b)
         }
-      }
+      
+        const pending = pendingSttReasonRef.current
+        if (pending) {
+          pendingSttReasonRef.current = null
+          if (pendingSttTimerRef.current) {
+            window.clearTimeout(pendingSttTimerRef.current)
+            pendingSttTimerRef.current = null
+          }
+          void maybeSendStt(pending)
+        }
+}
 
       rec.onerror = (ev: any) => {
         console.error("[REC] error", ev)

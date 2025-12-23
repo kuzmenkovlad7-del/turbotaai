@@ -25,7 +25,7 @@ function extFromMime(mime: string): string {
   if (m.includes("webm")) return "webm"
   if (m.includes("wav")) return "wav"
   if (m.includes("mpeg") || m.includes("mp3")) return "mp3"
-  if (m.includes("mp4")) return "mp4"
+  if (m.includes("mp4") || m.includes("m4a")) return "m4a"
   if (m.includes("ogg")) return "ogg"
   if (m.includes("flac")) return "flac"
   return "webm"
@@ -57,6 +57,14 @@ function shouldDropAsGarbage(text: string): boolean {
     /постав(ьте|те) лайк/i,
     /подпис(ывайтесь|уйтесь)/i,
     /see you next time/i,
+    // Video/screen hallucinations on silence/noise
+    /ви маєте можливість.*перейти на відео/i,
+    /перейти на відео.*дяку(ю|ємо)/i,
+    /яке ви бачите на екрані/i,
+    /перейти на видео.*спасибо/i,
+    /которое вы видите на экране/i,
+    /switch to (the )?video/i,
+    /that you see on (the )?screen/i,
   ]
 
   return patterns.some((re) => re.test(t))
