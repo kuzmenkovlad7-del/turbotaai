@@ -810,7 +810,9 @@ export default function VideoCallDialog({
     // prevent self-listening while TTS/video plays
     try {
       micStreamRef.current?.getAudioTracks?.().forEach((tr) => (tr.enabled = false))
-    } catch {}stopCurrentSpeech()
+    } catch {}
+
+    stopCurrentSpeech()
     setIsAiSpeaking(true)
     setActivityStatus("speaking")
 
@@ -830,7 +832,10 @@ export default function VideoCallDialog({
     const finish = () => {
       setIsAiSpeaking(false)
 
-      if (hasEnhancedVideo && speakingVideoRef.current) {
+      
+
+      try { micStreamRef.current?.getAudioTracks?.().forEach((tr) => (tr.enabled = true)) } catch {}
+if (hasEnhancedVideo && speakingVideoRef.current) {
         try {
           speakingVideoRef.current.pause()
           speakingVideoRef.current.currentTime = 0
@@ -1073,7 +1078,9 @@ export default function VideoCallDialog({
     if (isMicMuted) {
       setIsMicMuted(false)
       isMicMutedRef.current = false
-      setSpeechError(null)
+      
+      try { micStreamRef.current?.getAudioTracks?.().forEach((tr) => (tr.enabled = true)) } catch {}
+setSpeechError(null)
       setActivityStatus("listening")
       startListening().catch(() => {})
     } else {
