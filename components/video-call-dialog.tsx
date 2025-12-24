@@ -253,7 +253,10 @@ export default function VideoCallDialog({
   const isCallActiveRef = useRef(false)
   const isMicMutedRef = useRef(false)
 
-  const rawStreamRef = useRef<MediaStream | null>(null)
+  
+
+  const stopReasonRef = useRef<"silence" | "tts" | "manual" | "end" | null>(null)
+const rawStreamRef = useRef<MediaStream | null>(null)
   const bridgedStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recorderCfgRef = useRef<{ mimeType: string; sliceMs: number } | null>(null)
@@ -706,6 +709,7 @@ export default function VideoCallDialog({
   }
 
   function safeStartListening() {
+      stopReasonRef.current = null
     if (startListeningInFlightRef.current) return
     startListeningInFlightRef.current = true
     Promise.resolve()
@@ -818,6 +822,9 @@ export default function VideoCallDialog({
   }
 
   async function finishUtteranceAndTranscribe(reason: string) {
+      const stopReason = stopReasonRef.current
+      if (stopReason === "tts" || stopReason === "manual" || stopReason === "end") return
+
     if (!isCallActiveRef.current) return
     if (isSttBusyRef.current) return
     if (isAiSpeakingRef.current) return
@@ -1191,6 +1198,7 @@ export default function VideoCallDialog({
   }
 
   function endCall() {
+      stopReasonRef.current = "end"
     setIsCallActive(false)
     isCallActiveRef.current = false
 
@@ -1244,6 +1252,7 @@ export default function VideoCallDialog({
     } else {
       setIsMicMuted(true)
       isMicMutedRef.current = true
+        stopReasonRef.current = "manual"
       stopRecorderOnly()
       setInterimTranscript("")
       setActivityStatus("listening")

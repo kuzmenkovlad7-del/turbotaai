@@ -127,7 +127,7 @@ export default function VoiceCallDialog({
   const rawStreamRef = useRef<MediaStream | null>(null)
   const bridgedStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-    const recorderCfgRef = useRef<{ mimeType: string; sliceMs: number } | null>(null)
+  const recorderCfgRef = useRef<{ mimeType: string; sliceMs: number } | null>(null)
 
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
@@ -143,13 +143,11 @@ export default function VoiceCallDialog({
   const isSttBusyRef = useRef(false)
   const lastTranscriptRef = useRef("")
 
-  
-
   const lastSttHintRef = useRef<"uk" | "ru" | "en">("uk")
-const isCallActiveRef = useRef(false)
+  const isCallActiveRef = useRef(false)
   const isAiSpeakingRef = useRef(false)
   const isMicMutedRef = useRef(false)
-    const ttsCooldownUntilRef = useRef(0)
+  const ttsCooldownUntilRef = useRef(0)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -168,8 +166,8 @@ const isCallActiveRef = useRef(false)
     if (typeof window === "undefined") return { debug: false, stt: null as any, thr: null as any }
     const qs = new URLSearchParams(window.location.search)
     const debug = qs.get("debugAudio") === "1"
-    const stt = qs.get("stt") // uk|ru|en
-    const thr = qs.get("thr") // number
+    const stt = qs.get("stt")
+    const thr = qs.get("thr")
     return { debug, stt, thr }
   }, [])
 
@@ -190,11 +188,6 @@ const isCallActiveRef = useRef(false)
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages])
 
-  function log(...args: any[]) {
-    // eslint-disable-next-line no-console
-    console.log(...args)
-  }
-
   function computeLangCode(): string {
     const forced = debugParams.stt
     if (forced === "uk") return "uk-UA"
@@ -209,29 +202,6 @@ const isCallActiveRef = useRef(false)
     if (lang.startsWith("uk")) return "uk-UA"
     if (lang.startsWith("ru")) return "ru-RU"
     return "en-US"
-  }
-
-  function computeHint3(): "uk" | "ru" | "en" {
-    const forced = debugParams.stt
-    if (forced === "uk") return "uk"
-    if (forced === "ru") return "ru"
-    if (forced === "en") return "en"
-
-    const lang =
-      typeof (currentLanguage as any) === "string"
-        ? ((currentLanguage as any) as string)
-        : (currentLanguage as any)?.code || "uk"
-
-    if (lang.startsWith("ru")) return "ru"
-    if (lang.startsWith("en")) return "en"
-    return "uk"
-  }
-
-  function sttLangToLangCode(sttLang: any): string {
-    const l = (sttLang || "").toString().toLowerCase()
-    if (l.startsWith("ru")) return "ru-RU"
-    if (l.startsWith("en")) return "en-US"
-    return "uk-UA"
   }
 
   function getCurrentGender(): "MALE" | "FEMALE" {
@@ -263,7 +233,6 @@ const isCallActiveRef = useRef(false)
   function stopAudioGraph() {
     stopRaf()
     analyserRef.current = null
-
     const ctx = audioCtxRef.current
     if (ctx) {
       try {
@@ -274,7 +243,13 @@ const isCallActiveRef = useRef(false)
   }
 
   function stopRecorder() {
-    const rec = mediaRecorderRef.current
+    const rec = mediaRecorderRef.current as any
+    if (rec && rec._reqTimer) {
+      try {
+        clearInterval(rec._reqTimer)
+      } catch {}
+      rec._reqTimer = null
+    }
     if (rec) {
       try {
         if (rec.state !== "inactive") rec.stop()
@@ -314,108 +289,27 @@ const isCallActiveRef = useRef(false)
     }
   }
 
-    async function rotateRecorder() {
-    if (!isCallActiveRef.current) return
-    const stream = bridgedStreamRef.current || rawStreamRef.current
-    if (!stream) return
-    const old: any = mediaRecorderRef.current
-    const mimeType =
-      recorderCfgRef.current?.mimeType || (old && old.mimeType) || "audio/webm;codecs=opus"
-    const sliceMs = recorderCfgRef.current?.sliceMs || 250
-  
-    // стопаем старый recorder, но НЕ трогаем stream (чтобы не рвать микрофон)
-    if (old) {
-      try {
-        old.onstop = null
-      } catch {}
-      try {
-        old._rotating = true
-        if (old.state !== "inactive") {
-          await new Promise<void>((resolve) => {
-            let done = false
-            const finish = () => {
-              if (done) return
-              done = true
-              resolve()
-            }
-            try {
-              old.addEventListener("stop", () => finish(), { once: true })
-            } catch {}
-            try {
-              old.stop()
-            } catch {
-              finish()
-            }
-            setTimeout(() => finish(), 600)
-          })
-        }
-      } catch {}
-    }
-  
-    // сбрасываем буферы (иначе первое слово будет "тянуться" в каждом новом запросе)
-    audioChunksRef.current = []
-    sentIdxRef.current = 0
-    lastTranscriptRef.current = ""
-    pendingSttReasonRef.current = null
-    if (pendingSttTimerRef.current) {
-      try {
-        window.clearTimeout(pendingSttTimerRef.current)
-      } catch {}
-      pendingSttTimerRef.current = null
-    }
-  
-    const rec = new MediaRecorder(stream, { mimeType })
-    rec.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data)
-    }
-    rec.onstop = () => {
-      if ((rec as any)._rotating) return
-      if (!isCallActiveRef.current) {
-        setIsListening(false)
-        try {
-          stream.getTracks().forEach((t) => t.stop())
-        } catch {}
-        bridgedStreamRef.current = null
-      }
-    }
-    mediaRecorderRef.current = rec
-    recorderCfgRef.current = { mimeType, sliceMs }
-    try {
-      rec.start(sliceMs)
-    } catch {
-      rec.start()
-    }
-  
-    if (isAiSpeakingRef.current) {
-      try {
-        rec.pause()
-      } catch {}
-    }
-  }
-
-async function maybeSendStt(reason: string) {
+  async function maybeSendStt(reason: string) {
     if (!isCallActiveRef.current) return
     if (isAiSpeakingRef.current) return
-      if (Date.now() < ttsCooldownUntilRef.current) return
+    if (Date.now() < ttsCooldownUntilRef.current) return
     if (isMicMutedRef.current) return
 
     const chunks = audioChunksRef.current
     if (!chunks.length) return
 
-        // отправляем чанки с последней отправки; после vad_end мы перезапускаем recorder, поэтому WebM всегда валидный
+    const header = chunks[0]
     const sentIdx = sentIdxRef.current
-    const take = chunks.slice(Math.max(0, sentIdx))
+    const body = chunks.slice(Math.max(1, sentIdx))
+    if (!header || body.length === 0) return
 
-    if (!take.length) return
-
-    const blob = new Blob(take, { type: take[0]?.type || "audio/webm" })
+    const blob = new Blob([header, ...body], { type: header.type || body[0]?.type || "audio/webm" })
 
     if (blob.size < 6000) return
     if (isSttBusyRef.current) return
 
     try {
       isSttBusyRef.current = true
-      log("[STT] send", { reason, size: blob.size, sentIdx, totalChunks: chunks.length, type: blob.type })
 
       const res = await fetch("/api/stt", {
         method: "POST",
@@ -440,21 +334,18 @@ async function maybeSendStt(reason: string) {
         return
       }
 
-      // важное: только после успешного ответа двигаем sentIdx
-      sentIdxRef.current = chunks.length
+      const keep = audioChunksRef.current?.[0]
+      audioChunksRef.current = keep ? [keep] : []
+      sentIdxRef.current = keep ? 1 : 0
 
       const fullText = (data.text || "").toString().trim()
-      log('[STT] transcript full="' + fullText + '"')
       if (!fullText) return
 
       const prev = lastTranscriptRef.current
       const delta = diffTranscript(prev, fullText)
       lastTranscriptRef.current = fullText
 
-      if (!delta) {
-        log("[STT] no delta")
-        return
-      }
+      if (!delta) return
 
       const userMsg: VoiceMessage = {
         id: `${Date.now()}-user`,
@@ -470,8 +361,8 @@ async function maybeSendStt(reason: string) {
       isSttBusyRef.current = false
     }
   }
+
   function flushAndSendStt(reason: string) {
-    // Flush last MediaRecorder chunk before STT send (prevents missing tail + Whisper hallucinations)
     const rec: any = mediaRecorderRef.current
     if (!rec || rec.state !== "recording" || typeof rec.requestData !== "function") {
       void maybeSendStt(reason as any)
@@ -481,7 +372,9 @@ async function maybeSendStt(reason: string) {
     if (pendingSttReasonRef.current) return
     pendingSttReasonRef.current = reason
 
-    try { rec.requestData() } catch {}
+    try {
+      rec.requestData()
+    } catch {}
 
     if (pendingSttTimerRef.current) window.clearTimeout(pendingSttTimerRef.current)
     pendingSttTimerRef.current = window.setTimeout(() => {
@@ -493,22 +386,22 @@ async function maybeSendStt(reason: string) {
     }, 250)
   }
 
-
-
   function speakText(text: string, langCodeOverride?: string) {
     const cleanText = text?.trim()
     if (!cleanText) return
 
-    const langCode = (langCodeOverride || computeLangCode())
+    const langCode = langCodeOverride || computeLangCode()
     const gender = getCurrentGender()
 
     const begin = () => {
       setIsAiSpeaking(true)
-      // не даём TTS попасть в STT (эхо / "сам себя слушает")
       ttsCooldownUntilRef.current = Date.now() + 450
-      audioChunksRef.current = []
-      sentIdxRef.current = 0
+
+      const hdr = audioChunksRef.current?.[0]
+      audioChunksRef.current = hdr ? [hdr] : []
+      sentIdxRef.current = hdr ? 1 : 0
       lastTranscriptRef.current = ""
+
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "recording") {
         try {
@@ -518,7 +411,6 @@ async function maybeSendStt(reason: string) {
     }
 
     const finish = () => {
-      // чуть задерживаем возврат микрофона, чтобы хвост TTS не залетел в следующий VAD
       ttsCooldownUntilRef.current = Date.now() + 450
       setIsAiSpeaking(false)
       const rec = mediaRecorderRef.current
@@ -678,7 +570,6 @@ async function maybeSendStt(reason: string) {
       const now = Date.now()
       const st = vad.current
 
-      // noise floor апдейт только когда "не голос"
       if (!st.voice) {
         st.noiseFloor = st.noiseFloor * 0.995 + rms * 0.005
       }
@@ -706,7 +597,6 @@ async function maybeSendStt(reason: string) {
         }
       }
 
-      // длинная фраза — режем каждые maxUtteranceMs
       if (st.voice && st.utteranceStartTs && now - st.utteranceStartTs > maxUtteranceMs) {
         st.utteranceStartTs = now
         void flushAndSendStt("max_utt")
@@ -735,7 +625,6 @@ async function maybeSendStt(reason: string) {
       const raw = await navigator.mediaDevices.getUserMedia({ audio: true })
       rawStreamRef.current = raw
 
-      // keepalive (некоторые окружения реально быстрее “умирают” без потребителя)
       try {
         const a = new Audio()
         a.muted = true
@@ -745,7 +634,6 @@ async function maybeSendStt(reason: string) {
         await a.play().catch(() => {})
       } catch {}
 
-      // WebAudio bridge
       const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext
       const ctx: AudioContext = new AC()
       audioCtxRef.current = ctx
@@ -771,9 +659,8 @@ async function maybeSendStt(reason: string) {
       const bridged = dest.stream
       bridgedStreamRef.current = bridged
 
-      // reset state
       audioChunksRef.current = []
-      sentIdxRef.current = 1 // первый чанк (header) всегда оставляем как “0”
+      sentIdxRef.current = 1
       isSttBusyRef.current = false
       lastTranscriptRef.current = ""
       vad.current = {
@@ -792,22 +679,17 @@ async function maybeSendStt(reason: string) {
 
       const rec = new MediaRecorder(bridged, opts)
       mediaRecorderRef.current = rec
+      recorderCfgRef.current = { mimeType: mime || (rec as any).mimeType || "audio/webm", sliceMs: 1000 }
 
       rec.onstart = () => {
-        log("[REC] onstart", { state: rec.state, mime: (rec as any).mimeType || mime || "default" })
         setIsListening(true)
       }
 
       rec.ondataavailable = (ev: BlobEvent) => {
         const b = ev.data
         const size = b?.size || 0
-        if (debugParams.debug) {
-          log("[REC] chunk", { size, type: b?.type, totalChunks: audioChunksRef.current.length + (size > 0 ? 1 : 0) })
-        }
-        if (size > 0) {
-          audioChunksRef.current.push(b)
-        }
-      
+        if (size > 0) audioChunksRef.current.push(b)
+
         const pending = pendingSttReasonRef.current
         if (pending) {
           pendingSttReasonRef.current = null
@@ -817,7 +699,7 @@ async function maybeSendStt(reason: string) {
           }
           void maybeSendStt(pending)
         }
-}
+      }
 
       rec.onerror = (ev: any) => {
         console.error("[REC] error", ev)
@@ -827,12 +709,9 @@ async function maybeSendStt(reason: string) {
         setIsListening(false)
       }
 
-      // ключевой момент: на некоторых окружениях start(timeslice) даёт пустые чанки
-      // поэтому: start() + requestData() по таймеру
       rec.start()
       setIsListening(true)
 
-      // requestData таймер
       const sliceMs = isMobile ? 1200 : 1000
       ;(rec as any)._reqTimer = window.setInterval(() => {
         try {
@@ -842,16 +721,7 @@ async function maybeSendStt(reason: string) {
         } catch {}
       }, sliceMs)
 
-      // VAD loop
       startVadLoop()
-
-      // стартовый “прогрев” — через 2 сек если вообще нет аудио, покажем ошибку
-      window.setTimeout(() => {
-        if (!isCallActiveRef.current) return
-        if (audioChunksRef.current.length === 0) {
-          console.warn("[REC] no chunks after 2s (speak now). If stays 0 -> environment/mic issue.")
-        }
-      }, 2000)
 
       isCallActiveRef.current = true
       setIsCallActive(true)
@@ -875,23 +745,12 @@ async function maybeSendStt(reason: string) {
   }
 
   function endCall() {
-    log("[CALL] endCall")
-
     isCallActiveRef.current = false
     setIsCallActive(false)
     setIsListening(false)
     setIsMicMuted(false)
     setIsAiSpeaking(false)
     setNetworkError(null)
-
-    // stop recorder timer
-    const rec: any = mediaRecorderRef.current
-    if (rec && rec._reqTimer) {
-      try {
-        clearInterval(rec._reqTimer)
-      } catch {}
-      rec._reqTimer = null
-    }
 
     stopRecorder()
     stopKeepAlive()
@@ -932,14 +791,12 @@ async function maybeSendStt(reason: string) {
       endCall()
       setMessages([])
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
   useEffect(() => {
     return () => {
       endCall()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const statusText = !isCallActive
@@ -951,10 +808,6 @@ async function maybeSendStt(reason: string) {
         : isListening
           ? t("Listening… you can speak.")
           : t("Waiting... you can start speaking at any moment.")
-
-  const dbg = debugParams.debug
-    ? `stt=${debugParams.stt || "auto"} rms=${vad.current.rms.toFixed(5)} thr=${vad.current.thr.toFixed(5)} nf=${vad.current.noiseFloor.toFixed(5)} voice=${vad.current.voice ? 1 : 0} chunks=${audioChunksRef.current.length} sentIdx=${sentIdxRef.current}`
-    : null
 
   return (
     <Dialog
@@ -987,12 +840,6 @@ async function maybeSendStt(reason: string) {
           <div className="flex h-[500px] flex-col md:h-[540px]">
             <ScrollArea className="flex-1 px-5 pt-4 pb-2">
               <div ref={scrollRef} className="max-h-full space-y-3 pr-1 text-xs md:text-sm">
-                {dbg && (
-                  <div className="rounded-2xl bg-slate-900 px-3 py-2 text-[11px] text-white/90">
-                    debugAudio=1 {dbg}
-                  </div>
-                )}
-
                 {!isCallActive && messages.length === 0 && (
                   <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-slate-700">
                     <p className="mb-1 font-medium text-slate-900">{t("How it works")}</p>
@@ -1063,7 +910,7 @@ async function maybeSendStt(reason: string) {
                       onClick={endCall}
                       className="h-8 w-8 rounded-full bg-rose-600 text-white hover:bg-rose-700"
                     >
-                      <Phone className="h-4 w-4 rotate-[135deg]" />
+                      <Phone className="h-8 w-8 rotate-[135deg]" />
                     </Button>
                   </div>
                 )}

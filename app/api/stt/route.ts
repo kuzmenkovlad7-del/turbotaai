@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
-// Ensure we have Buffer / full Node APIs available for audio handling
 export const runtime = "nodejs"
 
 type Lang3 = "uk" | "ru" | "en"
@@ -31,11 +30,6 @@ function extFromMime(mime: string): string {
   return "webm"
 }
 
-/**
- * MVP anti-hallucination filter:
- * Whisper sometimes "hallucinates" common phrases on silence / noise.
- * We drop those so UI doesn't show garbage text.
- */
 function shouldDropAsGarbage(text: string): boolean {
   const t = text
     .toLowerCase()
@@ -44,7 +38,6 @@ function shouldDropAsGarbage(text: string): boolean {
     .trim()
 
   if (!t) return true
-  // Very short single filler tokens
   if (t.length <= 1) return true
 
   const patterns: RegExp[] = [
@@ -57,7 +50,6 @@ function shouldDropAsGarbage(text: string): boolean {
     /постав(ьте|те) лайк/i,
     /подпис(ывайтесь|уйтесь)/i,
     /see you next time/i,
-    // Video/screen hallucinations on silence/noise
     /ви маєте можливість.*перейти на відео/i,
     /перейти на відео.*дяку(ю|ємо)/i,
     /яке ви бачите на екрані/i,
@@ -70,11 +62,7 @@ function shouldDropAsGarbage(text: string): boolean {
   return patterns.some((re) => re.test(t))
 }
 
-async function whisperTranscribe(args: {
-  bytes: Uint8Array
-  mime: string
-  lang: Lang3
-}) {
+async function whisperTranscribe(args: { bytes: Uint8Array; mime: string; lang: Lang3 }) {
   const { bytes, mime, lang } = args
 
   const form = new FormData()
@@ -82,24 +70,21 @@ async function whisperTranscribe(args: {
   const ab = new ArrayBuffer(bytes.byteLength)
   new Uint8Array(ab).set(bytes)
   const blob = new Blob([ab], { type: cleanMime })
-const filename = `audio.${extFromMime(cleanMime)}`
+  const filename = `audio.${extFromMime(cleanMime)}`
+
   form.append("file", blob, filename)
   form.append("model", OPENAI_STT_MODEL)
-  // Whisper expects ISO-639-1 (uk/ru/en)
   form.append("language", lang)
   form.append("response_format", "verbose_json")
   form.append("temperature", "0")
-  // Helps reduce hallucinations on noise/silence
   form.append(
     "prompt",
-    "Transcribe speech verbatim. If there is no clear speech, return an empty transcription."
+    "Transcribe speech verbatim. If there is no clear speech, return an empty transcription.",
   )
 
   const resp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-    },
+    headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
     body: form,
   })
 
@@ -107,15 +92,11 @@ const filename = `audio.${extFromMime(cleanMime)}`
   let json: any = null
   try {
     json = JSON.parse(raw)
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   if (!resp.ok) {
     const msg =
-      (json && (json.error?.message || json.message)) ||
-      raw ||
-      `OpenAI STT error: ${resp.status}`
+      (json && (json.error?.message || json.message)) || raw || `OpenAI STT error: ${resp.status}`
     throw new Error(msg)
   }
 
@@ -125,17 +106,14 @@ const filename = `audio.${extFromMime(cleanMime)}`
 export async function POST(request: Request) {
   try {
     if (!OPENAI_API_KEY) {
-      return NextResponse.json(
-        { success: false, error: "Missing OPENAI_API_KEY" },
-        { status: 500 }
-      )
+      return NextResponse.json({ success: false, error: "Missing OPENAI_API_KEY" }, { status: 500 })
     }
 
     const lang = asLang3(
       request.headers.get("x-stt-lang") ||
         request.headers.get("x-lang") ||
         request.headers.get("x-stt-hint") ||
-        "uk"
+        "uk",
     )
 
     const contentType = request.headers.get("content-type") || ""
@@ -146,12 +124,11 @@ export async function POST(request: Request) {
 
     if (isMultipart) {
       const fd = await request.formData()
-      const maybe =
-        fd.get("audio") || fd.get("file") || fd.get("blob") || fd.get("data")
+      const maybe = fd.get("audio") || fd.get("file") || fd.get("blob") || fd.get("data")
       if (!maybe || !(maybe instanceof Blob)) {
         return NextResponse.json(
           { success: false, error: "Missing audio file in multipart form-data" },
-          { status: 400 }
+          { status: 400 },
         )
       }
       mime = baseMime((maybe as Blob).type) || mime
@@ -159,11 +136,9 @@ export async function POST(request: Request) {
     } else {
       const ab = await request.arrayBuffer()
       bytes = new Uint8Array(ab)
-      // When client sends Content-Type like: audio/webm;codecs=opus
       mime = baseMime(contentType) || "audio/webm"
     }
 
-    // If chunk is extremely small, it's probably a click/noise; skip it.
     if (!bytes || bytes.byteLength < 900) {
       return NextResponse.json({
         success: true,
@@ -185,18 +160,9 @@ export async function POST(request: Request) {
       })
     }
 
-    return NextResponse.json({
-      success: true,
-      text,
-      lang,
-      debug: { pickedBy: "ui_lang_forced" },
-    })
+    return NextResponse.json({ success: true, text, lang })
   } catch (err: any) {
-    const message =
-      (err && (err.message || String(err))) || "Unknown error in /api/stt"
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
-    )
+    const message = (err && (err.message || String(err))) || "Unknown error in /api/stt"
+    return NextResponse.json({ success: false, error: message }, { status: 500 })
   }
 }

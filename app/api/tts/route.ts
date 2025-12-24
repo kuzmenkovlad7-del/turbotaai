@@ -9,7 +9,6 @@ import {
 
 export const runtime = "nodejs"
 
-// Классический серверный клиент OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
@@ -22,30 +21,16 @@ export async function POST(req: NextRequest) {
     const text = String(rawText || "").trim()
 
     if (!text) {
-      return NextResponse.json(
-        { success: false, error: "Missing 'text' for TTS" },
-        { status: 400 },
-      )
+      return NextResponse.json({ success: false, error: "Missing 'text' for TTS" }, { status: 400 })
     }
 
     if (!process.env.OPENAI_API_KEY) {
-      console.error("[/api/tts] Missing OPENAI_API_KEY")
-      return NextResponse.json(
-        { success: false, error: "Server TTS is not configured" },
-        { status: 500 },
-      )
+      return NextResponse.json({ success: false, error: "Server TTS is not configured" }, { status: 500 })
     }
 
     const langCode = normalizeLanguage(body.language)
     const gender = normalizeGender(body.gender)
     const voice = selectOpenAIVoice(langCode, gender)
-
-    console.log("[/api/tts] Request:", {
-      language: langCode,
-      gender,
-      voice,
-      textSample: text.slice(0, 80),
-    })
 
     const response = await openai.audio.speech.create({
       model: OPENAI_TTS_MODEL,
@@ -64,11 +49,7 @@ export async function POST(req: NextRequest) {
       voice,
       contentType: "audio/mpeg",
     })
-  } catch (error: any) {
-    console.error("[/api/tts] Error:", error)
-    return NextResponse.json(
-      { success: false, error: "TTS generation failed" },
-      { status: 500 },
-    )
+  } catch {
+    return NextResponse.json({ success: false, error: "TTS generation failed" }, { status: 500 })
   }
 }
