@@ -203,7 +203,9 @@ export default function VideoCallDialog({
   const [speechError, setSpeechError] = useState<string | null>(null)
 
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  
+  const isAiSpeakingRef = useRef(false)
+const [messages, setMessages] = useState<ChatMessage[]>([])
   const [interimTranscript, setInterimTranscript] = useState("")
 
   const userVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -230,7 +232,10 @@ export default function VideoCallDialog({
   const hadSpeechRef = useRef<boolean>(false)
   const isStoppingRecorderRef = useRef<boolean>(false)
 
-  const VAD_POLL_MS = 120
+  
+  const restartAfterTtsRef = useRef(false)
+  const startListeningInFlightRef = useRef(false)
+const VAD_POLL_MS = 120
   const VAD_THRESHOLD = 0.018
   const SILENCE_MS_TO_STOP = 3500
   const MIN_BLOB_BYTES = 2500
@@ -247,6 +252,11 @@ export default function VideoCallDialog({
   useEffect(() => {
     isMicMutedRef.current = isMicMuted
   }, [isMicMuted])
+
+  useEffect(() => {
+    isAiSpeakingRef.current = isAiSpeaking
+  }, [isAiSpeaking])
+
 
   // preload voices
   useEffect(() => {
@@ -415,9 +425,8 @@ export default function VideoCallDialog({
 
   async function sendBlobToSTT(blob: Blob, mime: string): Promise<string> {
     // router app/api/stt/route.ts expects RAW audio body (not FormData)
-    const type = (mime || blob.type || "audio/webm").toLowerCase()
-
-    // hint for ru/uk/en (server reads x-stt-hint)
+    const typeFull = (mime || blob.type || "audio/webm").toLowerCase()
+    const type = typeFull.split(";")[0].trim()// hint for ru/uk/en (server reads x-stt-hint)
     const code = String(activeLanguage.code || "uk").toLowerCase()
     const hint = code.startsWith("ru") ? "ru" : code.startsWith("en") ? "en" : "uk"
 
@@ -446,13 +455,24 @@ export default function VideoCallDialog({
     if (typeof data?.result?.text === "string") return data.result.text.trim()
     return ""
   }
+  function safeStartListening() {
+    if (startListeningInFlightRef.current) return
+    startListeningInFlightRef.current = true
+    Promise.resolve()
+      .then(() => startListening())
+      .catch(() => {})
+      .finally(() => {
+        startListeningInFlightRef.current = false
+      })
+  }
+
 
 
 
   async function startListening() {
     if (!isCallActiveRef.current) return
     if (isMicMutedRef.current) return
-    if (isAiSpeaking) return
+    if (isAiSpeakingRef.current) return
 
     setSpeechError(null)
     setInterimTranscript("")
@@ -516,12 +536,13 @@ export default function VideoCallDialog({
       setIsListening(false)
 
       if (!isCallActiveRef.current || isMicMutedRef.current) return
-      if (isAiSpeaking) return
-
-      const chunks = recorderChunksRef.current || []
+      if (isAiSpeakingRef.current) {
+        restartAfterTtsRef.current = true
+        return
+      }const chunks = recorderChunksRef.current || []
       recorderChunksRef.current = []
 
-      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" })
+      const blob = new Blob(chunks, { type: String(recorder.mimeType || mimeType || "audio/webm").split(";")[0].trim() })
       const dur = Date.now() - (recordStartedAtRef.current || Date.now())
 
       // защита от пустых/нулевых записей (seconds:0 / invalid format)
@@ -857,6 +878,12 @@ if (hasEnhancedVideo && speakingVideoRef.current) {
         setActivityStatus("listening")
         startListening().catch(() => {})
       }
+    
+      try { micStreamRef.current?.getAudioTracks?.().forEach((tr) => (tr.enabled = true)) } catch {}
+      if (restartAfterTtsRef.current) {
+        restartAfterTtsRef.current = false
+        if (isCallActiveRef.current && !isMicMutedRef.current) safeStartListening()
+      }
     }
 
     try {
@@ -1123,7 +1150,7 @@ setSpeechError(null)
   const statusText = (() => {
     if (!isCallActive)
       return t("Choose an AI psychologist and press “Start video call” to begin.")
-    if (isAiSpeaking) return t("Assistant is speaking. Please wait a moment.")
+    if (isAiSpeakingRef.current) return t("Assistant is speaking. Please wait a moment.")
     if (micOn) return t("Listening… you can speak.")
     return t("Paused. Turn on microphone to continue.")
   })()
