@@ -1,6 +1,8 @@
 "use client"
 
 import { useCallback, useRef, useEffect, useState } from "react"
+import { ensureAudioUnlocked } from "@/lib/audio/unlock-audio"
+
 
 interface EnhancedSpeechSynthesisProps {
   onSpeechStart?: () => void
@@ -109,6 +111,8 @@ export function useEnhancedSpeechSynthesis({
           testUtterance.onerror = (event) => {
             console.warn("Speech synthesis test failed:", event.error)
           }
+
+          ensureAudioUnlocked().catch(() => {})
 
           window.speechSynthesis.speak(testUtterance)
           setTimeout(() => window.speechSynthesis.cancel(), 100)

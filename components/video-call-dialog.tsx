@@ -19,6 +19,8 @@ import {
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
 import {
+import { ensureAudioUnlocked } from "@/lib/audio/unlock-audio"
+
   getLocaleForLanguage,
   getNativeSpeechParameters,
   getNativeVoicePreferences,
@@ -293,7 +295,7 @@ const rawStreamRef = useRef<MediaStream | null>(null)
 
   const MIN_UTTERANCE_MS = 450
   const MIN_BLOB_BYTES = 2500
-  const hangoverMs = 3500
+  const hangoverMs = 1800
   const maxUtteranceMs = 20000
 
   const startListeningInFlightRef = useRef(false)
@@ -330,6 +332,7 @@ const rawStreamRef = useRef<MediaStream | null>(null)
   useEffect(() => {
     if (isCallActive && !isCameraOff && userVideoRef.current) {
       navigator.mediaDevices
+        ensureAudioUnlocked().catch(() => {})
         .getUserMedia({ video: true })
         .then((stream) => {
           if (userVideoRef.current) userVideoRef.current.srcObject = stream

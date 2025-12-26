@@ -13,6 +13,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Phone, Brain, Mic, MicOff, Loader2, Sparkles } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
+import { ensureAudioUnlocked } from "@/lib/audio/unlock-audio"
+
 
 interface VoiceCallDialogProps {
   isOpen: boolean
@@ -554,7 +556,7 @@ export default function VoiceCallDialog({
       return isMobile ? 0.010 : 0.008
     })()
 
-    const hangoverMs = 3500
+    const hangoverMs = 1800
     const maxUtteranceMs = 20000
 
     const tick = () => {
@@ -621,6 +623,8 @@ export default function VoiceCallDialog({
         setIsConnecting(false)
         return
       }
+
+      ensureAudioUnlocked().catch(() => {})
 
       const raw = await navigator.mediaDevices.getUserMedia({ audio: true })
       rawStreamRef.current = raw
