@@ -69,6 +69,54 @@ function extractAnswer(data: any): string {
   return ""
 }
 
+function normalizeUtterance(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[.,!?;:«»"“”‚‘’…]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function collapseLeadingWordRepeats(text: string): string {
+  let t = (text || "").trim()
+  if (!t) return t
+  // убираем повторяющееся первое слово сколько угодно раз
+  // "Вітаю Вітаю Вітаю як..." -> "Вітаю як..."
+  for (let i = 0; i < 6; i++) {
+    const parts = t.split(/\s+/)
+    if (parts.length < 2) break
+    const a = normalizeUtterance(parts[0])
+    const b = normalizeUtterance(parts[1])
+    if (a && b && a === b) {
+      t = parts.slice(1).join(" ").trim()
+      continue
+    }
+    break
+  }
+  return t
+}
+
+function stripLeadingEchoOfPrev(delta: string, prevSentNorm: string, prevSentTs: number): string {
+  let t = (delta || "").trim()
+  if (!t) return t
+  const dt = Date.now() - (prevSentTs || 0)
+  if (!prevSentNorm || dt > 15000) return t
+
+  // если прошлое сообщение было коротким (1-2 слова) — чаще всего это приветствие,
+  // и если оно “эхом” попало в начало нового — убираем.
+  const prevWords = prevSentNorm.split(" ").filter(Boolean)
+  if (prevWords.length === 0 || prevWords.length > 2) return t
+
+  const firstWord = normalizeUtterance(t.split(/\s+/)[0] || "")
+  const prevLast = prevWords[prevWords.length - 1] || ""
+
+  if (firstWord && prevLast && firstWord === prevLast) {
+    const parts = t.split(/\s+/)
+    if (parts.length >= 2) return parts.slice(1).join(" ").trim()
+  }
+  return t
+}
+
 function diffTranscript(prev: string, full: string): string {
   const normalize = (s: string) =>
     s
@@ -77,7 +125,7 @@ function diffTranscript(prev: string, full: string): string {
       .replace(/\s+/g, " ")
       .trim()
 
-  full = full.trim()
+  full = (full || "").trim()
   if (!full) return ""
   if (!prev) return full
 
@@ -91,10 +139,7 @@ function diffTranscript(prev: string, full: string): string {
 
   const maxCommon = Math.min(prevWords.length, fullWords.length)
   let common = 0
-
-  while (common < maxCommon && prevWords[common] === fullWords[common]) {
-    common++
-  }
+  while (common < maxCommon && prevWords[common] === fullWords[common]) common++
 
   if (common === 0) return full
 
@@ -103,45 +148,21 @@ function diffTranscript(prev: string, full: string): string {
   return rawTokens.slice(common).join(" ").trim()
 }
 
-function normalizeUtterance(s: string): string {
-  return (s || "")
-    .toLowerCase()
-    .replace(/[.,!?;:«»"“”‚‘’…]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-}
-
-function collapseLeadingRepeat(text: string): string {
-  const t = (text || "").trim()
-  if (!t) return t
-  const parts = t.split(/\s+/)
-  if (parts.length >= 2 && normalizeUtterance(parts[0]) === normalizeUtterance(parts[1])) {
-    // убираем повтор первого слова один раз
-    return parts.slice(1).join(" ").trim()
-  }
-  return t
-}
-
 function isMostlyGarbage(text: string): boolean {
   const t = (text || "").trim()
   if (!t) return true
-
   const norm = normalizeUtterance(t)
   if (!norm) return true
 
-  // слишком коротко
   if (norm.length < 3) return true
 
-  // одно слово из 1-2 букв
   const toks = norm.split(" ")
   if (toks.length === 1 && toks[0].length <= 2) return true
 
-  // слишком много не-букв/цифр
   const letters = (t.match(/[A-Za-zА-Яа-яЇїІіЄєҐґ]/g) || []).length
   const total = t.length
   if (total > 0 && letters / total < 0.45) return true
 
-  // типичные “мусорные” фразы (часто прилетают из шума/эха)
   const bannedSub = [
     "обратите внимание",
     "подпиш",
@@ -154,7 +175,6 @@ function isMostlyGarbage(text: string): boolean {
     "спонсор",
     "реклама",
     "промокод",
-    "видео",
     "фотография",
     "скриншот",
     "нажмите",
@@ -164,7 +184,6 @@ function isMostlyGarbage(text: string): boolean {
     if (norm.includes(b)) return true
   }
 
-  // очень короткие “служебные” токены
   const bannedExact = new Set([
     "угу",
     "ага",
@@ -209,7 +228,6 @@ export default function VoiceCallDialog({
   const rawStreamRef = useRef<MediaStream | null>(null)
   const bridgedStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const recorderCfgRef = useRef<{ mimeType: string; sliceMs: number } | null>(null)
 
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
@@ -223,14 +241,14 @@ export default function VoiceCallDialog({
   const pendingSttTimerRef = useRef<number | null>(null)
 
   const MIN_UTTERANCE_MS = 450
-  const MIN_BLOB_BYTES = 2500
-
   const isSttBusyRef = useRef(false)
-  const lastTranscriptRef = useRef("")
+  const lastTranscriptRef = useRef("") // ВАЖНО: не сбрасывать на TTS — иначе будут “эхо-слова”
   const lastUserSentNormRef = useRef("")
   const lastUserSentTsRef = useRef(0)
 
-  const lastSttHintRef = useRef<"uk" | "ru" | "en">("uk")
+  const lastAssistantSentNormRef = useRef("")
+  const lastAssistantSentTsRef = useRef(0)
+
   const isCallActiveRef = useRef(false)
   const isAiSpeakingRef = useRef(false)
   const isMicMutedRef = useRef(false)
@@ -240,12 +258,9 @@ export default function VoiceCallDialog({
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const debugParams = useMemo(() => {
-    if (typeof window === "undefined") return { debug: false, stt: null as any, thr: null as any }
+    if (typeof window === "undefined") return { debug: false }
     const qs = new URLSearchParams(window.location.search)
-    const debug = qs.get("debugAudio") === "1"
-    const stt = qs.get("stt")
-    const thr = qs.get("thr")
-    return { debug, stt, thr }
+    return { debug: qs.get("debugAudio") === "1" }
   }, [])
 
   const isMobile = useMemo(() => {
@@ -266,11 +281,6 @@ export default function VoiceCallDialog({
   }, [messages])
 
   function computeLangCode(): string {
-    const forced = debugParams.stt
-    if (forced === "uk") return "uk-UA"
-    if (forced === "ru") return "ru-RU"
-    if (forced === "en") return "en-US"
-
     const lang =
       typeof (currentLanguage as any) === "string"
         ? ((currentLanguage as any) as string)
@@ -285,7 +295,7 @@ export default function VoiceCallDialog({
     return (voiceGenderRef.current || "female") === "male" ? "MALE" : "FEMALE"
   }
 
-  // iOS/Safari: prime audio playback on first user gesture to reduce NotAllowedError on later async plays
+  // prime audio (iOS/safari)
   useEffect(() => {
     let done = false
     const prime = () => {
@@ -306,9 +316,7 @@ export default function VoiceCallDialog({
           a.muted = false
           a.src = ""
         } catch {}
-      } catch (e) {
-        console.warn("[TTS] prime failed", e)
-      }
+      } catch {}
     }
 
     window.addEventListener("touchstart", prime as any, { passive: true, once: true } as any)
@@ -321,12 +329,10 @@ export default function VoiceCallDialog({
 
   const vad = useRef({
     noiseFloor: 0,
-    rms: 0,
     thr: 0.008,
     voice: false,
     voiceUntilTs: 0,
     utteranceStartTs: 0,
-    endedCount: 0,
   })
 
   function stopRaf() {
@@ -364,7 +370,7 @@ export default function VoiceCallDialog({
   }
 
   function stopRecorder() {
-    const rec = mediaRecorderRef.current as any
+    const rec: any = mediaRecorderRef.current
     if (rec && rec._reqTimer) {
       try {
         clearInterval(rec._reqTimer)
@@ -418,25 +424,28 @@ export default function VoiceCallDialog({
     try {
       a.src = ""
     } catch {}
-    // keep ttsAudioRef.current (iOS unlock)
   }
 
-  function shouldDedup(text: string): boolean {
+  function shouldDedupUser(text: string): boolean {
     const norm = normalizeUtterance(text)
     if (!norm) return true
     const last = lastUserSentNormRef.current || ""
     const dt = Date.now() - (lastUserSentTsRef.current || 0)
-
-    // одинаковое подряд
     if (last && norm === last && dt < 12000) return true
-
-    // почти одинаковое (первые 25 символов) слишком быстро
-    if (last && dt < 4000) {
+    if (last && dt < 3500) {
       const a = norm.slice(0, 25)
       const b = last.slice(0, 25)
       if (a && b && a === b) return true
     }
+    return false
+  }
 
+  function shouldDedupAssistant(text: string): boolean {
+    const norm = normalizeUtterance(text)
+    if (!norm) return true
+    const last = lastAssistantSentNormRef.current || ""
+    const dt = Date.now() - (lastAssistantSentTsRef.current || 0)
+    if (last && norm === last && dt < 12000) return true
     return false
   }
 
@@ -454,14 +463,12 @@ export default function VoiceCallDialog({
     const body = chunks.slice(Math.max(1, sentIdx))
     if (!header || body.length === 0) return
 
-    // не шлём совсем мелочь
     const roughSize = body.reduce((acc, b) => acc + (b?.size || 0), 0)
     if (roughSize < 7000) return
+    if (isSttBusyRef.current) return
 
     const blob = new Blob([header, ...body], { type: header.type || body[0]?.type || "audio/webm" })
-
-    if (blob.size < Math.max(6000, MIN_BLOB_BYTES * 2)) return
-    if (isSttBusyRef.current) return
+    if (blob.size < 6000) return
 
     try {
       isSttBusyRef.current = true
@@ -500,16 +507,22 @@ export default function VoiceCallDialog({
       let delta = diffTranscript(prev, fullText)
       lastTranscriptRef.current = fullText
 
-      delta = collapseLeadingRepeat(delta).trim()
+      // 1) если STT “эхом” добавило первое слово прошлой короткой фразы — режем
+      delta = stripLeadingEchoOfPrev(delta, lastUserSentNormRef.current, lastUserSentTsRef.current)
+
+      // 2) схлопываем повторы первого слова ("Вітаю Вітаю ...")
+      delta = collapseLeadingWordRepeats(delta).trim()
+
       if (!delta) return
-
-      // супер-жёсткий фильтр шума/мусора
       if (isMostlyGarbage(delta)) return
-      if (shouldDedup(delta)) return
+      if (shouldDedupUser(delta)) return
 
-      // фиксируем для dedup
       lastUserSentNormRef.current = normalizeUtterance(delta)
       lastUserSentTsRef.current = Date.now()
+
+      if (debugParams.debug) {
+        console.log("[STT]", { reason, prev, fullText, delta })
+      }
 
       const userMsg: VoiceMessage = {
         id: `${Date.now()}-user`,
@@ -529,7 +542,7 @@ export default function VoiceCallDialog({
   function flushAndSendStt(reason: string) {
     const rec: any = mediaRecorderRef.current
     if (!rec || rec.state !== "recording" || typeof rec.requestData !== "function") {
-      void maybeSendStt(reason as any)
+      void maybeSendStt(reason)
       return
     }
 
@@ -546,7 +559,7 @@ export default function VoiceCallDialog({
       const r = pendingSttReasonRef.current
       pendingSttReasonRef.current = null
       pendingSttTimerRef.current = null
-      void maybeSendStt(r as any)
+      void maybeSendStt(r)
     }, 250)
   }
 
@@ -576,13 +589,7 @@ export default function VoiceCallDialog({
 
     const data = new Uint8Array(analyser.fftSize)
 
-    const baseThr = (() => {
-      const fromQs = debugParams.thr ? Number(debugParams.thr) : NaN
-      if (!Number.isNaN(fromQs) && fromQs > 0) return fromQs
-      // чуть выше на мобилках — меньше ложных срабатываний на шорохи
-      return isMobile ? 0.012 : 0.008
-    })()
-
+    const baseThr = isMobile ? 0.012 : 0.008
     const hangoverMs = 1800
     const maxUtteranceMs = 20000
 
@@ -599,16 +606,9 @@ export default function VoiceCallDialog({
       const now = Date.now()
       const st = vad.current
 
-      if (!st.voice) {
-        st.noiseFloor = st.noiseFloor * 0.995 + rms * 0.005
-      }
-
-      // multiplier чуть выше, чтобы меньше “шорохов” считались речью
+      if (!st.voice) st.noiseFloor = st.noiseFloor * 0.995 + rms * 0.005
       const thr = Math.max(baseThr, st.noiseFloor * 3.6)
       const voiceNow = rms > thr
-
-      st.rms = rms
-      st.thr = thr
 
       if (voiceNow) {
         st.voiceUntilTs = now + hangoverMs
@@ -621,9 +621,7 @@ export default function VoiceCallDialog({
           const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
           st.voice = false
           st.utteranceStartTs = 0
-          if (voiceMs >= MIN_UTTERANCE_MS) {
-            void flushAndSendStt("vad_end")
-          }
+          if (voiceMs >= MIN_UTTERANCE_MS) void flushAndSendStt("vad_end")
         }
       }
 
@@ -644,21 +642,20 @@ export default function VoiceCallDialog({
 
     const langCode = langCodeOverride || computeLangCode()
     const gender = getCurrentGender()
-
     let ttsWatchdog: any = null
 
     const begin = () => {
       setIsAiSpeaking(true)
       isAiSpeakingRef.current = true
 
-      // пока TTS — режем вход STT
       ttsCooldownUntilRef.current = Date.now() + 700
 
-      // сбрасываем накопленные чанки, чтобы не ловить хвост/эхо
+      // важно: НЕ трогаем lastTranscriptRef.current — иначе STT будет “начинать заново” и дублировать слова
+
+      // сбрасываем чанки, чтобы не ловить хвост
       const hdr = audioChunksRef.current?.[0]
       audioChunksRef.current = hdr ? [hdr] : []
       sentIdxRef.current = hdr ? 1 : 0
-      lastTranscriptRef.current = ""
 
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "recording") {
@@ -693,7 +690,7 @@ export default function VoiceCallDialog({
     }
 
     ;(async () => {
-      begin() // важное: ставим “ассистент отвечает” сразу, ещё до прихода mp3
+      begin()
 
       try {
         const res = await fetch("/api/tts", {
@@ -725,14 +722,8 @@ export default function VoiceCallDialog({
         a.src = url
         ttsAudioRef.current = a
 
-        a.onended = () => {
-          finish()
-          // keep ttsAudioRef.current (iOS unlock)
-        }
-        a.onerror = () => {
-          finish()
-          // keep ttsAudioRef.current (iOS unlock)
-        }
+        a.onended = () => finish()
+        a.onerror = () => finish()
 
         try {
           await a.play()
@@ -780,9 +771,18 @@ export default function VoiceCallDialog({
       } catch {}
 
       let answer = extractAnswer(data)
-      if (!answer) {
-        answer = t("I'm sorry, I couldn't process your message. Please try again.")
+      if (!answer) answer = t("I'm sorry, I couldn't process your message. Please try again.")
+
+      // на всякий: убираем повторы первого слова в ответе тоже
+      answer = collapseLeadingWordRepeats(answer)
+
+      // дедуп ассистента (если вдруг ответ добавляется дважды)
+      if (shouldDedupAssistant(answer)) {
+        speakText(answer, voiceLangCode)
+        return
       }
+      lastAssistantSentNormRef.current = normalizeUtterance(answer)
+      lastAssistantSentTsRef.current = Date.now()
 
       const assistantMsg: VoiceMessage = {
         id: `${Date.now()}-assistant`,
@@ -835,7 +835,6 @@ export default function VoiceCallDialog({
       const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext
       const ctx: AudioContext = new AC()
       audioCtxRef.current = ctx
-
       try {
         await ctx.resume()
       } catch {}
@@ -849,7 +848,6 @@ export default function VoiceCallDialog({
       analyserRef.current = analyser
 
       const dest = ctx.createMediaStreamDestination()
-
       src.connect(gain)
       gain.connect(analyser)
       gain.connect(dest)
@@ -863,15 +861,15 @@ export default function VoiceCallDialog({
       lastTranscriptRef.current = ""
       lastUserSentNormRef.current = ""
       lastUserSentTsRef.current = 0
+      lastAssistantSentNormRef.current = ""
+      lastAssistantSentTsRef.current = 0
 
       vad.current = {
         noiseFloor: 0,
-        rms: 0,
         thr: 0.008,
         voice: false,
         voiceUntilTs: 0,
         utteranceStartTs: 0,
-        endedCount: 0,
       }
 
       const mime = pickMime()
@@ -880,18 +878,13 @@ export default function VoiceCallDialog({
 
       const rec = new MediaRecorder(bridged, opts)
       mediaRecorderRef.current = rec
-      recorderCfgRef.current = { mimeType: mime || (rec as any).mimeType || "audio/webm", sliceMs: 1000 }
 
-      rec.onstart = () => {
-        setIsListening(true)
-      }
+      rec.onstart = () => setIsListening(true)
 
       rec.ondataavailable = (ev: BlobEvent) => {
         const b = ev.data
         const size = b?.size || 0
-
         if (size > 0) {
-          // не пушим чанки, пока AI говорит/микрофон выключен (анти-эхо/анти-мусор)
           if (!isAiSpeakingRef.current && !isMicMutedRef.current) {
             audioChunksRef.current.push(b)
           }
@@ -908,13 +901,8 @@ export default function VoiceCallDialog({
         }
       }
 
-      rec.onerror = (ev: any) => {
-        console.error("[REC] error", ev)
-      }
-
-      rec.onstop = () => {
-        setIsListening(false)
-      }
+      rec.onstop = () => setIsListening(false)
+      rec.onerror = (ev: any) => console.error("[REC] error", ev)
 
       rec.start()
       setIsListening(true)
@@ -970,6 +958,8 @@ export default function VoiceCallDialog({
     lastTranscriptRef.current = ""
     lastUserSentNormRef.current = ""
     lastUserSentTsRef.current = 0
+    lastAssistantSentNormRef.current = ""
+    lastAssistantSentTsRef.current = 0
     isSttBusyRef.current = false
   }
 
@@ -1003,9 +993,7 @@ export default function VoiceCallDialog({
   }, [isOpen])
 
   useEffect(() => {
-    return () => {
-      endCall()
-    }
+    return () => endCall()
   }, [])
 
   const statusText = !isCallActive
@@ -1031,36 +1019,20 @@ export default function VoiceCallDialog({
       <DialogContent className="max-w-xl border-none bg-transparent p-0">
         <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/10">
           <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
-                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
-                    <Phone className="h-4 w-4" />
-                  </span>
-                  {t("Voice session with AI-psychologist")}
-                </DialogTitle>
-                <DialogDescription className="mt-1 text-xs text-indigo-100">
-                  {t("You can talk out loud, the assistant will listen, answer and voice the reply.")}
-                </DialogDescription>
-              </div>
-            </div>
+            <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
+                <Phone className="h-4 w-4" />
+              </span>
+              {t("Voice session with AI-psychologist")}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-xs text-indigo-100">
+              {t("You can talk out loud, the assistant will listen, answer and voice the reply.")}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="flex h-[500px] flex-col md:h-[540px]">
             <ScrollArea className="flex-1 px-5 pt-4 pb-2">
               <div ref={scrollRef} className="max-h-full space-y-3 pr-1 text-xs md:text-sm">
-                {!isCallActive && messages.length === 0 && (
-                  <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-slate-700">
-                    <p className="mb-1 font-medium text-slate-900">{t("How it works")}</p>
-                    <p className="mb-2">
-                      {t("Choose a voice and start the session. The assistant will listen to you and answer like a real psychologist.")}
-                    </p>
-                    <p className="text-[11px] text-slate-500">
-                      {t("You can switch between female and male voice by ending the call and starting again with a different option.")}
-                    </p>
-                  </div>
-                )}
-
                 {messages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                     <div
@@ -1113,6 +1085,7 @@ export default function VoiceCallDialog({
                     >
                       {isMicMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                     </Button>
+
                     <Button
                       type="button"
                       size="icon"
@@ -1130,6 +1103,7 @@ export default function VoiceCallDialog({
                   <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
                     {t("Choose voice for this session")}
                   </div>
+
                   <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-center">
                     <Button
                       type="button"
