@@ -103,6 +103,88 @@ function diffTranscript(prev: string, full: string): string {
   return rawTokens.slice(common).join(" ").trim()
 }
 
+function normalizeUtterance(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[.,!?;:«»"“”‚‘’…]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function collapseLeadingRepeat(text: string): string {
+  const t = (text || "").trim()
+  if (!t) return t
+  const parts = t.split(/\s+/)
+  if (parts.length >= 2 && normalizeUtterance(parts[0]) === normalizeUtterance(parts[1])) {
+    // убираем повтор первого слова один раз
+    return parts.slice(1).join(" ").trim()
+  }
+  return t
+}
+
+function isMostlyGarbage(text: string): boolean {
+  const t = (text || "").trim()
+  if (!t) return true
+
+  const norm = normalizeUtterance(t)
+  if (!norm) return true
+
+  // слишком коротко
+  if (norm.length < 3) return true
+
+  // одно слово из 1-2 букв
+  const toks = norm.split(" ")
+  if (toks.length === 1 && toks[0].length <= 2) return true
+
+  // слишком много не-букв/цифр
+  const letters = (t.match(/[A-Za-zА-Яа-яЇїІіЄєҐґ]/g) || []).length
+  const total = t.length
+  if (total > 0 && letters / total < 0.45) return true
+
+  // типичные “мусорные” фразы (часто прилетают из шума/эха)
+  const bannedSub = [
+    "обратите внимание",
+    "подпиш",
+    "подписывай",
+    "лайк",
+    "ставьте",
+    "на канал",
+    "в описании",
+    "ссылка",
+    "спонсор",
+    "реклама",
+    "промокод",
+    "видео",
+    "фотография",
+    "скриншот",
+    "нажмите",
+    "кнопк",
+  ]
+  for (const b of bannedSub) {
+    if (norm.includes(b)) return true
+  }
+
+  // очень короткие “служебные” токены
+  const bannedExact = new Set([
+    "угу",
+    "ага",
+    "мм",
+    "м",
+    "а",
+    "ну",
+    "так",
+    "ок",
+    "okay",
+    "yes",
+    "no",
+    "hello",
+    "hi",
+  ])
+  if (toks.length === 1 && bannedExact.has(toks[0])) return true
+
+  return false
+}
+
 export default function VoiceCallDialog({
   isOpen,
   onClose,
@@ -127,9 +209,7 @@ export default function VoiceCallDialog({
   const rawStreamRef = useRef<MediaStream | null>(null)
   const bridgedStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const recorderCfgRef = useRef<{ mimeType: string; sliceMs: number } | null>(
-    null,
-  )
+  const recorderCfgRef = useRef<{ mimeType: string; sliceMs: number } | null>(null)
 
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
@@ -143,71 +223,24 @@ export default function VoiceCallDialog({
   const pendingSttTimerRef = useRef<number | null>(null)
 
   const MIN_UTTERANCE_MS = 450
+  const MIN_BLOB_BYTES = 2500
+
   const isSttBusyRef = useRef(false)
   const lastTranscriptRef = useRef("")
+  const lastUserSentNormRef = useRef("")
+  const lastUserSentTsRef = useRef(0)
 
+  const lastSttHintRef = useRef<"uk" | "ru" | "en">("uk")
   const isCallActiveRef = useRef(false)
   const isAiSpeakingRef = useRef(false)
   const isMicMutedRef = useRef(false)
   const ttsCooldownUntilRef = useRef(0)
 
-  const lastUserSentNormRef = useRef("")
-  const lastUserSentTsRef = useRef(0)
-
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
 
-  // iOS/Safari: prime audio playback on first user gesture to reduce NotAllowedError on later async plays
-  useEffect(() => {
-    let done = false
-    const prime = () => {
-      if (done) return
-      done = true
-      try {
-        const a = ttsAudioRef.current ?? new Audio()
-        ;(a as any).playsInline = true
-        ;(a as any).preload = "auto"
-        a.muted = true
-        a.src =
-          "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
-        ttsAudioRef.current = a
-        const p = a.play()
-        ;(p as any)?.catch?.(() => {})
-        try {
-          a.pause()
-          a.currentTime = 0
-          a.muted = false
-          a.src = ""
-        } catch {}
-      } catch (e) {
-        console.warn("[TTS] prime failed", e)
-      }
-    }
-
-    window.addEventListener("touchstart", prime as any, {
-      passive: true,
-      once: true,
-    } as any)
-    window.addEventListener("mousedown", prime as any, { once: true } as any)
-    return () => {
-      window.removeEventListener("touchstart", prime as any)
-      window.removeEventListener("mousedown", prime as any)
-    }
-  }, [])
-
-  const vad = useRef({
-    noiseFloor: 0,
-    rms: 0,
-    thr: 0.008,
-    voice: false,
-    voiceUntilTs: 0,
-    utteranceStartTs: 0,
-    endedCount: 0,
-  })
-
   const debugParams = useMemo(() => {
-    if (typeof window === "undefined")
-      return { debug: false, stt: null as any, thr: null as any }
+    if (typeof window === "undefined") return { debug: false, stt: null as any, thr: null as any }
     const qs = new URLSearchParams(window.location.search)
     const debug = qs.get("debugAudio") === "1"
     const stt = qs.get("stt")
@@ -229,8 +262,7 @@ export default function VoiceCallDialog({
   }, [isMicMuted])
 
   useEffect(() => {
-    if (scrollRef.current)
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages])
 
   function computeLangCode(): string {
@@ -252,6 +284,50 @@ export default function VoiceCallDialog({
   function getCurrentGender(): "MALE" | "FEMALE" {
     return (voiceGenderRef.current || "female") === "male" ? "MALE" : "FEMALE"
   }
+
+  // iOS/Safari: prime audio playback on first user gesture to reduce NotAllowedError on later async plays
+  useEffect(() => {
+    let done = false
+    const prime = () => {
+      if (done) return
+      done = true
+      try {
+        const a = ttsAudioRef.current ?? new Audio()
+        ;(a as any).playsInline = true
+        ;(a as any).preload = "auto"
+        a.muted = true
+        a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
+        ttsAudioRef.current = a
+        const p = a.play()
+        ;(p as any)?.catch?.(() => {})
+        try {
+          a.pause()
+          a.currentTime = 0
+          a.muted = false
+          a.src = ""
+        } catch {}
+      } catch (e) {
+        console.warn("[TTS] prime failed", e)
+      }
+    }
+
+    window.addEventListener("touchstart", prime as any, { passive: true, once: true } as any)
+    window.addEventListener("mousedown", prime as any, { once: true } as any)
+    return () => {
+      window.removeEventListener("touchstart", prime as any)
+      window.removeEventListener("mousedown", prime as any)
+    }
+  }, [])
+
+  const vad = useRef({
+    noiseFloor: 0,
+    rms: 0,
+    thr: 0.008,
+    voice: false,
+    voiceUntilTs: 0,
+    utteranceStartTs: 0,
+    endedCount: 0,
+  })
 
   function stopRaf() {
     if (rafRef.current) {
@@ -329,6 +405,11 @@ export default function VoiceCallDialog({
     const a = ttsAudioRef.current
     if (!a) return
     try {
+      a.onplay = null
+      a.onended = null
+      a.onerror = null
+    } catch {}
+    try {
       a.pause()
     } catch {}
     try {
@@ -337,71 +418,24 @@ export default function VoiceCallDialog({
     try {
       a.src = ""
     } catch {}
-  }
-
-  function normalizeUtterance(s: string): string {
-    return (s || "")
-      .toLowerCase()
-      .replace(/[.,!?;:«»"“”‚‘’…]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-  }
-
-  function isLikelyGarbageOrNoise(text: string): boolean {
-    const norm = normalizeUtterance(text)
-    if (!norm) return true
-
-    // считаем "буквы" (латиница + кириллица + укр)
-    const letters = norm.match(/[a-zа-яёієїґ]/gi)?.length || 0
-    const nonSpace = norm.replace(/\s+/g, "").length
-    const ratio = nonSpace > 0 ? letters / nonSpace : 0
-
-    const words = norm.split(" ").filter(Boolean)
-    const wc = words.length
-
-    // если мало букв — почти всегда шум/обрывки
-    if (letters < 3) return true
-    if (ratio < 0.55) return true
-
-    // очень короткие одиночные слова чаще всего мусор
-    if (wc === 1) {
-      const w = words[0]
-      const allow = new Set([
-        "да",
-        "нет",
-        "так",
-        "ні",
-        "ок",
-        "okay",
-        "ага",
-        "угу",
-        "yes",
-        "no",
-      ])
-      if (!allow.has(w) && w.length < 6) return true
-
-      // анти-повтор приветствия: если уже было приветствие недавно — игнор
-      const greetings = new Set(["вітаю", "привіт", "привет", "hello", "алло"])
-      const last = lastUserSentNormRef.current || ""
-      const dt = Date.now() - (lastUserSentTsRef.current || 0)
-      if (greetings.has(w) && dt < 30000 && last.startsWith(w)) return true
-    }
-
-    return false
+    // keep ttsAudioRef.current (iOS unlock)
   }
 
   function shouldDedup(text: string): boolean {
     const norm = normalizeUtterance(text)
     if (!norm) return true
-
     const last = lastUserSentNormRef.current || ""
     const dt = Date.now() - (lastUserSentTsRef.current || 0)
 
-    // точный дубль
-    if (last && norm === last && dt < 15000) return true
+    // одинаковое подряд
+    if (last && norm === last && dt < 12000) return true
 
-    // очень короткий хвост, который дублирует уже сказанное
-    if (last && norm.length <= 8 && dt < 20000 && last.includes(norm)) return true
+    // почти одинаковое (первые 25 символов) слишком быстро
+    if (last && dt < 4000) {
+      const a = norm.slice(0, 25)
+      const b = last.slice(0, 25)
+      if (a && b && a === b) return true
+    }
 
     return false
   }
@@ -420,11 +454,13 @@ export default function VoiceCallDialog({
     const body = chunks.slice(Math.max(1, sentIdx))
     if (!header || body.length === 0) return
 
-    const blob = new Blob([header, ...body], {
-      type: header.type || body[0]?.type || "audio/webm",
-    })
+    // не шлём совсем мелочь
+    const roughSize = body.reduce((acc, b) => acc + (b?.size || 0), 0)
+    if (roughSize < 7000) return
 
-    if (blob.size < 6000) return
+    const blob = new Blob([header, ...body], { type: header.type || body[0]?.type || "audio/webm" })
+
+    if (blob.size < Math.max(6000, MIN_BLOB_BYTES * 2)) return
     if (isSttBusyRef.current) return
 
     try {
@@ -461,15 +497,17 @@ export default function VoiceCallDialog({
       if (!fullText) return
 
       const prev = lastTranscriptRef.current
-      const delta = diffTranscript(prev, fullText)
+      let delta = diffTranscript(prev, fullText)
       lastTranscriptRef.current = fullText
 
+      delta = collapseLeadingRepeat(delta).trim()
       if (!delta) return
 
-      // КЛЮЧ: фильтруем шум/мусор и повторы
-      if (isLikelyGarbageOrNoise(delta)) return
+      // супер-жёсткий фильтр шума/мусора
+      if (isMostlyGarbage(delta)) return
       if (shouldDedup(delta)) return
 
+      // фиксируем для dedup
       lastUserSentNormRef.current = normalizeUtterance(delta)
       lastUserSentTsRef.current = Date.now()
 
@@ -490,11 +528,7 @@ export default function VoiceCallDialog({
 
   function flushAndSendStt(reason: string) {
     const rec: any = mediaRecorderRef.current
-    if (
-      !rec ||
-      rec.state !== "recording" ||
-      typeof rec.requestData !== "function"
-    ) {
+    if (!rec || rec.state !== "recording" || typeof rec.requestData !== "function") {
       void maybeSendStt(reason as any)
       return
     }
@@ -506,8 +540,7 @@ export default function VoiceCallDialog({
       rec.requestData()
     } catch {}
 
-    if (pendingSttTimerRef.current)
-      window.clearTimeout(pendingSttTimerRef.current)
+    if (pendingSttTimerRef.current) window.clearTimeout(pendingSttTimerRef.current)
     pendingSttTimerRef.current = window.setTimeout(() => {
       if (!pendingSttReasonRef.current) return
       const r = pendingSttReasonRef.current
@@ -517,8 +550,96 @@ export default function VoiceCallDialog({
     }, 250)
   }
 
+  function pickMime(): string | null {
+    const MR: any = typeof MediaRecorder !== "undefined" ? MediaRecorder : null
+    if (!MR || !MR.isTypeSupported) return null
+
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/mp4;codecs=mp4a.40.2",
+      "audio/mp4",
+    ]
+
+    for (const c of candidates) {
+      try {
+        if (MR.isTypeSupported(c)) return c
+      } catch {}
+    }
+    return null
+  }
+
+  function startVadLoop() {
+    const analyser = analyserRef.current
+    if (!analyser) return
+
+    const data = new Uint8Array(analyser.fftSize)
+
+    const baseThr = (() => {
+      const fromQs = debugParams.thr ? Number(debugParams.thr) : NaN
+      if (!Number.isNaN(fromQs) && fromQs > 0) return fromQs
+      // чуть выше на мобилках — меньше ложных срабатываний на шорохи
+      return isMobile ? 0.012 : 0.008
+    })()
+
+    const hangoverMs = 1800
+    const maxUtteranceMs = 20000
+
+    const tick = () => {
+      analyser.getByteTimeDomainData(data)
+
+      let sum = 0
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128
+        sum += v * v
+      }
+      const rms = Math.sqrt(sum / data.length)
+
+      const now = Date.now()
+      const st = vad.current
+
+      if (!st.voice) {
+        st.noiseFloor = st.noiseFloor * 0.995 + rms * 0.005
+      }
+
+      // multiplier чуть выше, чтобы меньше “шорохов” считались речью
+      const thr = Math.max(baseThr, st.noiseFloor * 3.6)
+      const voiceNow = rms > thr
+
+      st.rms = rms
+      st.thr = thr
+
+      if (voiceNow) {
+        st.voiceUntilTs = now + hangoverMs
+        if (!st.voice) {
+          st.voice = true
+          st.utteranceStartTs = now
+        }
+      } else {
+        if (st.voice && now > st.voiceUntilTs) {
+          const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
+          st.voice = false
+          st.utteranceStartTs = 0
+          if (voiceMs >= MIN_UTTERANCE_MS) {
+            void flushAndSendStt("vad_end")
+          }
+        }
+      }
+
+      if (st.voice && st.utteranceStartTs && now - st.utteranceStartTs > maxUtteranceMs) {
+        st.utteranceStartTs = now
+        void flushAndSendStt("max_utt")
+      }
+
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+  }
+
   function speakText(text: string, langCodeOverride?: string) {
-    const cleanText = text?.trim()
+    const cleanText = (text || "").trim()
     if (!cleanText) return
 
     const langCode = langCodeOverride || computeLangCode()
@@ -528,19 +649,23 @@ export default function VoiceCallDialog({
 
     const begin = () => {
       setIsAiSpeaking(true)
+      isAiSpeakingRef.current = true
+
+      // пока TTS — режем вход STT
       ttsCooldownUntilRef.current = Date.now() + 700
 
-      // режем буфер, чтобы хвосты не улетали в STT
+      // сбрасываем накопленные чанки, чтобы не ловить хвост/эхо
       const hdr = audioChunksRef.current?.[0]
       audioChunksRef.current = hdr ? [hdr] : []
       sentIdxRef.current = hdr ? 1 : 0
       lastTranscriptRef.current = ""
 
-      // сброс VAD
-      vad.current.voice = false
-      vad.current.voiceUntilTs = 0
-      vad.current.utteranceStartTs = 0
-      vad.current.endedCount = 0
+      const rec = mediaRecorderRef.current
+      if (rec && rec.state === "recording") {
+        try {
+          rec.pause()
+        } catch {}
+      }
 
       if (ttsWatchdog) window.clearTimeout(ttsWatchdog)
       ttsWatchdog = window.setTimeout(() => {
@@ -552,11 +677,24 @@ export default function VoiceCallDialog({
     const finish = () => {
       if (ttsWatchdog) window.clearTimeout(ttsWatchdog)
       ttsWatchdog = null
+
       ttsCooldownUntilRef.current = Date.now() + 700
       setIsAiSpeaking(false)
+      isAiSpeakingRef.current = false
+
+      const rec = mediaRecorderRef.current
+      if (rec && rec.state === "paused" && isCallActiveRef.current && !isMicMutedRef.current) {
+        window.setTimeout(() => {
+          try {
+            rec.resume()
+          } catch {}
+        }, 250)
+      }
     }
 
     ;(async () => {
+      begin() // важное: ставим “ассистент отвечает” сразу, ещё до прихода mp3
+
       try {
         const res = await fetch("/api/tts", {
           method: "POST",
@@ -580,22 +718,30 @@ export default function VoiceCallDialog({
         const url = `data:audio/mp3;base64,${data.audioContent}`
 
         stopTtsAudio()
+
         const a = ttsAudioRef.current ?? new Audio()
         ;(a as any).playsInline = true
         ;(a as any).preload = "auto"
         a.src = url
         ttsAudioRef.current = a
 
-        a.onplay = begin
-        a.onended = () => finish()
-        a.onerror = () => finish()
+        a.onended = () => {
+          finish()
+          // keep ttsAudioRef.current (iOS unlock)
+        }
+        a.onerror = () => {
+          finish()
+          // keep ttsAudioRef.current (iOS unlock)
+        }
 
         try {
           await a.play()
-        } catch {
+        } catch (e) {
+          console.warn("[TTS] play blocked", e)
           finish()
         }
-      } catch {
+      } catch (e) {
+        console.error("[TTS] fatal", e)
         finish()
       }
     })()
@@ -654,91 +800,6 @@ export default function VoiceCallDialog({
     }
   }
 
-  function pickMime(): string | null {
-    const MR: any = typeof MediaRecorder !== "undefined" ? MediaRecorder : null
-    if (!MR || !MR.isTypeSupported) return null
-
-    const candidates = [
-      "audio/webm;codecs=opus",
-      "audio/webm",
-      "audio/ogg;codecs=opus",
-      "audio/mp4;codecs=mp4a.40.2",
-      "audio/mp4",
-    ]
-
-    for (const c of candidates) {
-      try {
-        if (MR.isTypeSupported(c)) return c
-      } catch {}
-    }
-    return null
-  }
-
-  function startVadLoop() {
-    const analyser = analyserRef.current
-    if (!analyser) return
-
-    const data = new Uint8Array(analyser.fftSize)
-    const baseThr = (() => {
-      const fromQs = debugParams.thr ? Number(debugParams.thr) : NaN
-      if (!Number.isNaN(fromQs) && fromQs > 0) return fromQs
-      return isMobile ? 0.010 : 0.008
-    })()
-
-    const hangoverMs = 1800
-    const maxUtteranceMs = 20000
-
-    const tick = () => {
-      analyser.getByteTimeDomainData(data)
-
-      let sum = 0
-      for (let i = 0; i < data.length; i++) {
-        const v = (data[i] - 128) / 128
-        sum += v * v
-      }
-      const rms = Math.sqrt(sum / data.length)
-
-      const now = Date.now()
-      const st = vad.current
-
-      if (!st.voice) {
-        st.noiseFloor = st.noiseFloor * 0.995 + rms * 0.005
-      }
-
-      const thr = Math.max(baseThr, st.noiseFloor * 3.0)
-      const voiceNow = rms > thr
-
-      st.rms = rms
-      st.thr = thr
-
-      if (voiceNow) {
-        st.voiceUntilTs = now + hangoverMs
-        if (!st.voice) {
-          st.voice = true
-          st.utteranceStartTs = now
-        }
-      } else {
-        if (st.voice && now > st.voiceUntilTs) {
-          const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
-          st.voice = false
-          st.utteranceStartTs = 0
-          if (voiceMs >= MIN_UTTERANCE_MS) {
-            void flushAndSendStt("vad_end")
-          }
-        }
-      }
-
-      if (st.voice && st.utteranceStartTs && now - st.utteranceStartTs > maxUtteranceMs) {
-        st.utteranceStartTs = now
-        void flushAndSendStt("max_utt")
-      }
-
-      rafRef.current = requestAnimationFrame(tick)
-    }
-
-    rafRef.current = requestAnimationFrame(tick)
-  }
-
   async function startCall(gender: "female" | "male") {
     voiceGenderRef.current = gender
     setIsConnecting(true)
@@ -747,22 +808,19 @@ export default function VoiceCallDialog({
     try {
       if (!navigator?.mediaDevices?.getUserMedia) {
         setNetworkError(
-          t(
-            "Microphone access is not supported in this browser. Please use the latest version of Chrome, Edge or Safari.",
-          ),
+          t("Microphone access is not supported in this browser. Please use the latest version of Chrome, Edge or Safari."),
         )
         setIsConnecting(false)
         return
       }
 
-      // ВАЖНО: системные фильтры (без наушников это must-have)
       const raw = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         } as any,
-      } as any)
+      })
       rawStreamRef.current = raw
 
       try {
@@ -774,8 +832,7 @@ export default function VoiceCallDialog({
         await a.play().catch(() => {})
       } catch {}
 
-      const AC: any =
-        (window as any).AudioContext || (window as any).webkitAudioContext
+      const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext
       const ctx: AudioContext = new AC()
       audioCtxRef.current = ctx
 
@@ -823,10 +880,7 @@ export default function VoiceCallDialog({
 
       const rec = new MediaRecorder(bridged, opts)
       mediaRecorderRef.current = rec
-      recorderCfgRef.current = {
-        mimeType: mime || (rec as any).mimeType || "audio/webm",
-        sliceMs: 1000,
-      }
+      recorderCfgRef.current = { mimeType: mime || (rec as any).mimeType || "audio/webm", sliceMs: 1000 }
 
       rec.onstart = () => {
         setIsListening(true)
@@ -835,15 +889,11 @@ export default function VoiceCallDialog({
       rec.ondataavailable = (ev: BlobEvent) => {
         const b = ev.data
         const size = b?.size || 0
+
         if (size > 0) {
-          // первый chunk сохраняем всегда как header
-          if (audioChunksRef.current.length === 0) {
+          // не пушим чанки, пока AI говорит/микрофон выключен (анти-эхо/анти-мусор)
+          if (!isAiSpeakingRef.current && !isMicMutedRef.current) {
             audioChunksRef.current.push(b)
-          } else {
-            // пока AI говорит или микрофон выключен — не копим
-            if (!isAiSpeakingRef.current && !isMicMutedRef.current) {
-              audioChunksRef.current.push(b)
-            }
           }
         }
 
@@ -872,10 +922,7 @@ export default function VoiceCallDialog({
       const sliceMs = isMobile ? 1200 : 1000
       ;(rec as any)._reqTimer = window.setInterval(() => {
         try {
-          if (
-            mediaRecorderRef.current &&
-            mediaRecorderRef.current.state === "recording"
-          ) {
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
             mediaRecorderRef.current.requestData()
           }
         } catch {}
@@ -896,9 +943,7 @@ export default function VoiceCallDialog({
       const name = e?.name
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
         setNetworkError(
-          t(
-            "Microphone is blocked for this site in the browser. Please allow access in the address bar and reload the page.",
-          ),
+          t("Microphone is blocked for this site in the browser. Please allow access in the address bar and reload the page."),
         )
       } else {
         setNetworkError(t("Could not start microphone. Check permissions and try again."))
@@ -923,6 +968,8 @@ export default function VoiceCallDialog({
     audioChunksRef.current = []
     sentIdxRef.current = 0
     lastTranscriptRef.current = ""
+    lastUserSentNormRef.current = ""
+    lastUserSentTsRef.current = 0
     isSttBusyRef.current = false
   }
 
