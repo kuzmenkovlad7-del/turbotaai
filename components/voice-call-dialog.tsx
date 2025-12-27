@@ -127,7 +127,9 @@ export default function VoiceCallDialog({
   const rawStreamRef = useRef<MediaStream | null>(null)
   const bridgedStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const recorderCfgRef = useRef<{ mimeType: string; sliceMs: number } | null>(null)
+  const recorderCfgRef = useRef<{ mimeType: string; sliceMs: number } | null>(
+    null,
+  )
 
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
@@ -139,6 +141,7 @@ export default function VoiceCallDialog({
   const sentIdxRef = useRef(0)
   const pendingSttReasonRef = useRef<string | null>(null)
   const pendingSttTimerRef = useRef<number | null>(null)
+
   const MIN_UTTERANCE_MS = 450
   const isSttBusyRef = useRef(false)
   const lastTranscriptRef = useRef("")
@@ -166,10 +169,8 @@ export default function VoiceCallDialog({
         a.src =
           "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
         ttsAudioRef.current = a
-
         const p = a.play()
         ;(p as any)?.catch?.(() => {})
-
         try {
           a.pause()
           a.currentTime = 0
@@ -203,7 +204,8 @@ export default function VoiceCallDialog({
   })
 
   const debugParams = useMemo(() => {
-    if (typeof window === "undefined") return { debug: false, stt: null as any, thr: null as any }
+    if (typeof window === "undefined")
+      return { debug: false, stt: null as any, thr: null as any }
     const qs = new URLSearchParams(window.location.search)
     const debug = qs.get("debugAudio") === "1"
     const stt = qs.get("stt")
@@ -225,7 +227,8 @@ export default function VoiceCallDialog({
   }, [isMicMuted])
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (scrollRef.current)
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages])
 
   function computeLangCode(): string {
@@ -324,11 +327,6 @@ export default function VoiceCallDialog({
     const a = ttsAudioRef.current
     if (!a) return
     try {
-      a.onplay = null
-      a.onended = null
-      a.onerror = null
-    } catch {}
-    try {
       a.pause()
     } catch {}
     try {
@@ -417,7 +415,11 @@ export default function VoiceCallDialog({
 
   function flushAndSendStt(reason: string) {
     const rec: any = mediaRecorderRef.current
-    if (!rec || rec.state !== "recording" || typeof rec.requestData !== "function") {
+    if (
+      !rec ||
+      rec.state !== "recording" ||
+      typeof rec.requestData !== "function"
+    ) {
       void maybeSendStt(reason as any)
       return
     }
@@ -429,7 +431,8 @@ export default function VoiceCallDialog({
       rec.requestData()
     } catch {}
 
-    if (pendingSttTimerRef.current) window.clearTimeout(pendingSttTimerRef.current)
+    if (pendingSttTimerRef.current)
+      window.clearTimeout(pendingSttTimerRef.current)
     pendingSttTimerRef.current = window.setTimeout(() => {
       if (!pendingSttReasonRef.current) return
       const r = pendingSttReasonRef.current
@@ -450,19 +453,21 @@ export default function VoiceCallDialog({
 
     const begin = () => {
       setIsAiSpeaking(true)
+
+      // чуть больше cooldown, чтобы хвост TTS не улетал в STT
       ttsCooldownUntilRef.current = Date.now() + 700
 
+      // режем буфер, чтобы старые куски не переиспользовались
       const hdr = audioChunksRef.current?.[0]
       audioChunksRef.current = hdr ? [hdr] : []
       sentIdxRef.current = hdr ? 1 : 0
       lastTranscriptRef.current = ""
 
-      const rec = mediaRecorderRef.current
-      if (rec && rec.state === "recording") {
-        try {
-          rec.pause()
-        } catch {}
-      }
+      // сброс VAD (эхо/шум во время TTS часто ломает состояние)
+      vad.current.voice = false
+      vad.current.voiceUntilTs = 0
+      vad.current.utteranceStartTs = 0
+      vad.current.endedCount = 0
 
       if (ttsWatchdog) window.clearTimeout(ttsWatchdog)
       ttsWatchdog = window.setTimeout(() => {
@@ -474,16 +479,12 @@ export default function VoiceCallDialog({
     const finish = () => {
       if (ttsWatchdog) window.clearTimeout(ttsWatchdog)
       ttsWatchdog = null
+
       ttsCooldownUntilRef.current = Date.now() + 700
       setIsAiSpeaking(false)
-      const rec = mediaRecorderRef.current
-      if (rec && rec.state === "paused" && isCallActiveRef.current && !isMicMutedRef.current) {
-        window.setTimeout(() => {
-          try {
-            rec.resume()
-          } catch {}
-        }, 250)
-      }
+
+      // ВАЖНО: НЕ pause/resume MediaRecorder на iOS/Safari — часто “умирает”
+      // Мы просто не копим чанки в буфер, пока AI говорит.
     }
 
     ;(async () => {
@@ -516,24 +517,20 @@ export default function VoiceCallDialog({
         a.src = url
         ttsAudioRef.current = a
 
+        a.onplay = begin
         a.onended = () => {
           finish()
-          // keep ttsAudioRef.current (iOS unlock)
         }
         a.onerror = () => {
           finish()
-          // keep ttsAudioRef.current (iOS unlock)
         }
 
-        // IMPORTANT: begin BEFORE play() so mic pauses immediately (prevents "assistant voice -> STT garbage")
-        begin()
         try {
           await a.play()
-        } catch (e) {
-          console.warn("[TTS] play blocked", e)
+        } catch {
           finish()
         }
-      } catch (e) {
+      } catch {
         finish()
       }
     })()
@@ -705,7 +702,8 @@ export default function VoiceCallDialog({
         await a.play().catch(() => {})
       } catch {}
 
-      const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext
+      const AC: any =
+        (window as any).AudioContext || (window as any).webkitAudioContext
       const ctx: AudioContext = new AC()
       audioCtxRef.current = ctx
 
@@ -750,7 +748,10 @@ export default function VoiceCallDialog({
 
       const rec = new MediaRecorder(bridged, opts)
       mediaRecorderRef.current = rec
-      recorderCfgRef.current = { mimeType: mime || (rec as any).mimeType || "audio/webm", sliceMs: 1000 }
+      recorderCfgRef.current = {
+        mimeType: mime || (rec as any).mimeType || "audio/webm",
+        sliceMs: 1000,
+      }
 
       rec.onstart = () => {
         setIsListening(true)
@@ -760,8 +761,14 @@ export default function VoiceCallDialog({
         const b = ev.data
         const size = b?.size || 0
         if (size > 0) {
-          if (!isAiSpeakingRef.current && !isMicMutedRef.current) {
+          // всегда забираем первый chunk как "header"
+          if (audioChunksRef.current.length === 0) {
             audioChunksRef.current.push(b)
+          } else {
+            // анти-эхо/анти-мусор: пока AI говорит или микрофон выключен — не копим
+            if (!isAiSpeakingRef.current && !isMicMutedRef.current) {
+              audioChunksRef.current.push(b)
+            }
           }
         }
 
@@ -790,7 +797,10 @@ export default function VoiceCallDialog({
       const sliceMs = isMobile ? 1200 : 1000
       ;(rec as any)._reqTimer = window.setInterval(() => {
         try {
-          if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+          if (
+            mediaRecorderRef.current &&
+            mediaRecorderRef.current.state === "recording"
+          ) {
             mediaRecorderRef.current.requestData()
           }
         } catch {}
@@ -921,14 +931,10 @@ export default function VoiceCallDialog({
                   <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-slate-700">
                     <p className="mb-1 font-medium text-slate-900">{t("How it works")}</p>
                     <p className="mb-2">
-                      {t(
-                        "Choose a voice and start the session. The assistant will listen to you and answer like a real psychologist.",
-                      )}
+                      {t("Choose a voice and start the session. The assistant will listen to you and answer like a real psychologist.")}
                     </p>
                     <p className="text-[11px] text-slate-500">
-                      {t(
-                        "You can switch between female and male voice by ending the call and starting again with a different option.",
-                      )}
+                      {t("You can switch between female and male voice by ending the call and starting again with a different option.")}
                     </p>
                   </div>
                 )}
