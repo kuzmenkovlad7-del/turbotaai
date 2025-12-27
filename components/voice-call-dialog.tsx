@@ -446,9 +446,11 @@ export default function VoiceCallDialog({
     const langCode = langCodeOverride || computeLangCode()
     const gender = getCurrentGender()
 
+    let ttsWatchdog: any = null
+
     const begin = () => {
       setIsAiSpeaking(true)
-      ttsCooldownUntilRef.current = Date.now() + 450
+      ttsCooldownUntilRef.current = Date.now() + 700
 
       const hdr = audioChunksRef.current?.[0]
       audioChunksRef.current = hdr ? [hdr] : []
@@ -461,10 +463,18 @@ export default function VoiceCallDialog({
           rec.pause()
         } catch {}
       }
+
+      if (ttsWatchdog) window.clearTimeout(ttsWatchdog)
+      ttsWatchdog = window.setTimeout(() => {
+        console.warn("[TTS] watchdog fired")
+        finish()
+      }, 20000)
     }
 
     const finish = () => {
-      ttsCooldownUntilRef.current = Date.now() + 450
+      if (ttsWatchdog) window.clearTimeout(ttsWatchdog)
+      ttsWatchdog = null
+      ttsCooldownUntilRef.current = Date.now() + 700
       setIsAiSpeaking(false)
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "paused" && isCallActiveRef.current && !isMicMutedRef.current) {
@@ -472,7 +482,7 @@ export default function VoiceCallDialog({
           try {
             rec.resume()
           } catch {}
-        }, 120)
+        }, 250)
       }
     }
 
@@ -749,7 +759,11 @@ export default function VoiceCallDialog({
       rec.ondataavailable = (ev: BlobEvent) => {
         const b = ev.data
         const size = b?.size || 0
-        if (size > 0) audioChunksRef.current.push(b)
+        if (size > 0) {
+          if (!isAiSpeakingRef.current && !isMicMutedRef.current) {
+            audioChunksRef.current.push(b)
+          }
+        }
 
         const pending = pendingSttReasonRef.current
         if (pending) {
