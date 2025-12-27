@@ -275,6 +275,41 @@ const rawStreamRef = useRef<MediaStream | null>(null)
   const pendingSttReasonRef = useRef<string | null>(null)
   const pendingSttTimerRef = useRef<number | null>(null)
   const ttsCooldownUntilRef = useRef(0)
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  // iOS/Safari: prime audio playback on first user gesture to reduce NotAllowedError on later async plays
+  useEffect(() => {
+    let done = false
+    const prime = () => {
+      if (done) return
+      done = true
+      try {
+        const a = ttsAudioRef.current ?? new Audio()
+        a.playsInline = true
+        ;(a as any).preload = "auto"
+        a.muted = true
+        a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
+        ttsAudioRef.current = a
+        const p = a.play()
+        ;(p as any)?.catch?.(() => {})
+        try {
+          a.pause()
+          a.currentTime = 0
+          a.muted = false
+          a.src = ""
+        } catch (e) {}
+      } catch (e) {
+        console.warn("[TTS] prime failed", e)
+      }
+    }
+
+    window.addEventListener("touchstart", prime as any, { passive: true, once: true } as any)
+    window.addEventListener("mousedown", prime as any, { once: true } as any)
+    return () => {
+      window.removeEventListener("touchstart", prime as any)
+      window.removeEventListener("mousedown", prime as any)
+    }
+  }, [])
   const isSttBusyRef = useRef(false)
 
   const vad = useRef({
@@ -996,15 +1031,16 @@ const rawStreamRef = useRef<MediaStream | null>(null)
     const dataUrl = `data:${contentType};base64,${json.audioContent}`
 
     await new Promise<void>((resolve) => {
-      const audio = new Audio()
+      const audio = ttsAudioRef.current ?? new Audio()
       currentAudioRef.current = audio
       audio.preload = "auto"
       audio.volume = 1
       audio.playsInline = true
+      ttsAudioRef.current = audio
       audio.src = dataUrl
       audio.onended = () => resolve()
       audio.onerror = () => resolve()
-      audio.play().catch(() => resolve())
+      audio.play().then(() => resolve()).catch((err) => { console.warn('[TTS] play blocked', err); resolve() })
     })
   }
 

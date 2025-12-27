@@ -152,6 +152,46 @@ export default function VoiceCallDialog({
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
 
+  // iOS/Safari: prime audio playback on first user gesture to reduce NotAllowedError on later async plays
+  useEffect(() => {
+    let done = false
+    const prime = () => {
+      if (done) return
+      done = true
+      try {
+        const a = ttsAudioRef.current ?? new Audio()
+        ;(a as any).playsInline = true
+        ;(a as any).preload = "auto"
+        a.muted = true
+        a.src =
+          "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
+        ttsAudioRef.current = a
+
+        const p = a.play()
+        ;(p as any)?.catch?.(() => {})
+
+        try {
+          a.pause()
+          a.currentTime = 0
+          a.muted = false
+          a.src = ""
+        } catch {}
+      } catch (e) {
+        console.warn("[TTS] prime failed", e)
+      }
+    }
+
+    window.addEventListener("touchstart", prime as any, {
+      passive: true,
+      once: true,
+    } as any)
+    window.addEventListener("mousedown", prime as any, { once: true } as any)
+    return () => {
+      window.removeEventListener("touchstart", prime as any)
+      window.removeEventListener("mousedown", prime as any)
+    }
+  }, [])
+
   const vad = useRef({
     noiseFloor: 0,
     rms: 0,
@@ -281,12 +321,23 @@ export default function VoiceCallDialog({
   }
 
   function stopTtsAudio() {
-    if (ttsAudioRef.current) {
-      try {
-        ttsAudioRef.current.pause()
-      } catch {}
-      ttsAudioRef.current = null
-    }
+    const a = ttsAudioRef.current
+    if (!a) return
+    try {
+      a.onplay = null
+      a.onended = null
+      a.onerror = null
+    } catch {}
+    try {
+      a.pause()
+    } catch {}
+    try {
+      a.currentTime = 0
+    } catch {}
+    try {
+      a.src = ""
+    } catch {}
+    // keep ttsAudioRef.current (iOS unlock)
   }
 
   async function maybeSendStt(reason: string) {
@@ -303,7 +354,9 @@ export default function VoiceCallDialog({
     const body = chunks.slice(Math.max(1, sentIdx))
     if (!header || body.length === 0) return
 
-    const blob = new Blob([header, ...body], { type: header.type || body[0]?.type || "audio/webm" })
+    const blob = new Blob([header, ...body], {
+      type: header.type || body[0]?.type || "audio/webm",
+    })
 
     if (blob.size < 6000) return
     if (isSttBusyRef.current) return
@@ -447,24 +500,30 @@ export default function VoiceCallDialog({
         const url = `data:audio/mp3;base64,${data.audioContent}`
 
         stopTtsAudio()
-        const a = new Audio(url)
+        const a = ttsAudioRef.current ?? new Audio()
+        ;(a as any).playsInline = true
+        ;(a as any).preload = "auto"
+        a.src = url
         ttsAudioRef.current = a
-        a.onplay = begin
+
         a.onended = () => {
           finish()
-          ttsAudioRef.current = null
+          // keep ttsAudioRef.current (iOS unlock)
         }
         a.onerror = () => {
           finish()
-          ttsAudioRef.current = null
+          // keep ttsAudioRef.current (iOS unlock)
         }
 
+        // IMPORTANT: begin BEFORE play() so mic pauses immediately (prevents "assistant voice -> STT garbage")
+        begin()
         try {
           await a.play()
-        } catch {
+        } catch (e) {
+          console.warn("[TTS] play blocked", e)
           finish()
         }
-      } catch {
+      } catch (e) {
         finish()
       }
     })()
@@ -616,7 +675,9 @@ export default function VoiceCallDialog({
     try {
       if (!navigator?.mediaDevices?.getUserMedia) {
         setNetworkError(
-          t("Microphone access is not supported in this browser. Please use the latest version of Chrome, Edge or Safari."),
+          t(
+            "Microphone access is not supported in this browser. Please use the latest version of Chrome, Edge or Safari.",
+          ),
         )
         setIsConnecting(false)
         return
@@ -736,7 +797,9 @@ export default function VoiceCallDialog({
       const name = e?.name
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
         setNetworkError(
-          t("Microphone is blocked for this site in the browser. Please allow access in the address bar and reload the page."),
+          t(
+            "Microphone is blocked for this site in the browser. Please allow access in the address bar and reload the page.",
+          ),
         )
       } else {
         setNetworkError(t("Could not start microphone. Check permissions and try again."))
@@ -844,10 +907,14 @@ export default function VoiceCallDialog({
                   <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-slate-700">
                     <p className="mb-1 font-medium text-slate-900">{t("How it works")}</p>
                     <p className="mb-2">
-                      {t("Choose a voice and start the session. The assistant will listen to you and answer like a real psychologist.")}
+                      {t(
+                        "Choose a voice and start the session. The assistant will listen to you and answer like a real psychologist.",
+                      )}
                     </p>
                     <p className="text-[11px] text-slate-500">
-                      {t("You can switch between female and male voice by ending the call and starting again with a different option.")}
+                      {t(
+                        "You can switch between female and male voice by ending the call and starting again with a different option.",
+                      )}
                     </p>
                   </div>
                 )}
