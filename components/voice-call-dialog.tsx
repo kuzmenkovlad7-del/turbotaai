@@ -148,42 +148,27 @@ function diffTranscript(prev: string, full: string): string {
   return rawTokens.slice(common).join(" ").trim()
 }
 
+/**
+ * Лёгкий локальный фильтр. НЕ делаем “список слов”.
+ * Основной анти-мусор — на сервере (/api/stt) по verbose_json no_speech_prob/logprob.
+ */
 function isMostlyGarbage(text: string): boolean {
   const t = (text || "").trim()
   if (!t) return true
+
   const norm = normalizeUtterance(t)
   if (!norm) return true
+  if (norm.length < 2) return true
 
-  if (norm.length < 3) return true
-
-  const toks = norm.split(" ")
+  const toks = norm.split(" ").filter(Boolean)
   if (toks.length === 1 && toks[0].length <= 2) return true
 
+  // мало букв = часто шум/артефакты
   const letters = (t.match(/[A-Za-zА-Яа-яЇїІіЄєҐґ]/g) || []).length
   const total = t.length
-  if (total > 0 && letters / total < 0.45) return true
+  if (total > 0 && letters / total < 0.35) return true
 
-  const bannedSub = [
-    "обратите внимание",
-    "подпиш",
-    "подписывай",
-    "лайк",
-    "ставьте",
-    "на канал",
-    "в описании",
-    "ссылка",
-    "спонсор",
-    "реклама",
-    "промокод",
-    "фотография",
-    "скриншот",
-    "нажмите",
-    "кнопк",
-  ]
-  for (const b of bannedSub) {
-    if (norm.includes(b)) return true
-  }
-
+  // односложные “поддакивания” — не отправляем в агента
   const bannedExact = new Set([
     "угу",
     "ага",
@@ -200,6 +185,12 @@ function isMostlyGarbage(text: string): boolean {
     "hi",
   ])
   if (toks.length === 1 && bannedExact.has(toks[0])) return true
+
+  // одинаковое слово много раз подряд
+  if (toks.length >= 4) {
+    const uniq = new Set(toks)
+    if (uniq.size === 1) return true
+  }
 
   return false
 }
@@ -241,7 +232,9 @@ export default function VoiceCallDialog({
   const pendingSttTimerRef = useRef<number | null>(null)
 
   const MIN_UTTERANCE_MS = 450
+  const MIN_VOICED_MS = 220 // игнорим “импульсы” (клавиатура/клик), чтобы тишина не шла в STT
   const isSttBusyRef = useRef(false)
+
   const lastTranscriptRef = useRef("") // ВАЖНО: не сбрасывать на TTS — иначе будут “эхо-слова”
   const lastUserSentNormRef = useRef("")
   const lastUserSentTsRef = useRef(0)
@@ -329,11 +322,18 @@ export default function VoiceCallDialog({
 
   const vad = useRef({
     noiseFloor: 0,
-    thr: 0.008,
     voice: false,
     voiceUntilTs: 0,
     utteranceStartTs: 0,
+    voicedMs: 0,
+    lastTickTs: 0,
   })
+
+  function dropBufferedAudioBody() {
+    const hdr = audioChunksRef.current?.[0]
+    audioChunksRef.current = hdr ? [hdr] : []
+    sentIdxRef.current = hdr ? 1 : 0
+  }
 
   function stopRaf() {
     if (rafRef.current) {
@@ -454,6 +454,7 @@ export default function VoiceCallDialog({
     if (isAiSpeakingRef.current) return
     if (Date.now() < ttsCooldownUntilRef.current) return
     if (isMicMutedRef.current) return
+    if (ttsAudioRef.current && !ttsAudioRef.current.paused) return
 
     const chunks = audioChunksRef.current
     if (!chunks.length) return
@@ -496,9 +497,9 @@ export default function VoiceCallDialog({
         return
       }
 
-      const keep = audioChunksRef.current?.[0]
-      audioChunksRef.current = keep ? [keep] : []
-      sentIdxRef.current = keep ? 1 : 0
+      // важное: после любого успешного ответа STT — “срезаем хвост”
+      // (даже если text == "" — сервер уже решил что там мусор/тишина)
+      dropBufferedAudioBody()
 
       const fullText = (data.text || "").toString().trim()
       if (!fullText) return
@@ -594,6 +595,25 @@ export default function VoiceCallDialog({
     const maxUtteranceMs = 20000
 
     const tick = () => {
+      const now = Date.now()
+      const st = vad.current
+      const dt = st.lastTickTs ? Math.min(80, Math.max(0, now - st.lastTickTs)) : 16
+      st.lastTickTs = now
+
+      // Во время TTS/паузы микрофона — гасим VAD состояние, чтобы не “ловить” спикер/эхо
+      if (
+        isAiSpeakingRef.current ||
+        Date.now() < ttsCooldownUntilRef.current ||
+        isMicMutedRef.current
+      ) {
+        st.voice = false
+        st.voiceUntilTs = 0
+        st.utteranceStartTs = 0
+        st.voicedMs = 0
+        rafRef.current = requestAnimationFrame(tick)
+        return
+      }
+
       analyser.getByteTimeDomainData(data)
 
       let sum = 0
@@ -603,31 +623,49 @@ export default function VoiceCallDialog({
       }
       const rms = Math.sqrt(sum / data.length)
 
-      const now = Date.now()
-      const st = vad.current
-
       if (!st.voice) st.noiseFloor = st.noiseFloor * 0.995 + rms * 0.005
       const thr = Math.max(baseThr, st.noiseFloor * 3.6)
       const voiceNow = rms > thr
 
       if (voiceNow) {
         st.voiceUntilTs = now + hangoverMs
+        st.voicedMs += dt
+
         if (!st.voice) {
           st.voice = true
           st.utteranceStartTs = now
+          st.voicedMs = 0
         }
       } else {
         if (st.voice && now > st.voiceUntilTs) {
           const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
+          const voicedMs = st.voicedMs || 0
+
           st.voice = false
           st.utteranceStartTs = 0
-          if (voiceMs >= MIN_UTTERANCE_MS) void flushAndSendStt("vad_end")
+          st.voicedMs = 0
+
+          // фильтр импульсного шума: не отправляем в STT “клавиатуру/клики/тишину”
+          if (voiceMs >= MIN_UTTERANCE_MS && voicedMs >= MIN_VOICED_MS) {
+            void flushAndSendStt("vad_end")
+          } else {
+            // чтобы мусор не копился и не улетал “через минуту”
+            dropBufferedAudioBody()
+          }
         }
       }
 
+      // защита от слишком длинной фразы
       if (st.voice && st.utteranceStartTs && now - st.utteranceStartTs > maxUtteranceMs) {
+        const voicedMs = st.voicedMs || 0
         st.utteranceStartTs = now
-        void flushAndSendStt("max_utt")
+        st.voicedMs = 0
+
+        if (voicedMs >= MIN_VOICED_MS) {
+          void flushAndSendStt("max_utt")
+        } else {
+          dropBufferedAudioBody()
+        }
       }
 
       rafRef.current = requestAnimationFrame(tick)
@@ -650,12 +688,8 @@ export default function VoiceCallDialog({
 
       ttsCooldownUntilRef.current = Date.now() + 700
 
-      // важно: НЕ трогаем lastTranscriptRef.current — иначе STT будет “начинать заново” и дублировать слова
-
       // сбрасываем чанки, чтобы не ловить хвост
-      const hdr = audioChunksRef.current?.[0]
-      audioChunksRef.current = hdr ? [hdr] : []
-      sentIdxRef.current = hdr ? 1 : 0
+      dropBufferedAudioBody()
 
       const rec = mediaRecorderRef.current
       if (rec && rec.state === "recording") {
@@ -773,10 +807,8 @@ export default function VoiceCallDialog({
       let answer = extractAnswer(data)
       if (!answer) answer = t("I'm sorry, I couldn't process your message. Please try again.")
 
-      // на всякий: убираем повторы первого слова в ответе тоже
       answer = collapseLeadingWordRepeats(answer)
 
-      // дедуп ассистента (если вдруг ответ добавляется дважды)
       if (shouldDedupAssistant(answer)) {
         speakText(answer, voiceLangCode)
         return
@@ -866,10 +898,11 @@ export default function VoiceCallDialog({
 
       vad.current = {
         noiseFloor: 0,
-        thr: 0.008,
         voice: false,
         voiceUntilTs: 0,
         utteranceStartTs: 0,
+        voicedMs: 0,
+        lastTickTs: 0,
       }
 
       const mime = pickMime()

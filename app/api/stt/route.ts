@@ -30,8 +30,89 @@ function extFromMime(mime: string): string {
   return "webm"
 }
 
-function shouldDropAsGarbage(text: string): boolean {
-  const t = text
+type WhisperSegment = {
+  id?: number
+  start?: number
+  end?: number
+  text?: string
+  avg_logprob?: number
+  compression_ratio?: number
+  no_speech_prob?: number
+}
+
+type WhisperVerbose = {
+  text?: string
+  language?: string
+  segments?: WhisperSegment[]
+}
+
+function shouldDropByConfidence(verbose: WhisperVerbose): { drop: boolean; reason: string; metrics?: any } {
+  const segs = Array.isArray(verbose?.segments) ? verbose.segments : []
+  if (!segs.length) return { drop: true, reason: "no_segments" }
+
+  let nspSum = 0
+  let nspN = 0
+  let logSum = 0
+  let logN = 0
+  let compSum = 0
+  let compN = 0
+  let speechy = 0
+
+  for (const s of segs) {
+    if (typeof s.no_speech_prob === "number") {
+      nspSum += s.no_speech_prob
+      nspN++
+      if (s.no_speech_prob < 0.55) speechy++
+    }
+    if (typeof s.avg_logprob === "number") {
+      logSum += s.avg_logprob
+      logN++
+    }
+    if (typeof s.compression_ratio === "number") {
+      compSum += s.compression_ratio
+      compN++
+    }
+  }
+
+  const avgNoSpeech = nspN ? nspSum / nspN : null
+  const avgLogprob = logN ? logSum / logN : null
+  const avgComp = compN ? compSum / compN : null
+
+  // Основной критерий: все сегменты “как будто без речи”
+  if (nspN && speechy === 0) {
+    return { drop: true, reason: "all_no_speech", metrics: { avgNoSpeech, avgLogprob, avgComp } }
+  }
+
+  // Жёсткий no-speech
+  if (typeof avgNoSpeech === "number" && avgNoSpeech > 0.75) {
+    return { drop: true, reason: "high_no_speech_prob", metrics: { avgNoSpeech, avgLogprob, avgComp } }
+  }
+
+  // Whisper-порог: no_speech_prob + низкая уверенность
+  if (
+    typeof avgNoSpeech === "number" &&
+    typeof avgLogprob === "number" &&
+    avgNoSpeech > 0.6 &&
+    avgLogprob < -1.0
+  ) {
+    return { drop: true, reason: "no_speech+low_logprob", metrics: { avgNoSpeech, avgLogprob, avgComp } }
+  }
+
+  // “галлюцинации” часто имеют высокий compression_ratio + низкий logprob
+  if (
+    typeof avgComp === "number" &&
+    typeof avgLogprob === "number" &&
+    avgComp > 2.4 &&
+    avgLogprob < -1.0
+  ) {
+    return { drop: true, reason: "high_compression+low_logprob", metrics: { avgNoSpeech, avgLogprob, avgComp } }
+  }
+
+  return { drop: false, reason: "ok", metrics: { avgNoSpeech, avgLogprob, avgComp, speechy } }
+}
+
+function shouldDropAsGarbageText(text: string): boolean {
+  const t = (text || "")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .replace(/[“”"«»]/g, '"')
@@ -40,6 +121,7 @@ function shouldDropAsGarbage(text: string): boolean {
   if (!t) return true
   if (t.length <= 1) return true
 
+  // минимальный набор “очевидного мусора” (но основное — confidence фильтр)
   const patterns: RegExp[] = [
     /^(thank(s| you).*)$/i,
     /^thanks for (watching|listening).*$/i,
@@ -50,13 +132,6 @@ function shouldDropAsGarbage(text: string): boolean {
     /постав(ьте|те) лайк/i,
     /подпис(ывайтесь|уйтесь)/i,
     /see you next time/i,
-    /ви маєте можливість.*перейти на відео/i,
-    /перейти на відео.*дяку(ю|ємо)/i,
-    /яке ви бачите на екрані/i,
-    /перейти на видео.*спасибо/i,
-    /которое вы видите на экране/i,
-    /switch to (the )?video/i,
-    /that you see on (the )?screen/i,
   ]
 
   return patterns.some((re) => re.test(t))
@@ -100,7 +175,7 @@ async function whisperTranscribe(args: { bytes: Uint8Array; mime: string; lang: 
     throw new Error(msg)
   }
 
-  return json as { text?: string; language?: string }
+  return json as any
 }
 
 export async function POST(request: Request) {
@@ -148,15 +223,34 @@ export async function POST(request: Request) {
       })
     }
 
-    const result = await whisperTranscribe({ bytes, mime, lang })
+    const result = (await whisperTranscribe({ bytes, mime, lang })) as WhisperVerbose
     const text = (result?.text || "").trim()
 
-    if (!text || shouldDropAsGarbage(text)) {
+    if (!text) {
       return NextResponse.json({
         success: true,
         text: "",
         lang,
-        debug: { dropped: true, reason: "garbage_or_empty" },
+        debug: { dropped: true, reason: "empty_text" },
+      })
+    }
+
+    const conf = shouldDropByConfidence(result)
+    if (conf.drop) {
+      return NextResponse.json({
+        success: true,
+        text: "",
+        lang,
+        debug: { dropped: true, reason: conf.reason, metrics: conf.metrics },
+      })
+    }
+
+    if (shouldDropAsGarbageText(text)) {
+      return NextResponse.json({
+        success: true,
+        text: "",
+        lang,
+        debug: { dropped: true, reason: "garbage_text" },
       })
     }
 
