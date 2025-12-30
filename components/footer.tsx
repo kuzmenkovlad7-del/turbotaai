@@ -1,8 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { Instagram, Facebook, Github } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { useLanguage } from "@/lib/i18n/language-context"
 import Logo from "@/components/logo"
 import { APP_NAME, APP_SUPPORT_EMAIL } from "@/lib/app-config"
@@ -26,15 +24,11 @@ const legalLinks: FooterLink[] = [
   { href: "/terms-of-use", labelKey: "nav.termsOfUse" },
 ]
 
-const socialLinks = [
-  { href: "https://instagram.com/turbotaai", icon: Instagram, label: "Instagram" },
-  { href: "https://facebook.com/turbotaai", icon: Facebook, label: "Facebook" },
-  { href: "https://github.com/turbotaai", icon: Github, label: "Github" },
-]
-
 export default function Footer() {
   const { t } = useLanguage()
-  const currentYear = new Date().getFullYear()
+
+  // Показываем 2026 уже сейчас (и дальше будет автоматически расти)
+  const currentYear = Math.max(new Date().getFullYear(), 2026)
 
   const renderLabel = (link: FooterLink) =>
     link.labelKey ? t(link.labelKey) : link.label
@@ -93,7 +87,7 @@ export default function Footer() {
             </nav>
           </div>
 
-          {/* Контакты / соцсети */}
+          {/* Контакты */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-slate-900">
               {t("Contact Us")}
@@ -105,26 +99,6 @@ export default function Footer() {
             >
               {APP_SUPPORT_EMAIL}
             </a>
-
-            <div className="flex flex-wrap gap-2">
-              {socialLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={link.label}
-                >
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 rounded-full border border-slate-200 text-slate-500 transition-colors hover:border-violet-500 hover:bg-violet-50 hover:text-violet-600"
-                  >
-                    <link.icon className="h-4 w-4" />
-                  </Button>
-                </Link>
-              ))}
-            </div>
           </div>
         </div>
 

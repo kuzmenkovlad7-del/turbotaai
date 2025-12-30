@@ -442,3 +442,10 @@ video {
   inset: auto 1rem 1rem auto !important;
   z-index: 40 !important;
 }
+
+
+/* Disable soft grid background pattern */
+.bg-soft-grid {
+  background-image: none !important;
+  opacity: 0 !important;
+}

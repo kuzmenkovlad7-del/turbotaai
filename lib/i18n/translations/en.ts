@@ -1,5 +1,3 @@
-// lib/i18n/translations/en.ts
-
 export const en: Record<string, string> = {
   // Navigation & menu
   Home: "Home",
@@ -212,7 +210,7 @@ export const en: Record<string, string> = {
     "The corporate program changed how our team relates to mental health. Highly recommend!",
 
   // Client stories
-  "Real experiences from beta users": "Real experiences from beta users",
+  "Real experiences from beta users": "Real experiences from users",
   "Client stories": "Client stories",
   "These stories show how people use TurbotaAI in different life situations — from night anxiety and burnout to adaptation after moving. Names and details are changed for privacy.":
     "These stories show how people use TurbotaAI in different life situations — from night anxiety and burnout to adaptation after moving. Names and details are changed for privacy.",
@@ -482,8 +480,6 @@ export const en: Record<string, string> = {
   Ukrainian: "Ukrainian",
   "All characters use Google TTS for authentic native accent.":
     "All characters use Google TTS for an authentic native accent.",
-  "Clinical psychologist specializing in anxiety, depression, and workplace stress management":
-    "Clinical psychologist specializing in anxiety, depression, and workplace stress management",
   Selected: "Selected",
   "Start Video Call": "Start video call",
   "Video session in Ukrainian": "Video session in Ukrainian",
@@ -813,4 +809,9 @@ export const en: Record<string, string> = {
   "Speech recognition is disabled or not available on this device. Please enable speech recognition in the system settings or use another browser.": "Speech recognition is disabled or not available on this device. Please enable speech recognition in the system settings or use another browser.",
   "AI will understand and respond in this language with voice and text.": "AI will understand and respond in this language with voice and text.",
   "Video session in {{language}}": "Video session in {{language}}",
+  "Video call language": "Video call language",
+  "Senior psychologist specializing in cognitive behavioral therapy with 15+ years of experience": "Senior psychologist specializing in cognitive behavioral therapy with 15+ years of experience",
+  "Clinical psychologist specializing in anxiety, depression, and workplace stress management": "Clinical psychologist specializing in anxiety, depression, and workplace stress management",
+  "Psychotherapist specializing in emotional regulation, trauma recovery, and relationship counseling": "Psychotherapist specializing in emotional regulation, trauma recovery, and relationship counseling",
+
 }

@@ -26,6 +26,7 @@ interface Story {
 export default function ClientStoriesPage() {
   const { t } = useLanguage()
 
+  // Эти 3 истории (раскрывающиеся) оставляем как были
   const stories: Story[] = [
     {
       id: "relocation-burnout",
@@ -122,16 +123,180 @@ export default function ClientStoriesPage() {
     },
   ]
 
-  const testimonials: Testimonial[] = stories.map((s) => ({
-    text: s.shortQuote,
-    image: s.avatar,
-    name: s.name,
-    role: s.context,
-  }))
+  // Крутящиеся плитки: делаем больше историй, чтобы не повторялись
+  const rotatingTestimonials: Testimonial[] = [
+    // 1–6
+    {
+      text: t(
+        "“After a week with TurbotaAI I finally slept through the night without panic thoughts.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=800&q=80",
+      name: t("Anna, 27 — product designer"),
+      role: t("Burnout after relocation & anxiety before sleep"),
+    },
+    {
+      text: t(
+        "“Talking to a calm voice for ten minutes before stand-up is easier than pretending that everything is fine.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=800&q=80",
+      name: t("Max, 35 — team lead in IT"),
+      role: t("Panic before meetings & fear of mistakes"),
+    },
+    {
+      text: t(
+        "“It’s easier to write to the AI first and only then to friends — when I understand what I really feel.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80",
+      name: t("Sofia, 19 — first-year student"),
+      role: t("Loneliness, adaptation to university & dorm life"),
+    },
+    {
+      text: t(
+        "“I stopped rewriting messages ten times. Now I send them — and breathe.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80",
+      name: t("Dmytro, 28 — marketing specialist"),
+      role: t("Social anxiety & perfectionism"),
+    },
+    {
+      text: t(
+        "“When the panic starts, I have a 3-minute grounding routine that actually works.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1548142813-c348350df52b?auto=format&fit=crop&w=800&q=80",
+      name: t("Iryna, 32 — entrepreneur"),
+      role: t("Panic episodes & body sensations"),
+    },
+    {
+      text: t(
+        "“I learned to name the feeling first — and only then decide what to do.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1524502397800-2eeaad7c3fe5?auto=format&fit=crop&w=800&q=80",
+      name: t("Kateryna, 29 — teacher"),
+      role: t("Overwhelm & emotional regulation"),
+    },
 
-  const firstColumn = testimonials
-  const secondColumn = [...testimonials].reverse()
-  const thirdColumn = testimonials
+    // 7–12
+    {
+      text: t(
+        "“A short evening check-in helped me stop scrolling and go to sleep earlier.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1544725176-7c40e5a71c5e?auto=format&fit=crop&w=800&q=80",
+      name: t("Andrii, 41 — operations manager"),
+      role: t("Stress, insomnia & constant tension"),
+    },
+    {
+      text: t(
+        "“I didn’t need a perfect plan. I needed one small next step — and I got it.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1546961329-78bef0414d7c?auto=format&fit=crop&w=800&q=80",
+      name: t("Oksana, 24 — junior designer"),
+      role: t("Self-doubt & job search"),
+    },
+    {
+      text: t(
+        "“Instead of catastrophizing, I wrote down facts. The fear got smaller.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1525134479668-1bee5c7c6845?auto=format&fit=crop&w=800&q=80",
+      name: t("Artem, 22 — student"),
+      role: t("Overthinking & exam anxiety"),
+    },
+    {
+      text: t(
+        "“I can finally say ‘I need time to think’ without freezing.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=800&q=80",
+      name: t("Yulia, 30 — QA engineer"),
+      role: t("Fear of mistakes & pressure at work"),
+    },
+    {
+      text: t(
+        "“Before talking to family, I talk here — and it becomes easier.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1541519481457-763224276691?auto=format&fit=crop&w=800&q=80",
+      name: t("Natalia, 37 — HR"),
+      role: t("Relationship stress & boundaries"),
+    },
+    {
+      text: t(
+        "“I stopped avoiding tough conversations. I started preparing calmly.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1545996124-0501ebae84d0?auto=format&fit=crop&w=800&q=80",
+      name: t("Bohdan, 26 — founder"),
+      role: t("Decision fatigue & burnout risk"),
+    },
+
+    // 13–18
+    {
+      text: t(
+        "“The breathing + grounding combo saved me on days when everything felt ‘too much’.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=800&q=80",
+      name: t("Viktoriia, 31 — project manager"),
+      role: t("Anxiety spikes & overload"),
+    },
+    {
+      text: t(
+        "“I don’t chase motivation anymore. I follow a simple routine — and it helps.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80",
+      name: t("Svitlana, 33 — analyst"),
+      role: t("Low energy & procrastination"),
+    },
+    {
+      text: t(
+        "“I stopped blaming myself for stress. I started supporting myself.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1524502397800-2eeaad7c3fe5?auto=format&fit=crop&w=800&q=80",
+      name: t("Olena, 27 — customer support"),
+      role: t("Burnout & self-criticism"),
+    },
+    {
+      text: t(
+        "“Ten minutes of voice support before bed — and my sleep got deeper.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1548142813-c348350df52b?auto=format&fit=crop&w=800&q=80",
+      name: t("Roman, 39 — engineer"),
+      role: t("Sleep issues & rumination"),
+    },
+    {
+      text: t(
+        "“I learned to separate thoughts from facts. That alone changed a lot.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1544725176-7c40e5a71c5e?auto=format&fit=crop&w=800&q=80",
+      name: t("Ihor, 34 — product lead"),
+      role: t("Work stress & perfectionism"),
+    },
+    {
+      text: t(
+        "“The hardest part was starting. The assistant made it feel safe.”",
+      ),
+      image:
+        "https://images.unsplash.com/photo-1541519481457-763224276691?auto=format&fit=crop&w=800&q=80",
+      name: t("Marta, 25 — trainee"),
+      role: t("First steps in therapy & anxiety"),
+    },
+  ]
+
+  const firstColumn = rotatingTestimonials.slice(0, 6)
+  const secondColumn = rotatingTestimonials.slice(6, 12)
+  const thirdColumn = rotatingTestimonials.slice(12, 18)
 
   return (
     <AutoTranslate>
@@ -156,10 +321,7 @@ export default function ClientStoriesPage() {
             {/* Автопрокрутка коротких отзывов */}
             <div className="mx-auto max-w-5xl">
               <div className="flex justify-center gap-4 md:gap-6 [mask-image:linear-gradient(to_bottom,transparent,black_15%,black_85%,transparent)] max-h-[580px] overflow-hidden">
-                <TestimonialsColumn
-                  testimonials={firstColumn}
-                  duration={22}
-                />
+                <TestimonialsColumn testimonials={firstColumn} duration={22} />
                 <TestimonialsColumn
                   testimonials={secondColumn}
                   duration={26}
