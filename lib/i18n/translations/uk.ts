@@ -226,7 +226,7 @@ export const uk: Record<string, string> = {
   // ─────────────────────
   // Нові ключі: сторінка Client Stories
   // ─────────────────────
-  "Real experiences from beta users": "Реальні історії користувачів",
+  "Real experiences from beta users": "Реальний досвід користувачів",
   "Client stories": "Історії клієнтів",
   "These stories show how people use TurbotaAI in different life situations — from night anxiety and burnout to adaptation after moving. Names and details are changed for privacy.":
     "Ці історії показують, як люди використовують TurbotaAI у різних життєвих ситуаціях — від нічної тривоги та вигорання до адаптації після переїзду. Імена й деталі змінені з міркувань конфіденційності.",

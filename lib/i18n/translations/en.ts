@@ -210,7 +210,7 @@ export const en: Record<string, string> = {
     "The corporate program changed how our team relates to mental health. Highly recommend!",
 
   // Client stories
-  "Real experiences from beta users": "Real user stories",
+  "Real experiences from beta users": "Real experiences from users",
   "Client stories": "Client stories",
   "These stories show how people use TurbotaAI in different life situations — from night anxiety and burnout to adaptation after moving. Names and details are changed for privacy.":
     "These stories show how people use TurbotaAI in different life situations — from night anxiety and burnout to adaptation after moving. Names and details are changed for privacy.",

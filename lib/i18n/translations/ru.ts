@@ -226,7 +226,7 @@ export const ru: Record<string, string> = {
   // ─────────────────────
   // Client Stories
   // ─────────────────────
-  "Real experiences from beta users": "Реальные истории пользователей",
+  "Real experiences from beta users": "Реальный опыт пользователей",
   "Client stories": "Истории клиентов",
   "These stories show how people use TurbotaAI in different life situations — from night anxiety and burnout to adaptation after moving. Names and details are changed for privacy.":
     "Эти истории показывают, как люди используют TurbotaAI в разных жизненных ситуациях — от ночной тревоги и выгорания до адаптации после переезда. Имена и детали изменены из соображений конфиденциальности.",
