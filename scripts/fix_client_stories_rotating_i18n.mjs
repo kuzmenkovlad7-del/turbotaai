@@ -11,11 +11,9 @@ const ukPath = path.join(ROOT, "lib/i18n/translations/uk.ts")
 function mustExist(p) {
   if (!fs.existsSync(p)) throw new Error(`File not found: ${p}`)
 }
-
 function read(p) {
   return fs.readFileSync(p, "utf-8")
 }
-
 function write(p, s) {
   fs.writeFileSync(p, s, "utf-8")
 }
@@ -23,7 +21,6 @@ function write(p, s) {
 function escapeForRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
-
 function escapeForTsString(s) {
   return String(s)
     .replace(/\\/g, "\\\\")
@@ -53,12 +50,14 @@ function setProp(text, key, value) {
     "m",
   )
 
+  // update existing
   if (re.test(text)) {
     return text.replace(re, (_all, indent, _old, comma) => {
       return `${indent}"${keyEsc}": "${valEsc}"${comma}`
     })
   }
 
+  // insert before final "}" of exported object
   const endMatch = text.match(/}\s*$/)
   if (!endMatch || endMatch.index == null) {
     throw new Error("Could not find end of translations object (missing trailing '}')")
@@ -80,17 +79,69 @@ function setProp(text, key, value) {
   return before + line + after
 }
 
-function extractRotatingTestimonialsKeys(pageSource) {
-  const idx = pageSource.indexOf("const rotatingTestimonials")
-  if (idx === -1) throw new Error("Could not find `const rotatingTestimonials` in app/client-stories/page.tsx")
+function extractArrayLiteralBlock(source, constName) {
+  const idx = source.indexOf(`const ${constName}`)
+  if (idx === -1) throw new Error(`Could not find \`const ${constName}\``)
 
-  const open = pageSource.indexOf("[", idx)
-  if (open === -1) throw new Error("Could not find '[' after `const rotatingTestimonials`")
+  const eq = source.indexOf("=", idx)
+  if (eq === -1) throw new Error(`Could not find '=' for const ${constName}`)
+
+  // IMPORTANT: array literal starts after "=" (skip Testimonial[] type brackets)
+  const open = source.indexOf("[", eq)
+  if (open === -1) throw new Error(`Could not find '[' after '=' for const ${constName}`)
 
   let depth = 0
   let close = -1
-  for (let i = open; i < pageSource.length; i++) {
-    const ch = pageSource[i]
+
+  let inStr = null // '"', "'", '`'
+  let inLineComment = false
+  let inBlockComment = false
+
+  for (let i = open; i < source.length; i++) {
+    const ch = source[i]
+    const next = source[i + 1]
+
+    // comments
+    if (inLineComment) {
+      if (ch === "\n") inLineComment = false
+      continue
+    }
+    if (inBlockComment) {
+      if (ch === "*" && next === "/") {
+        inBlockComment = false
+        i++
+      }
+      continue
+    }
+
+    // strings
+    if (inStr) {
+      if (ch === "\\") {
+        i++ // skip escaped char
+        continue
+      }
+      if (ch === inStr) {
+        inStr = null
+      }
+      continue
+    } else {
+      if (ch === "/" && next === "/") {
+        inLineComment = true
+        i++
+        continue
+      }
+      if (ch === "/" && next === "*") {
+        inBlockComment = true
+        i++
+        continue
+      }
+      if (ch === '"' || ch === "'" || ch === "`") {
+        inStr = ch
+        continue
+      }
+    }
+
+    // brackets
     if (ch === "[") depth++
     else if (ch === "]") {
       depth--
@@ -100,11 +151,16 @@ function extractRotatingTestimonialsKeys(pageSource) {
       }
     }
   }
-  if (close === -1) throw new Error("Could not find matching closing ']' for rotatingTestimonials array")
 
-  const block = pageSource.slice(open, close + 1)
+  if (close === -1) throw new Error(`Could not find matching closing ']' for ${constName} array literal`)
 
-  // IMPORTANT: allow trailing comma inside t("...",) or t('...',)
+  return source.slice(open, close + 1)
+}
+
+function extractRotatingTestimonialsKeys(pageSource) {
+  const block = extractArrayLiteralBlock(pageSource, "rotatingTestimonials")
+
+  // allow trailing comma: t("...",) / t('...',)
   const keys = []
   const re = /t\(\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)')\s*,?\s*\)/g
   let m
@@ -142,7 +198,7 @@ async function openaiTranslateBatch(strings, targetLang) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -183,10 +239,8 @@ async function translateAndPatch(langName, text, keys) {
       need.push(k)
       continue
     }
-    // fallback case: value === key (не переведено)
-    if (prop.valueEscaped === escapeForTsString(k)) {
-      need.push(k)
-    }
+    // fallback: value == key (still English)
+    if (prop.valueEscaped === escapeForTsString(k)) need.push(k)
   }
 
   if (need.length === 0) {
@@ -229,6 +283,8 @@ async function main() {
 
   const pageSrc = read(pagePath)
   const keys = extractRotatingTestimonialsKeys(pageSrc)
+
+  console.log(`[info] rotatingTestimonials: extracted keys = ${keys.length}`)
 
   if (keys.length === 0) {
     console.log("[warn] no t(...) keys found in rotatingTestimonials (check if strings are wrapped in t())")
