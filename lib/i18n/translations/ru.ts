@@ -526,6 +526,8 @@ export const ru: Record<string, string> = {
   "Video session in Ukrainian": "Видеосессия на украинском",
   "AI will understand and respond in this language with native accent":
     "ИИ поймёт и ответит на выбранном языке",
+  "AI will understand and respond in this language with voice and text.": "AI будет понимать и отвечать на этом языке голосом и текстом.",
+  "Video session in {{language}}": "Видеосессия на языке: {{language}}",
   "Video session in Russian": "Видеосессия на русском",
   "Video session in English": "Видеосессия на английском",
 

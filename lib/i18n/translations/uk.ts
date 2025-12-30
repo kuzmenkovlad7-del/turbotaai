@@ -527,6 +527,8 @@ export const uk: Record<string, string> = {
   "Video session in Ukrainian": "Відеосесія українською",
   "AI will understand and respond in this language with native accent":
     "ШІ зрозуміє і відповість на обраній мові",
+  "AI will understand and respond in this language with voice and text.": "AI розумітиме та відповідатиме цією мовою голосом і текстом.",
+  "Video session in {{language}}": "Відеосесія мовою: {{language}}",
   "Video session in Russian": "Відеосесія російською",
   "Video session in English": "Відеосесія англійською",
 

@@ -811,4 +811,6 @@ export const en: Record<string, string> = {
   "Microphone access is not supported in this browser. Please use the latest version of Chrome, Edge or Safari.": "Microphone access is not supported in this browser. Please use the latest version of Chrome, Edge or Safari.",
   "Microphone access is not available in this environment. Please open the assistant in a regular browser window.": "Microphone access is not available in this environment. Please open the assistant in a regular browser window.",
   "Speech recognition is disabled or not available on this device. Please enable speech recognition in the system settings or use another browser.": "Speech recognition is disabled or not available on this device. Please enable speech recognition in the system settings or use another browser.",
+  "AI will understand and respond in this language with voice and text.": "AI will understand and respond in this language with voice and text.",
+  "Video session in {{language}}": "Video session in {{language}}",
 }
