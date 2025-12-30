@@ -949,5 +949,5 @@ export const uk: Record<string, string> = {
   "“The hardest part was starting. The assistant made it feel safe.”": "“The hardest part was starting. The assistant made it feel safe.”",
   "Marta, 25 — trainee": "Марта, 25 — стажер",
   "First steps in therapy & anxiety": "Перші кроки в терапії та тривога",
-  "Real experiences from beta users": "Реальний досвід користувачів", // override
 }
+
