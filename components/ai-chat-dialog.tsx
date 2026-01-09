@@ -76,8 +76,10 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
   const [input, setInput] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [keyboardOffset, setKeyboardOffset] = useState(0)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
     if (!isOpen) {
@@ -85,6 +87,7 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
       setInput("")
       setError(null)
       setIsSending(false)
+      setKeyboardOffset(0)
     }
   }, [isOpen])
 
@@ -93,6 +96,35 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages])
+
+  useEffect(() => {
+    if (!isOpen) return
+    if (typeof window === "undefined") return
+
+    const vv = window.visualViewport
+    if (!vv) return
+
+    const update = () => {
+      const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      setKeyboardOffset(offset)
+    }
+
+    update()
+    vv.addEventListener("resize", update)
+    vv.addEventListener("scroll", update)
+
+    return () => {
+      vv.removeEventListener("resize", update)
+      vv.removeEventListener("scroll", update)
+    }
+  }, [isOpen])
+
+  const nudgeToComposer = () => {
+    if (typeof window === "undefined") return
+    window.setTimeout(() => {
+      textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+    }, 60)
+  }
 
   const sendMessage = async () => {
     const text = input.trim()
@@ -152,9 +184,7 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
       let answer = extractAnswer(data)
 
       if (!answer) {
-        answer = t(
-          "I'm sorry, I couldn't process your message. Please try again.",
-        )
+        answer = t("I'm sorry, I couldn't process your message. Please try again.")
       }
 
       const assistantMessage: ChatMessage = {
@@ -167,12 +197,11 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
     } catch (err) {
       console.error("Chat error:", err)
       setError(
-        t(
-          "AI assistant is temporarily unavailable. Please try again a bit later.",
-        ),
+        t("AI assistant is temporarily unavailable. Please try again a bit later."),
       )
     } finally {
       setIsSending(false)
+      nudgeToComposer()
     }
   }
 
@@ -183,8 +212,11 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xl border-none bg-transparent p-0">
-        <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/10">
+      <DialogContent
+        style={keyboardOffset > 0 ? ({ bottom: keyboardOffset } as any) : undefined}
+        className="left-0 right-0 top-auto bottom-0 translate-x-0 translate-y-0 max-w-xl border-none bg-transparent p-0 sm:left-[50%] sm:top-[50%] sm:right-auto sm:bottom-auto sm:-translate-x-1/2 sm:-translate-y-1/2"
+      >
+        <div className="mx-auto w-full max-w-xl overflow-hidden rounded-t-3xl bg-white shadow-xl shadow-slate-900/10 sm:rounded-3xl">
           <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -203,14 +235,12 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
             </div>
           </DialogHeader>
 
-          <div className="flex h-[500px] flex-col md:h-[540px]">
+          <div className="flex h-[82dvh] flex-col sm:h-[500px] md:h-[540px]">
             <ScrollArea className="flex-1 px-5 pt-4 pb-2">
               <div ref={scrollRef} className="max-h-full space-y-3 pr-1">
                 {messages.length === 0 && (
                   <div className="rounded-2xl bg-indigo-50/70 px-3 py-3 text-xs text-slate-700">
-                    <p className="font-medium text-slate-900">
-                      {t("How to start")}
-                    </p>
+                    <p className="font-medium text-slate-900">{t("How to start")}</p>
                     <p className="mt-1">
                       {t(
                         "You can start with one sentence: for example, 'I feel anxious and can't sleep', 'I can't concentrate', or 'I don't know what to do in a relationship'.",
@@ -222,9 +252,7 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`flex ${
-                      msg.role === "user" ? "justify-end" : "justify-start"
-                    }`}
+                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     <div
                       className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs md:text-sm ${
@@ -240,16 +268,16 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
               </div>
             </ScrollArea>
 
-            {error && (
-              <div className="px-5 pb-1 text-xs text-red-600">{error}</div>
-            )}
+            {error && <div className="px-5 pb-1 text-xs text-red-600">{error}</div>}
 
             <form onSubmit={handleSubmit} className="border-t border-slate-100">
-              <div className="space-y-2 px-5 py-3">
+              <div className="space-y-2 px-5 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
                 <Textarea
+                  ref={textareaRef}
                   rows={2}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
+                  onFocus={nudgeToComposer}
                   placeholder={t("Write here what is happening to you...")}
                   className="resize-none text-sm"
                 />
@@ -260,22 +288,19 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
                       "In crisis situations, please contact local emergency services immediately.",
                     )}
                   </p>
+
                   <Button
                     type="submit"
-                    size="sm"
+                    size="icon"
                     disabled={isSending || !input.trim()}
-                    className="h-8 rounded-full bg-indigo-600 px-4 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-70"
+                    aria-label={isSending ? t("Sending") : t("Send")}
+                    title={isSending ? t("Sending") : t("Send")}
+                    className="h-10 w-10 rounded-full bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 disabled:opacity-70"
                   >
                     {isSending ? (
-                      <>
-                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                        {t("Sending")}
-                      </>
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <>
-                        {t("Send")}
-                        <Send className="ml-1 h-3 w-3" />
-                      </>
+                      <Send className="h-4 w-4" />
                     )}
                   </Button>
                 </div>
