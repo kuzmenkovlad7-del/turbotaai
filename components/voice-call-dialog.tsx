@@ -94,6 +94,96 @@ function collapseLeadingWordRepeats(text: string): string {
   return t
 }
 
+function splitSentencesKeepPunct(text: string): string[] {
+  const t = (text || "").replace(/\s+/g, " ").trim()
+  if (!t) return []
+  const parts = t.match(/[^.!?]+[.!?]?/g)
+  if (!parts) return [t]
+  return parts.map((p) => p.trim()).filter(Boolean)
+}
+
+function dedupeConsecutive(parts: string[]): string[] {
+  const out: string[] = []
+  let prevNorm = ""
+  for (const raw of parts) {
+    const p = (raw || "").trim()
+    if (!p) continue
+    const n = normalizeUtterance(p)
+    if (!n) continue
+    if (n === prevNorm) continue
+    out.push(p)
+    prevNorm = n
+  }
+  return out
+}
+
+function sanitizeCommaRepeatsInSentence(sentence: string): string {
+  let s = (sentence || "").trim()
+  if (!s) return s
+
+  const endPunct = /[.!?]$/.test(s) ? s.slice(-1) : ""
+  const body = endPunct ? s.slice(0, -1) : s
+
+  const commaCount = (body.match(/,/g) || []).length
+  if (commaCount < 2) return s
+
+  const parts = body.split(/\s*,\s*/g).map((p) => p.trim()).filter(Boolean)
+  if (parts.length < 3) return s
+
+  const deduped = dedupeConsecutive(parts)
+  const joined = deduped.join(", ").trim()
+  return (joined + endPunct).trim()
+}
+
+function sanitizeTextRepetitions(text: string): string {
+  let t = (text || "").trim()
+  if (!t) return t
+
+  // 1) Схлопываем повторы по предложениям (A. A. A.)
+  const sentences = splitSentencesKeepPunct(t)
+  if (sentences.length >= 2) {
+    t = dedupeConsecutive(sentences).join(" ").trim()
+  }
+
+  // 2) Схлопываем повторы внутри предложения через запятые (A, A, A)
+  const sentences2 = splitSentencesKeepPunct(t).map(sanitizeCommaRepeatsInSentence)
+  t = sentences2.join(" ").replace(/\s+/g, " ").trim()
+
+  // 3) Страховка от “зацикливания” текста: если почти всё одно и то же — режем до 2 предложений
+  const toks = normalizeUtterance(t).split(" ").filter(Boolean)
+  if (toks.length >= 40) {
+    const uniq = new Set(toks).size
+    const ratio = uniq / toks.length
+    if (ratio < 0.35) {
+      const first = splitSentencesKeepPunct(t).slice(0, 2)
+      t = first.join(" ").trim()
+    }
+  }
+
+  return t
+}
+
+function sanitizeUserText(text: string): string {
+  let t = (text || "").trim()
+  if (!t) return t
+  t = collapseLeadingWordRepeats(t)
+  t = sanitizeTextRepetitions(t)
+  return t.trim()
+}
+
+function sanitizeAssistantText(text: string): string {
+  let t = (text || "").trim()
+  if (!t) return t
+  t = collapseLeadingWordRepeats(t)
+  t = sanitizeTextRepetitions(t)
+
+  // Ограничим “разгон” если вдруг пришло слишком много
+  const sents = splitSentencesKeepPunct(t)
+  if (sents.length > 5) t = sents.slice(0, 5).join(" ").trim()
+
+  return t.trim()
+}
+
 function stripLeadingEchoOfPrev(delta: string, prevSentNorm: string, prevSentTs: number): string {
   let t = (delta || "").trim()
   if (!t) return t
@@ -128,13 +218,13 @@ function isMostlyGarbage(text: string): boolean {
   const total = t.length
   if (total > 0 && letters / total < 0.45) return true
 
-  // локальный “анти-мусор” (на всякий)
   const bannedSub = [
     "обратите внимание",
     "зверніть увагу",
     "звернить увагу",
     "дивіться на екран",
     "дивиться на екран",
+    "перейти на екран",
     "подпиш",
     "подписывай",
     "лайк",
@@ -204,6 +294,10 @@ export default function VoiceCallDialog({
   const voiceGenderRef = useRef<"female" | "male">("female")
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
+  // фиксируем язык на момент старта звонка (STT/TTS/агент)
+  const sessionVoiceLangRef = useRef<string>("uk-UA")
+  const sessionAgentLangRef = useRef<"uk" | "ru" | "en">("uk")
+
   const rawStreamRef = useRef<MediaStream | null>(null)
   const bridgedStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -222,10 +316,9 @@ export default function VoiceCallDialog({
   const pendingSttTimerRef = useRef<number | null>(null)
   const pendingSttStartIdxRef = useRef<number | null>(null)
 
-  const MIN_UTTERANCE_MS = 450
+  const MIN_UTTERANCE_MS = 520
   const isSttBusyRef = useRef(false)
 
-  // больше не “диффим” по предыдущему fullText — отправляем по фразам
   const lastUserSentNormRef = useRef("")
   const lastUserSentTsRef = useRef(0)
 
@@ -236,6 +329,10 @@ export default function VoiceCallDialog({
   const isAiSpeakingRef = useRef(false)
   const isMicMutedRef = useRef(false)
   const ttsCooldownUntilRef = useRef(0)
+
+  // защита от параллельных запросов к агенту
+  const isAgentBusyRef = useRef(false)
+  const pendingUserToAgentRef = useRef<{ text: string; voiceLang: string } | null>(null)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
@@ -271,6 +368,21 @@ export default function VoiceCallDialog({
     if (lang.startsWith("uk")) return "uk-UA"
     if (lang.startsWith("ru")) return "ru-RU"
     return "en-US"
+  }
+
+  function setSessionLangFromUi() {
+    const voiceLang = computeLangCode()
+    sessionVoiceLangRef.current = voiceLang
+    const lc = voiceLang.toLowerCase()
+    sessionAgentLangRef.current = lc.startsWith("ru") ? "ru" : lc.startsWith("en") ? "en" : "uk"
+  }
+
+  function getSessionVoiceLang(): string {
+    return sessionVoiceLangRef.current || computeLangCode()
+  }
+
+  function getSessionAgentLang(): "uk" | "ru" | "en" {
+    return sessionAgentLangRef.current || "uk"
   }
 
   function getCurrentGender(): "MALE" | "FEMALE" {
@@ -314,6 +426,7 @@ export default function VoiceCallDialog({
     voice: false,
     voiceUntilTs: 0,
     utteranceStartTs: 0,
+    voiceOnCount: 0,
   })
 
   function stopRaf() {
@@ -395,6 +508,7 @@ export default function VoiceCallDialog({
       a.onplay = null
       a.onended = null
       a.onerror = null
+      a.onloadedmetadata = null
     } catch {}
     try {
       a.pause()
@@ -448,21 +562,23 @@ export default function VoiceCallDialog({
     if (!body.length) return
 
     const roughSize = body.reduce((acc, b) => acc + (b?.size || 0), 0)
-    // ниже порог — чтобы короткие фразы не копились минутами
-    if (roughSize < 1800) return
+    const minBytes = isMobile ? 2600 : 2200
+    if (roughSize < minBytes) return
 
     const blob = new Blob([header, ...body], { type: header.type || body[0]?.type || "audio/webm" })
-    if (blob.size < 1600) return
+    if (blob.size < minBytes) return
 
     try {
       isSttBusyRef.current = true
+
+      const sttLang = getSessionVoiceLang()
 
       const res = await fetch("/api/stt", {
         method: "POST",
         headers: {
           "Content-Type": blob.type || "application/octet-stream",
           "X-STT-Hint": "auto",
-          "X-STT-Lang": computeLangCode(),
+          "X-STT-Lang": sttLang,
         } as any,
         body: blob,
       })
@@ -480,7 +596,6 @@ export default function VoiceCallDialog({
         return
       }
 
-      // после успешного STT — чистим буфер до “header only”, чтобы следующая фраза не склеивалась
       const keepHeader = audioChunksRef.current?.[0]
       audioChunksRef.current = keepHeader ? [keepHeader] : []
       utterStartIdxRef.current = keepHeader ? 1 : 0
@@ -489,12 +604,8 @@ export default function VoiceCallDialog({
       if (!fullText) return
 
       let delta = fullText
-
-      // эхом в начале может прилететь слово предыдущей короткой фразы — режем
       delta = stripLeadingEchoOfPrev(delta, lastUserSentNormRef.current, lastUserSentTsRef.current)
-
-      // схлопываем повторы первого слова ("Вітаю Вітаю ...")
-      delta = collapseLeadingWordRepeats(delta).trim()
+      delta = sanitizeUserText(delta)
 
       if (!delta) return
       if (isMostlyGarbage(delta)) return
@@ -514,7 +625,7 @@ export default function VoiceCallDialog({
       }
 
       setMessages((prevMsgs) => [...prevMsgs, userMsg])
-      await handleUserText(delta, computeLangCode())
+      await handleUserText(delta, sttLang)
     } catch (e: any) {
       console.error("[STT] fatal", e)
     } finally {
@@ -575,9 +686,11 @@ export default function VoiceCallDialog({
 
     const data = new Uint8Array(analyser.fftSize)
 
-    const baseThr = isMobile ? 0.012 : 0.008
-    const hangoverMs = 2200 // чуть больше, чтобы не резать фразы на коротких паузах
+    const baseThr = isMobile ? 0.014 : 0.01
+    const hangoverMs = 2000
     const maxUtteranceMs = 25000
+    const onFramesNeeded = isMobile ? 4 : 3
+    const thrMult = isMobile ? 5.0 : 4.6
 
     const tick = () => {
       analyser.getByteTimeDomainData(data)
@@ -592,32 +705,36 @@ export default function VoiceCallDialog({
       const now = Date.now()
       const st = vad.current
 
-      if (!st.voice) st.noiseFloor = st.noiseFloor * 0.995 + rms * 0.005
-      const thr = Math.max(baseThr, st.noiseFloor * 3.6)
+      // обновляем noiseFloor только когда “тишина”
+      if (!st.voice && rms < baseThr) st.noiseFloor = st.noiseFloor * 0.995 + rms * 0.005
+
+      const thr = Math.max(baseThr, st.noiseFloor * thrMult)
       const voiceNow = rms > thr
 
-      if (voiceNow) {
-        st.voiceUntilTs = now + hangoverMs
-        if (!st.voice) {
+      if (!st.voice) {
+        st.voiceOnCount = voiceNow ? Math.min(onFramesNeeded + 2, st.voiceOnCount + 1) : 0
+        if (st.voiceOnCount >= onFramesNeeded) {
+          st.voiceOnCount = 0
           st.voice = true
+          st.voiceUntilTs = now + hangoverMs
           st.utteranceStartTs = now
-          // важное: стартовый индекс чанков для текущей фразы
           utterStartIdxRef.current = Math.max(1, audioChunksRef.current.length - 1)
         }
       } else {
-        if (st.voice && now > st.voiceUntilTs) {
+        if (voiceNow) st.voiceUntilTs = now + hangoverMs
+
+        if (!voiceNow && now > st.voiceUntilTs) {
           const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
           st.voice = false
           st.utteranceStartTs = 0
           if (voiceMs >= MIN_UTTERANCE_MS) void flushAndSendStt("vad_end", utterStartIdxRef.current)
         }
-      }
 
-      if (st.voice && st.utteranceStartTs && now - st.utteranceStartTs > maxUtteranceMs) {
-        st.utteranceStartTs = now
-        void flushAndSendStt("max_utt", utterStartIdxRef.current)
-        // после “max_utt” новый кусок будет уже со свежего индекса
-        utterStartIdxRef.current = Math.max(1, audioChunksRef.current.length - 1)
+        if (st.voice && st.utteranceStartTs && now - st.utteranceStartTs > maxUtteranceMs) {
+          st.utteranceStartTs = now
+          void flushAndSendStt("max_utt", utterStartIdxRef.current)
+          utterStartIdxRef.current = Math.max(1, audioChunksRef.current.length - 1)
+        }
       }
 
       rafRef.current = requestAnimationFrame(tick)
@@ -627,10 +744,10 @@ export default function VoiceCallDialog({
   }
 
   function speakText(text: string, langCodeOverride?: string) {
-    const cleanText = (text || "").trim()
+    const cleanText = sanitizeAssistantText(text || "")
     if (!cleanText) return
 
-    const langCode = langCodeOverride || computeLangCode()
+    const langCode = langCodeOverride || getSessionVoiceLang()
     const gender = getCurrentGender()
 
     let done = false
@@ -660,7 +777,6 @@ export default function VoiceCallDialog({
       done = true
 
       clearWatchdog()
-      // на всякий не ловим TTS хвост в STT
       ttsCooldownUntilRef.current = Date.now() + 900
 
       setIsAiSpeaking(false)
@@ -684,12 +800,10 @@ export default function VoiceCallDialog({
 
       ttsCooldownUntilRef.current = Date.now() + 900
 
-      // сбрасываем чанки (оставляем header, если он уже есть), чтобы не ловить хвост в STT
       const hdr = audioChunksRef.current?.[0]
       audioChunksRef.current = hdr ? [hdr] : []
       utterStartIdxRef.current = hdr ? 1 : 0
 
-      // отменяем отложенную отправку STT, если она висит
       pendingSttReasonRef.current = null
       pendingSttStartIdxRef.current = null
       if (pendingSttTimerRef.current) {
@@ -706,12 +820,10 @@ export default function VoiceCallDialog({
         } catch {}
       }
 
-      // watchdog по длине текста (больше не “20с в лоб”)
       const hardTimeoutMs = Math.min(120000, Math.max(30000, cleanText.length * 140))
       clearWatchdog()
       watchdogId = window.setTimeout(() => {
         console.warn("[TTS] watchdog fired (hard timeout)")
-        // если зависло — останавливаем воспроизведение и выходим
         try {
           const a = ttsAudioRef.current
           if (a) a.pause()
@@ -750,14 +862,12 @@ export default function VoiceCallDialog({
         ;(a as any).preload = "auto"
         ttsAudioRef.current = a
 
-        // Blob URL стабильнее на iOS, чем data:audio/mp3;base64,...
         objectUrl = base64ToObjectUrl(data.audioContent, "audio/mpeg")
         a.src = objectUrl
 
         a.onended = () => finishOnce()
         a.onerror = () => finishOnce()
 
-        // если метаданные пришли — можем уточнить watchdog по duration
         a.onloadedmetadata = () => {
           try {
             const dur = Number(a.duration)
@@ -789,9 +899,16 @@ export default function VoiceCallDialog({
   }
 
   async function handleUserText(text: string, langCodeOverride?: string) {
-    const voiceLangCode = langCodeOverride || computeLangCode()
-    const lc = voiceLangCode.toLowerCase()
-    const agentLang = lc.startsWith("ru") ? "ru" : lc.startsWith("en") ? "en" : "uk"
+    const voiceLangCode = langCodeOverride || getSessionVoiceLang()
+    const agentLang = getSessionAgentLang()
+
+    // если запрос уже идёт — держим только последнюю реплику
+    if (isAgentBusyRef.current) {
+      pendingUserToAgentRef.current = { text, voiceLang: voiceLangCode }
+      return
+    }
+
+    isAgentBusyRef.current = true
 
     const resolvedWebhook =
       (webhookUrl && webhookUrl.trim()) ||
@@ -823,12 +940,14 @@ export default function VoiceCallDialog({
       let answer = extractAnswer(data)
       if (!answer) answer = t("I'm sorry, I couldn't process your message. Please try again.")
 
-      answer = collapseLeadingWordRepeats(answer)
+      answer = sanitizeAssistantText(answer)
 
-      if (shouldDedupAssistant(answer)) {
-        speakText(answer, voiceLangCode)
-        return
-      }
+      // если внезапно пришло пустое после чистки — не озвучиваем
+      if (!answer) return
+
+      // если агент вернул то же самое — не повторяем (и не говорим второй раз)
+      if (shouldDedupAssistant(answer)) return
+
       lastAssistantSentNormRef.current = normalizeUtterance(answer)
       lastAssistantSentTsRef.current = Date.now()
 
@@ -845,6 +964,17 @@ export default function VoiceCallDialog({
       console.error(e)
       setNetworkError(t("Connection error. Please try again."))
       if (onError && e instanceof Error) onError(e)
+    } finally {
+      isAgentBusyRef.current = false
+
+      const pending = pendingUserToAgentRef.current
+      pendingUserToAgentRef.current = null
+
+      if (pending && isCallActiveRef.current) {
+        window.setTimeout(() => {
+          void handleUserText(pending.text, pending.voiceLang)
+        }, 0)
+      }
     }
   }
 
@@ -852,6 +982,9 @@ export default function VoiceCallDialog({
     voiceGenderRef.current = gender
     setIsConnecting(true)
     setNetworkError(null)
+
+    // фиксируем язык/агент на момент старта сессии
+    setSessionLangFromUi()
 
     try {
       if (!navigator?.mediaDevices?.getUserMedia) {
@@ -912,11 +1045,15 @@ export default function VoiceCallDialog({
       lastAssistantSentNormRef.current = ""
       lastAssistantSentTsRef.current = 0
 
+      pendingUserToAgentRef.current = null
+      isAgentBusyRef.current = false
+
       vad.current = {
         noiseFloor: 0,
         voice: false,
         voiceUntilTs: 0,
         utteranceStartTs: 0,
+        voiceOnCount: 0,
       }
 
       pendingSttReasonRef.current = null
@@ -1014,6 +1151,9 @@ export default function VoiceCallDialog({
       } catch {}
       pendingSttTimerRef.current = null
     }
+
+    pendingUserToAgentRef.current = null
+    isAgentBusyRef.current = false
 
     stopRecorder()
     stopKeepAlive()
