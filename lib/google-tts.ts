@@ -37,9 +37,9 @@ export function normalizeGender(gender?: string): TTSGender {
 }
 
 /**
- * ОДНА ПАРА ГОЛОСОВ ДЛЯ ВСЕХ ЯЗЫКОВ:
- *   MALE   → onyx  (самый низкий / «мужской»)
- *   FEMALE → shimmer (самый «женский»)
+ * ГОЛОСА ПО ЯЗЫКУ:
+ * - uk-UA: меняем мужской на более мягкий, чтобы уйти от металлического тембра
+ * - ru-RU/en-US: оставляем как было, чтобы не менять привычное звучание
  */
 const VOICE_MAP: Record<string, { MALE: string; FEMALE: string }> = {
   "en-US": {
@@ -51,7 +51,7 @@ const VOICE_MAP: Record<string, { MALE: string; FEMALE: string }> = {
     FEMALE: "shimmer",
   },
   "uk-UA": {
-    MALE: "onyx",
+    MALE: "sage",
     FEMALE: "shimmer",
   },
 }
@@ -59,10 +59,7 @@ const VOICE_MAP: Record<string, { MALE: string; FEMALE: string }> = {
 /**
  * Выбор голоса OpenAI по языку и полу.
  */
-export function selectOpenAIVoice(
-  language: string,
-  gender: TTSGender,
-): string {
+export function selectOpenAIVoice(language: string, gender: TTSGender): string {
   const lang = normalizeLanguage(language)
   const g = normalizeGender(gender)
 
@@ -122,9 +119,7 @@ export async function generateGoogleTTS(
   try {
     data = raw ? JSON.parse(raw) : null
   } catch {
-    throw new Error(
-      "TTS: server returned non-JSON response: " + raw.slice(0, 200),
-    )
+    throw new Error("TTS: server returned non-JSON response: " + raw.slice(0, 200))
   }
 
   if (!res.ok || !data?.success || !data.audioContent) {
