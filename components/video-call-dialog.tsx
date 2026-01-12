@@ -48,6 +48,20 @@ const AI_CHARACTERS: AICharacter[] = [
     description:
       "Senior psychologist specializing in cognitive behavioral therapy with 15+ years of experience",
     avatar:
+      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-19%D1%83-iWDrUd3gH9sLBeOjmIvu8wX3yxwBuq.jpg",
+    animated: true,
+    idleVideo:
+      "/avatars/avatar3_idle.mp4",
+    speakingVideo:
+      "/avatars/avatar3_speaking.mp4",
+  },
+    {
+    id: "dr-maria",
+    name: "Dr. Maria",
+    gender: "female",
+    description:
+      "Psychotherapist specializing in emotional regulation, trauma recovery, and relationship counseling",
+    avatar:
       "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-18-BmxDH7DCv7e3p0y8HobTyoPkQw1COM.jpg",
     animated: true,
     idleVideo:
@@ -55,7 +69,7 @@ const AI_CHARACTERS: AICharacter[] = [
     speakingVideo:
       "/avatars/avatar1_speaking.mp4",
   },
-  {
+{
     id: "dr-sophia",
     name: "Dr. Sophia",
     gender: "female",
@@ -68,20 +82,6 @@ const AI_CHARACTERS: AICharacter[] = [
       "/avatars/avatar2_idle.mp4",
     speakingVideo:
       "/avatars/avatar2_speaking.mp4",
-  },
-  {
-    id: "dr-maria",
-    name: "Dr. Maria",
-    gender: "female",
-    description:
-      "Psychotherapist specializing in emotional regulation, trauma recovery, and relationship counseling",
-    avatar:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-19%D1%83-iWDrUd3gH9sLBeOjmIvu8wX3yxwBuq.jpg",
-    animated: true,
-    idleVideo:
-      "/avatars/avatar3_idle.mp4",
-    speakingVideo:
-      "/avatars/avatar3_speaking.mp4",
   },
 ]
 
@@ -1892,8 +1892,9 @@ export default function VideoCallDialog({
                               loop
                               playsInline
                               autoPlay
-                              preload="auto"
+                              preload="metadata"
                             >
+                              poster={character.avatar}>
                               <source src={character.idleVideo} type="video/mp4" />
                             </video>
                           ) : (
@@ -1959,8 +1960,9 @@ export default function VideoCallDialog({
                             loop
                             playsInline
                             autoPlay
-                            preload="auto"
+                            preload="metadata"
                           >
+                            poster={selectedCharacter.avatar}>
                             <source src={selectedCharacter.idleVideo} type="video/mp4" />
                           </video>
                         )}
@@ -1974,8 +1976,9 @@ export default function VideoCallDialog({
                             muted
                             loop
                             playsInline
-                            preload="auto"
+                            preload="metadata"
                           >
+                            poster={selectedCharacter.avatar}>
                             <source src={selectedCharacter.speakingVideo} type="video/mp4" />
                           </video>
                         )}
@@ -2005,8 +2008,9 @@ export default function VideoCallDialog({
                             muted
                             loop
                             playsInline
-                            preload="auto"
+                            preload="metadata"
                           >
+                            poster={selectedCharacter.avatar}>
                             <source src={selectedCharacter.speakingVideo} type="video/mp4" />
                           </video>
                         )}
