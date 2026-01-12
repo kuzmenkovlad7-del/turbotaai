@@ -1,73 +1,119 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import Header from "@/components/header"
-import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
 import { Button } from "@/components/ui/button"
-import { Loader2, Brain } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+
+type Summary = {
+  ok: boolean
+  principal: string
+  trialLeft: number
+  paidUntil: string | null
+  promoUntil: string | null
+  hasAccess: boolean
+}
 
 export default function ProfilePage() {
-  const { t } = useLanguage()
   const { user, isLoading, signOut } = useAuth()
   const router = useRouter()
 
+  const [summary, setSummary] = useState<Summary | null>(null)
+  const [history, setHistory] = useState<any[]>([])
+  const [err, setErr] = useState<string | null>(null)
+
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/login")
-    }
-  }, [isLoading, user, router])
+    fetch("/api/account/summary")
+      .then((r) => r.json())
+      .then(setSummary)
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!user) return
+    fetch("/api/history/list")
+      .then((r) => r.json())
+      .then((d) => setHistory(d?.conversations || []))
+      .catch(() => {})
+  }, [user])
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
-      </div>
-    )
-  }
-
-  if (!user) {
-    // редирект уже ушёл, просто ничего не рендерим
-    return null
+    return <div className="min-h-[calc(100vh-96px)] flex items-center justify-center">Loading...</div>
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-primary-50">
-      <Header />
-      <div className="container mx-auto px-4 py-24">
-        <div className="max-w-xl mx-auto bg-white/80 backdrop-blur-sm rounded-xl shadow-xl border border-white/20 p-8">
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">
-              <Brain className="h-8 w-8 text-primary-600" />
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">{t("Your Profile")}</h1>
-            <p className="text-gray-600">
-              {t("You are using TurbotaAI in demo mode. Full account features will appear later.")}
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <p className="text-xs uppercase text-gray-500 mb-1">{t("Email")}</p>
-              <p className="text-base font-medium text-gray-900">{user.email}</p>
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-6">
-            <Button
-              type="button"
-              variant="outline"
-              className="text-red-600 bg-transparent"
-              onClick={async () => {
-                await signOut()
-                router.push("/")
-              }}
-            >
-              {t("Sign Out")}
-            </Button>
-          </div>
+    <div className="mx-auto max-w-4xl px-4 py-12">
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-3xl font-semibold text-slate-900">Profile</h1>
+        <div className="flex items-center gap-3">
+          <Link href="/pricing">
+            <Button variant="outline">Pricing</Button>
+          </Link>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              await signOut()
+              router.push("/")
+            }}
+          >
+            Sign out
+          </Button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle>Account</CardTitle>
+            <CardDescription>Login status and access</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="text-sm text-slate-700">
+              <div><span className="text-slate-500">Email:</span> {user?.email || "Guest"}</div>
+              <div><span className="text-slate-500">Access:</span> {summary?.hasAccess ? "Active" : "Limited"}</div>
+              <div><span className="text-slate-500">Trial left:</span> {summary?.trialLeft ?? "—"}</div>
+              <div><span className="text-slate-500">Paid until:</span> {summary?.paidUntil ?? "—"}</div>
+              <div><span className="text-slate-500">Promo until:</span> {summary?.promoUntil ?? "—"}</div>
+            </div>
+
+            <Link href="/pricing">
+              <Button className="w-full">Manage subscription</Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle>History</CardTitle>
+            <CardDescription>Saved sessions</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!user && (
+              <p className="text-sm text-slate-600">
+                Login to see history.
+              </p>
+            )}
+
+            {user && history.length === 0 && (
+              <p className="text-sm text-slate-600">No sessions yet.</p>
+            )}
+
+            {user && history.length > 0 && (
+              <div className="space-y-2">
+                {history.slice(0, 10).map((c) => (
+                  <Link key={c.id} href={`/profile?conv=${c.id}`} className="block">
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                      <div className="font-medium text-slate-900">{c.mode}</div>
+                      <div className="text-xs text-slate-500">Updated: {c.updated_at}</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

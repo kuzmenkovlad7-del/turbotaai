@@ -1,11 +1,11 @@
-// app/api/turbotaai-agent/route.ts
 import { NextRequest, NextResponse } from "next/server"
+import { requireAccess } from "@/lib/access/access-control"
+import { getOrCreateConversationId, appendMessage } from "@/lib/history/history-store"
 
 const N8N_WEBHOOK_URL =
   process.env.N8N_TURBOTA_AGENT_WEBHOOK_URL ??
   "https://n8n.vladkuzmenko.com/webhook/turbotaai-agent"
 
-// Универсальный прокси в n8n (всегда POST)
 async function forwardToN8N(payload: any) {
   const res = await fetch(N8N_WEBHOOK_URL, {
     method: "POST",
@@ -20,35 +20,84 @@ async function forwardToN8N(payload: any) {
   const text = await res.text()
   const contentType = res.headers.get("content-type") || "text/plain"
 
-  // если это JSON — вернём JSON
   if (contentType.includes("application/json")) {
     try {
       const json = text ? JSON.parse(text) : {}
-      return NextResponse.json(json, { status: res.status })
+      return { ok: res.ok, status: res.status, contentType, body: json }
     } catch {
-      // если вдруг не распарсилось — отдадим как текст
+      // fallthrough
     }
   }
 
-  return new NextResponse(text, {
-    status: res.status,
-    headers: { "Content-Type": contentType },
-  })
+  return { ok: res.ok, status: res.status, contentType, body: text }
 }
 
-// POST: основной путь для чата / голоса / видео
 export async function POST(req: NextRequest) {
+  // лимиты: 1 вопрос на каждый вызов /api/turbotaai-agent
+  const access = await requireAccess(req, true)
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: "payment_required", reason: access.reason, grant: access.grant },
+      { status: access.status },
+    )
+  }
+
   let payload: any = {}
   try {
     payload = await req.json()
-  } catch {
-    // пустое тело — не критично
+  } catch {}
+
+  const result = await forwardToN8N(payload)
+
+  // история
+  try {
+    const deviceHash = req.cookies.get("turbotaai_device")?.value || ""
+    const mode =
+      typeof payload?.mode === "string" && payload.mode.trim()
+        ? payload.mode.trim()
+        : "chat"
+
+    const q = typeof payload?.query === "string" ? payload.query.trim() : ""
+    const email = typeof payload?.email === "string" ? payload.email.trim() : null
+
+    if (deviceHash && q) {
+      const title = q.slice(0, 80)
+      const convId = await getOrCreateConversationId({
+        deviceHash,
+        mode,
+        title,
+        userEmail: email,
+      })
+
+      if (convId) {
+        await appendMessage({ conversationId: convId, role: "user", text: q })
+
+        const answer =
+          typeof result.body === "string" ? result.body : JSON.stringify(result.body)
+        await appendMessage({ conversationId: convId, role: "assistant", text: String(answer || "").trim() })
+      }
+    }
+  } catch (e) {
+    console.warn("History save failed:", e)
   }
 
-  return forwardToN8N(payload)
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: `Webhook returned ${result.status}`, status: result.status, body: result.body },
+      { status: 502 },
+    )
+  }
+
+  if (typeof result.body === "string") {
+    return new NextResponse(result.body, {
+      status: 200,
+      headers: { "Content-Type": result.contentType },
+    })
+  }
+
+  return NextResponse.json(result.body, { status: 200 })
 }
 
-// GET: на случай старого кода вида /api/turbotaai-agent?query=...
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
 
@@ -58,27 +107,41 @@ export async function GET(req: NextRequest) {
     url.searchParams.get("text") ||
     url.searchParams.get("message")
 
-  // если текста нет — это просто health-check, отвечаем ок
   if (!query) {
     return NextResponse.json({ ok: true })
   }
 
   const language = url.searchParams.get("language") || "uk"
-  const email =
-    url.searchParams.get("email") ||
-    url.searchParams.get("userEmail") ||
-    "guest@example.com"
+  const email = url.searchParams.get("email") || url.searchParams.get("userEmail") || "guest@example.com"
   const mode = url.searchParams.get("mode") || "video"
 
-  const payload = {
-    query,
-    language,
-    email,
-    mode,
+  // GET тоже считаем как вопрос
+  const access = await requireAccess(req, true)
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: "payment_required", reason: access.reason, grant: access.grant },
+      { status: access.status },
+    )
   }
 
-  return forwardToN8N(payload)
+  const payload = { query, language, email, mode }
+  const result = await forwardToN8N(payload)
+
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: `Webhook returned ${result.status}`, status: result.status, body: result.body },
+      { status: 502 },
+    )
+  }
+
+  if (typeof result.body === "string") {
+    return new NextResponse(result.body, {
+      status: 200,
+      headers: { "Content-Type": result.contentType },
+    })
+  }
+
+  return NextResponse.json(result.body, { status: 200 })
 }
 
-// чтобы Next не кешировал
 export const dynamic = "force-dynamic"
