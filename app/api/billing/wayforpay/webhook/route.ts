@@ -14,10 +14,20 @@ async function readPayload(req: Request) {
     if (ct.includes("application/json")) {
       return await req.json()
     }
+
     if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
       const fd = await req.formData()
-      return Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]))
+      const obj: Record<string, string> = {}
+
+      // ✅ Никаких iterators / entries() / spread — чтобы TS не падал на Vercel
+      fd.forEach((v, k) => {
+        if (typeof v === "string") obj[k] = v
+        else obj[k] = v?.name ? String(v.name) : String(v)
+      })
+
+      return obj
     }
+
     return await req.json().catch(() => ({}))
   } catch {
     return {}
@@ -49,7 +59,6 @@ export async function POST(req: Request) {
       expected,
       payload,
     })
-    // пусть WayForPay ретраит, если подпись не совпала
     return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 400 })
   }
 
@@ -69,7 +78,7 @@ export async function POST(req: Request) {
     console.error("WayForPay webhook: billing_orders update failed", e)
   }
 
-  // 2) (опционально) выдаём доступ через access_grants - если таблица подходит
+  // 2) (опционально) выдаём доступ через access_grants
   if (isApproved) {
     try {
       const { data: orderRow } = await supabaseAdmin
@@ -86,12 +95,11 @@ export async function POST(req: Request) {
         })
       }
     } catch (e) {
-      // не ломаем webhook из-за access_grants
       console.error("WayForPay webhook: access_grants insert skipped/failed", e)
     }
   }
 
-  // WayForPay ждёт такой ответ: status=accept + signature(orderReference;status;time)
+  // WayForPay ждёт ответ accept + signature(orderReference;status;time)
   const status = "accept"
   const time = Math.floor(Date.now() / 1000)
   const signature = makeServiceResponseSignature(secret, orderReference, status, time)
