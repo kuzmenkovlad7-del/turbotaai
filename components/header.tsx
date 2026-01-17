@@ -1,39 +1,93 @@
 "use client"
-import { usePathname, useSearchParams } from "next/navigation"
-import { RainbowButton } from "@/components/ui/rainbow-button"
-import { Banner } from "@/components/ui/banner"
 
+import { usePathname, useSearchParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Menu } from "lucide-react"
+
+import { RainbowButton } from "@/components/ui/rainbow-button"
+import { Banner } from "@/components/ui/banner"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { LanguageSelector } from "@/components/language-selector"
+
 import { useLanguage } from "@/lib/i18n/language-context"
+import { useAuth } from "@/lib/auth/auth-context"
 import Logo from "@/components/logo"
 import { APP_NAME } from "@/lib/app-config"
-import { useAuth } from "@/lib/auth/auth-context"
 
 type MainLink = { href: string; label: string }
+
+function tryExtractUserText(init?: any): string | null {
+  try {
+    const body = init?.body
+    if (typeof body !== "string") return null
+    const parsed = JSON.parse(body)
+    return (
+      (typeof parsed?.text === "string" && parsed.text) ||
+      (typeof parsed?.message === "string" && parsed.message) ||
+      (typeof parsed?.prompt === "string" && parsed.prompt) ||
+      (typeof parsed?.input === "string" && parsed.input) ||
+      (typeof parsed?.query === "string" && parsed.query) ||
+      (typeof parsed?.q === "string" && parsed.q) ||
+      null
+    )
+  } catch {
+    return null
+  }
+}
+
+function tryExtractAssistantText(data: any): string | null {
+  if (!data) return null
+
+  if (Array.isArray(data) && data.length) {
+    const first: any = data[0]
+    const v =
+      (typeof first?.text === "string" && first.text) ||
+      (typeof first?.output === "string" && first.output) ||
+      (typeof first?.answer === "string" && first.answer) ||
+      (typeof first?.result === "string" && first.result) ||
+      (typeof first?.message === "string" && first.message) ||
+      null
+    if (v) return v
+  }
+
+  return (
+    (typeof data?.text === "string" && data.text) ||
+    (typeof data?.output === "string" && data.output) ||
+    (typeof data?.answer === "string" && data.answer) ||
+    (typeof data?.result === "string" && data.result) ||
+    (typeof data?.message === "string" && data.message) ||
+    null
+  )
+}
+
+function clipText(s: string, max = 4000) {
+  if (!s) return s
+  return s.length > max ? s.slice(0, max) : s
+}
 
 export default function Header() {
   const { t } = useLanguage()
   const { user } = useAuth()
 
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [trialLeft, setTrialLeft] = useState<number | null>(null)
-
   const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const [trialLeft, setTrialLeft] = useState<number | null>(null)
+  const [trialText, setTrialText] = useState<string | null>(null)
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null)
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null)
+
+  const loggedIn = Boolean(user) || Boolean(isLoggedIn)
+
   const paywall = searchParams?.get("paywall")
   const [paywallDismissed, setPaywallDismissed] = useState(false)
   const showPaywall = pathname === "/pricing" && paywall === "trial" && !paywallDismissed
-  const [trialText, setTrialText] = useState<string | null>(null)
-  const [hasAccess, setHasAccess] = useState<boolean | null>(null)
 
-  
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null)
-const mainLinks: MainLink[] = useMemo(
+  const mainLinks: MainLink[] = useMemo(
     () => [
       { href: "/", label: t("Home") },
       { href: "/programs", label: t("Programs") },
@@ -42,11 +96,10 @@ const mainLinks: MainLink[] = useMemo(
       { href: "/contacts", label: t("Contacts") },
       { href: "/pricing", label: t("Pricing") },
     ],
-    [t],
+    [t]
   )
 
-  const loadSummary = () =>
-    fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
+  const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
 
   useEffect(() => {
     let alive = true
@@ -73,11 +126,7 @@ const mainLinks: MainLink[] = useMemo(
 
           setTrialText(txt)
 
-          const accessActive =
-            Boolean(d?.hasAccess) ||
-            d?.access === "Paid" ||
-            d?.access === "Promo"
-
+          const accessActive = Boolean(d?.hasAccess) || d?.access === "Paid" || d?.access === "Promo"
           setHasAccess(accessActive)
         })
         .catch(() => {})
@@ -91,8 +140,9 @@ const mainLinks: MainLink[] = useMemo(
       alive = false
       window.removeEventListener("turbota:refresh", onRefresh)
     }
-  }, [user?.email])
-const scrollToSection = (e: any, href: string) => {
+  }, [])
+
+  const scrollToSection = (e: any, href: string) => {
     if (href.startsWith("#")) {
       e.preventDefault()
       const el = document.querySelector(href)
@@ -108,7 +158,15 @@ const scrollToSection = (e: any, href: string) => {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
-
+  // badge text: правильный приоритет
+  const badgeText =
+    trialText
+      ? `Access: ${trialText}`
+      : typeof trialLeft === "number"
+      ? `Trial left: ${trialLeft}`
+      : hasAccess
+      ? "Access: Active"
+      : null
 
   // turbota_global_fetch_interceptor
   useEffect(() => {
@@ -130,18 +188,29 @@ const scrollToSection = (e: any, href: string) => {
         const isAgent = url.includes("/api/turbotaai-agent")
         const isPromo = url.includes("/api/billing/promo/redeem")
         const isClear = url.includes("/api/auth/clear")
+        const isLogin = url.includes("/api/auth/login")
 
-        // paywall -> pricing + toast
+        // paywall -> pricing + refresh
         if (isAgent && res.status === 402) {
           try {
             sessionStorage.setItem("turbota_paywall", "trial")
           } catch {}
+
           window.dispatchEvent(new Event("turbota:refresh"))
           window.location.assign("/pricing?paywall=trial")
           return res
         }
 
-        // logout -> чистим localStorage supabase session
+        // login -> обязательно начинаем новую историю
+        if (isLogin && res.ok) {
+          try {
+            sessionStorage.removeItem("turbota_conv_id")
+          } catch {}
+          window.dispatchEvent(new Event("turbota:refresh"))
+          return res
+        }
+
+        // logout/clear -> чистим localStorage supabase session + сбрасываем текущую сессию истории
         if (isClear && res.ok) {
           try {
             for (const k of Object.keys(localStorage)) {
@@ -153,15 +222,59 @@ const scrollToSection = (e: any, href: string) => {
 
           try {
             sessionStorage.removeItem("turbota_paywall")
+            sessionStorage.removeItem("turbota_conv_id")
           } catch {}
 
           window.dispatchEvent(new Event("turbota:refresh"))
           return res
         }
 
-        // success -> refresh summary in header
+        // success -> refresh summary + save history
         if ((isAgent || isPromo) && res.ok) {
           window.dispatchEvent(new Event("turbota:refresh"))
+
+          if (isAgent) {
+            const userText = tryExtractUserText(init)
+
+            ;(async () => {
+              try {
+                const convId =
+                  (() => {
+                    try {
+                      return sessionStorage.getItem("turbota_conv_id")
+                    } catch {
+                      return null
+                    }
+                  })() || null
+
+                const cloned = res.clone()
+                const raw = await cloned.text().catch(() => "")
+                let parsed: any = null
+                try {
+                  parsed = raw ? JSON.parse(raw) : null
+                } catch {}
+
+                const assistantText = tryExtractAssistantText(parsed) || (raw ? clipText(raw) : null)
+
+                if (userText || assistantText) {
+                  const rr = await fetch("/api/history/save", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ conversationId: convId, userText, assistantText }),
+                  }).catch(() => null)
+
+                  const dd = await rr?.json().catch(() => null)
+                  const newId = typeof dd?.conversationId === "string" ? dd.conversationId : null
+
+                  if (newId) {
+                    try {
+                      sessionStorage.setItem("turbota_conv_id", newId)
+                    } catch {}
+                  }
+                }
+              } catch {}
+            })()
+          }
         }
       } catch {}
 
@@ -172,7 +285,8 @@ const scrollToSection = (e: any, href: string) => {
       window.fetch = originalFetch as any
     }
   }, [])
-return (
+
+  return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-sm">
       {showPaywall ? (
         <div className="fixed right-4 top-4 z-[9999] w-[380px]">
@@ -196,11 +310,7 @@ return (
                 >
                   Subscribe
                 </RainbowButton>
-                <Button
-                  variant="outline"
-                  className="h-9 px-4"
-                  onClick={() => setPaywallDismissed(true)}
-                >
+                <Button variant="outline" className="h-9 px-4" onClick={() => setPaywallDismissed(true)}>
                   Later
                 </Button>
               </div>
@@ -231,27 +341,27 @@ return (
         <div className="hidden items-center gap-3 lg:flex">
           <LanguageSelector />
 
-          {trialLeft != null && (
+          {badgeText ? (
             <span className="rounded-full bg-slate-50 px-3 py-1 text-xs text-slate-700 ring-1 ring-slate-200">
-              {trialText ? `Access: ${trialText}` : hasAccess ? "Access: Active" : `Trial left: ${trialLeft}`}
+              {badgeText}
             </span>
-          )}
+          ) : null}
 
-          {isLoggedIn ? (
-            <Link href="/profile">
-              <Button variant="outline" size="sm" className="border-slate-200 bg-white px-4 text-sm font-medium text-slate-800 hover:bg-slate-100">
-                {t("Profile")}
-              </Button>
-            </Link>
-          ) : (
-            <Link href="/login">
-              <Button variant="outline" size="sm" className="border-slate-200 bg-white px-4 text-sm font-medium text-slate-800 hover:bg-slate-100">
-                {t("Sign In")}
-              </Button>
-            </Link>
-          )}
+          <Link href={loggedIn ? "/profile" : "/login"}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-slate-200 bg-white px-4 text-sm font-medium text-slate-800 hover:bg-slate-100 hover:text-slate-900"
+            >
+              {loggedIn ? t("Profile") : t("Sign In")}
+            </Button>
+          </Link>
 
-          <Button onClick={scrollToAssistant} size="sm" className="rounded-full bg-slate-900 px-5 text-sm font-medium text-white shadow-sm hover:bg-slate-800">
+          <Button
+            onClick={scrollToAssistant}
+            size="sm"
+            className="rounded-full bg-slate-900 px-5 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+          >
             {t("Talk Now")}
           </Button>
         </div>
@@ -289,9 +399,12 @@ return (
               </div>
 
               <div className="flex flex-col gap-3">
-                <Link href={user ? "/profile" : "/login"} onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="outline" className="w-full border-slate-200 bg-white text-slate-800 hover:bg-slate-100">
-                    {user ? t("Profile") : t("Sign In")}
+                <Link href={loggedIn ? "/profile" : "/login"} onClick={() => setMobileMenuOpen(false)}>
+                  <Button
+                    variant="outline"
+                    className="w-full border-slate-200 bg-white text-slate-800 hover:bg-slate-100 hover:text-slate-900"
+                  >
+                    {loggedIn ? t("Profile") : t("Sign In")}
                   </Button>
                 </Link>
 

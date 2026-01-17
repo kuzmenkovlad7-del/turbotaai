@@ -25,15 +25,32 @@ function routeSupabase() {
     },
   });
 
+  const getOrCreateDeviceHash = () => {
+    const existing = cookieStore.get("turbotaai_device")?.value ?? null;
+    if (existing) return existing;
+
+    const created = crypto.randomUUID();
+    pendingCookies.push({
+      name: "turbotaai_device",
+      value: created,
+      options: {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 365,
+      },
+    });
+    return created;
+  };
+
   const json = (body: any, status = 200) => {
     const res = NextResponse.json(body, { status });
-    for (const c of pendingCookies) {
-      res.cookies.set(c.name, c.value, c.options);
-    }
+    for (const c of pendingCookies) res.cookies.set(c.name, c.value, c.options);
+    res.headers.set("cache-control", "no-store, max-age=0");
     return res;
   };
 
-  return { sb, json };
+  return { sb, json, getOrCreateDeviceHash };
 }
 
 function supabaseAdminOrNull() {
@@ -46,48 +63,45 @@ function supabaseAdminOrNull() {
   });
 }
 
-function getDeviceHashFromCookies(): string | null {
-  try {
-    return cookies().get("turbotaai_device")?.value ?? null;
-  } catch {
-    return null;
-  }
+async function upsertProfile(sb: any, user: any, fullName: string | null) {
+  const now = new Date().toISOString();
+  const row = {
+    id: user.id,
+    email: user.email ?? null,
+    full_name: fullName ?? null,
+    created_at: now,
+    updated_at: now,
+  };
+
+  await sb.from("profiles").upsert(row, { onConflict: "id" });
 }
 
-async function ensureAccessGrant(sb: any, userId: string) {
-  const deviceHash = getDeviceHashFromCookies();
+async function ensureAccessGrant(sb: any, userId: string, deviceHash: string) {
   const trial = Number(process.env.TRIAL_QUESTIONS_LIMIT ?? "5");
   const now = new Date().toISOString();
 
   // 1) если уже есть grant по user_id -> ок
-  const { data: byUser } = await sb
-    .from("access_grants")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
-
+  const { data: byUser } = await sb.from("access_grants").select("*").eq("user_id", userId).maybeSingle();
   if (byUser) return byUser;
 
   // 2) если есть guest grant по device_hash -> прикрепляем к юзеру
-  if (deviceHash) {
-    const { data: byDevice } = await sb
-      .from("access_grants")
-      .select("*")
-      .eq("device_hash", deviceHash)
-      .is("user_id", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  const { data: byDevice } = await sb
+    .from("access_grants")
+    .select("*")
+    .eq("device_hash", deviceHash)
+    .is("user_id", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-    if (byDevice?.id) {
-      const { data: updated } = await sb
-        .from("access_grants")
-        .update({ user_id: userId, updated_at: now })
-        .eq("id", byDevice.id)
-        .select("*")
-        .single();
-      return updated ?? byDevice;
-    }
+  if (byDevice?.id) {
+    const { data: updated } = await sb
+      .from("access_grants")
+      .update({ user_id: userId, updated_at: now })
+      .eq("id", byDevice.id)
+      .select("*")
+      .single();
+    return updated ?? byDevice;
   }
 
   // 3) иначе создаем новый grant под user_id
@@ -96,7 +110,7 @@ async function ensureAccessGrant(sb: any, userId: string) {
     .insert({
       id: crypto.randomUUID(),
       user_id: userId,
-      device_hash: deviceHash ?? crypto.randomUUID(),
+      device_hash: deviceHash,
       trial_questions_left: trial,
       paid_until: null,
       promo_until: null,
@@ -110,21 +124,27 @@ async function ensureAccessGrant(sb: any, userId: string) {
 }
 
 export async function POST(req: Request) {
-  const { sb, json } = routeSupabase();
+  const { sb, json, getOrCreateDeviceHash } = routeSupabase();
 
   const body = await req.json().catch(() => ({} as any));
   const email = String(body?.email ?? "").trim().toLowerCase();
   const password = String(body?.password ?? "");
-  const name = String(body?.name ?? "").trim();
+  const fullNameRaw =
+    body?.fullName ?? body?.full_name ?? body?.name ?? body?.full_name_input ?? null;
+  const fullName = fullNameRaw ? String(fullNameRaw).trim() : "";
 
   if (!email || !password) {
     return json({ ok: false, error: "Email and password are required" }, 400);
   }
 
+  const deviceHash = getOrCreateDeviceHash();
+
+  const meta = fullName ? { full_name: fullName, name: fullName } : undefined;
+
   const { data: signUpData, error: signUpError } = await sb.auth.signUp({
     email,
     password,
-    options: { data: name ? { name } : undefined },
+    options: { data: meta },
   });
 
   if (signUpError || !signUpData?.user) {
@@ -132,7 +152,6 @@ export async function POST(req: Request) {
   }
 
   // Если Supabase требует подтверждение email, session будет null
-  // Делаем авто-подтверждение через service_role и логиним сразу
   if (!signUpData.session) {
     const admin = supabaseAdminOrNull();
     if (!admin) {
@@ -149,30 +168,24 @@ export async function POST(req: Request) {
     try {
       await admin.auth.admin.updateUserById(signUpData.user.id, {
         email_confirm: true,
-        user_metadata: name ? { name } : undefined,
+        user_metadata: meta,
       } as any);
-    } catch (e: any) {
-      // если не получилось подтвердить, дальше signIn упадет с Email not confirmed
-    }
+    } catch {}
 
     const { data: signInData, error: signInError } = await sb.auth.signInWithPassword({ email, password });
     if (signInError || !signInData?.session) {
-      return json(
-        {
-          ok: false,
-          error: signInError?.message || "Auto login failed after sign up",
-        },
-        400
-      );
+      return json({ ok: false, error: signInError?.message || "Auto login failed after sign up" }, 400);
     }
 
-    await ensureAccessGrant(sb, signInData.user.id);
+    await ensureAccessGrant(sb, signInData.user.id, deviceHash);
+    await upsertProfile(sb, signInData.user, fullName || null);
 
     return json({ ok: true, user: signInData.user });
   }
 
   // session уже есть -> просто привязываем grant
-  await ensureAccessGrant(sb, signUpData.user.id);
+  await ensureAccessGrant(sb, signUpData.user.id, deviceHash);
+  await upsertProfile(sb, signUpData.user, fullName || null);
 
   return json({ ok: true, user: signUpData.user });
 }

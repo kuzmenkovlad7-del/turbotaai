@@ -49,6 +49,7 @@ export default function RegisterPage() {
           password,
           fullName: n1 || null,
           full_name: n1 || null,
+          name: n1 || null,
         }),
       });
 

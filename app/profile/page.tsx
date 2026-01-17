@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,13 @@ type Summary = {
   promoUntil: string | null;
 };
 
+type HistoryItem = {
+  id: string;
+  title: string | null;
+  updated_at: string | null;
+  mode?: string | null;
+};
+
 function fmtDate(v: string | null) {
   if (!v) return "Not active";
   const d = new Date(v);
@@ -24,10 +32,15 @@ function fmtDate(v: string | null) {
 
 export default function ProfilePage() {
   const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [s, setS] = useState<Summary | null>(null);
 
-  async function load() {
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  async function loadSummary() {
     setLoading(true);
     try {
       const r = await fetch("/api/account/summary", { cache: "no-store", credentials: "include" });
@@ -38,6 +51,23 @@ export default function ProfilePage() {
     }
   }
 
+  async function loadHistory() {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const r = await fetch("/api/history/list", { cache: "no-store", credentials: "include" });
+      const d = await r.json().catch(() => ({} as any));
+      if (!r.ok || d?.ok === false) {
+        setHistoryError(d?.error || "Failed to load history");
+        setHistory([]);
+        return;
+      }
+      setHistory(Array.isArray(d?.conversations) ? d.conversations : []);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
   async function signOut() {
     await fetch("/api/auth/clear", { method: "POST", credentials: "include" }).catch(() => null);
     router.push("/");
@@ -45,8 +75,12 @@ export default function ProfilePage() {
   }
 
   useEffect(() => {
-    load();
+    loadSummary();
   }, []);
+
+  useEffect(() => {
+    if (s?.isLoggedIn) loadHistory();
+  }, [s?.isLoggedIn]);
 
   const isLoggedIn = !!s?.isLoggedIn;
   const email = s?.email || "Guest";
@@ -56,13 +90,25 @@ export default function ProfilePage() {
     <div className="mx-auto max-w-5xl px-4 py-12">
       <div className="mb-8 flex items-center justify-between">
         <h1 className="text-4xl font-semibold">Profile</h1>
+
         <div className="flex items-center gap-3">
-          <Button variant="outline" className="rounded-full border border-slate-200" onClick={() => router.push("/pricing")}>
+          <Button
+            variant="outline"
+            className="rounded-full border border-slate-200"
+            onClick={() => router.push("/pricing")}
+          >
             Pricing
           </Button>
-          <Button variant="outline" className="rounded-full border border-slate-200" onClick={signOut}>
-            Sign out
-          </Button>
+
+          {isLoggedIn ? (
+            <Button variant="outline" className="rounded-full border border-slate-200" onClick={signOut}>
+              Sign out
+            </Button>
+          ) : (
+            <Button variant="outline" className="rounded-full border border-slate-200" onClick={() => router.push("/login")}>
+              Sign in
+            </Button>
+          )}
         </div>
       </div>
 
@@ -79,19 +125,25 @@ export default function ProfilePage() {
             ) : (
               <>
                 <div>
-                  <span className="text-slate-500">Email:</span> <span className="font-medium">{email}</span>
+                  <span className="text-slate-500">Email:</span>{" "}
+                  <span className="font-medium">{email}</span>
                 </div>
+
                 <div>
-                  <span className="text-slate-500">Access:</span> <span className="font-medium">{access}</span>
+                  <span className="text-slate-500">Access:</span>{" "}
+                  <span className="font-medium">{access}</span>
                 </div>
+
                 <div>
-                  <span className="text-slate-500">{(s as any)?.unlimited ? "Access:" : (s?.access === "Paid" || s?.access === "Promo") ? "Access:" : "Trial left:"}</span>{" "}
-                  <span className="font-medium">{((s as any)?.unlimited ? ((s as any)?.trialText ?? ((s as any)?.access === "Paid" ? "Unlimited" : "Doctor access")) : ((s?.access === "Paid" ? "Unlimited" : s?.access === "Promo" ? "Doctor access" : (typeof s?.trialLeft === "number" ? s?.trialLeft : 0))))}</span>
+                  <span className="text-slate-500">Trial left:</span>{" "}
+                  <span className="font-medium">{typeof s?.trialLeft === "number" ? s.trialLeft : 0}</span>
                 </div>
+
                 <div>
                   <span className="text-slate-500">Paid until:</span>{" "}
                   <span className="font-medium">{fmtDate(s?.paidUntil ?? null)}</span>
                 </div>
+
                 <div>
                   <span className="text-slate-500">Promo until:</span>{" "}
                   <span className="font-medium">{fmtDate(s?.promoUntil ?? null)}</span>
@@ -107,7 +159,11 @@ export default function ProfilePage() {
                   </Button>
                 </div>
 
-                {!isLoggedIn ? <div className="pt-2 text-xs text-slate-500">Log in to unlock saved sessions and promo.</div> : null}
+                {!isLoggedIn ? (
+                  <div className="pt-2 text-xs text-slate-500">
+                    Log in to unlock saved sessions and promo.
+                  </div>
+                ) : null}
               </>
             )}
           </CardContent>
@@ -118,8 +174,32 @@ export default function ProfilePage() {
             <CardTitle className="text-2xl">History</CardTitle>
             <CardDescription>Saved sessions</CardDescription>
           </CardHeader>
+
           <CardContent className="text-sm text-slate-700">
-            {isLoggedIn ? "History will appear here after first session." : "Login to see history."}
+            {!isLoggedIn ? (
+              "Login to see history."
+            ) : historyLoading ? (
+              "Loading..."
+            ) : historyError ? (
+              <div className="text-red-600">{historyError}</div>
+            ) : history.length === 0 ? (
+              "History will appear here after first session."
+            ) : (
+              <div className="space-y-2">
+                {history.map((h) => (
+                  <Link
+                    key={h.id}
+                    href={`/history/${h.id}`}
+                    className="block rounded-xl border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50"
+                  >
+                    <div className="font-medium text-slate-900">{h.title || "Session"}</div>
+                    <div className="text-xs text-slate-500">
+                      {h.updated_at ? new Date(h.updated_at).toLocaleString() : ""}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

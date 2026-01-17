@@ -183,7 +183,7 @@ const router = useRouter();
 
                 <div className="flex items-center justify-between">
                   <span>{trialText ? "Access" : "Trial left"}</span>
-                  <span className="text-slate-900">{loadingSummary ? "…" : (trialText ?? trialLeft)}</span>
+                  <span className="text-slate-900">{loadingSummary ? "…" : (typeof trialText === "string" ? trialText : (Number.isFinite(Number(trialLeft)) ? Number(trialLeft) : 0))}</span>
                 </div>
 
                 {summary?.accessUntil || summary?.access_until ? (

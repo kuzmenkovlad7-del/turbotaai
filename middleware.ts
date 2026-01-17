@@ -1,28 +1,50 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
+import { createServerClient } from "@supabase/ssr"
 
-const COOKIE_NAME = "turbotaai_device"
-const ONE_YEAR = 60 * 60 * 24 * 365
+const DEVICE_COOKIE = "device_hash"
 
-export function middleware(req: NextRequest) {
-  const res = NextResponse.next()
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next({
+    request: { headers: req.headers },
+  })
 
-  const existing = req.cookies.get(COOKIE_NAME)?.value
+  // гарантируем стабильный device_hash (иначе будут плодиться access_grants)
+  const existing = req.cookies.get(DEVICE_COOKIE)?.value
   if (!existing) {
-    const id = crypto.randomUUID()
-    res.cookies.set(COOKIE_NAME, id, {
+    res.cookies.set({
+      name: DEVICE_COOKIE,
+      value: crypto.randomUUID(),
       path: "/",
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      maxAge: ONE_YEAR,
+      maxAge: 60 * 60 * 24 * 365,
     })
   }
 
+  // синхронизация Supabase auth cookies
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return req.cookies.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          res.cookies.set({ name, value, ...options })
+        },
+        remove(name: string, options: any) {
+          res.cookies.set({ name, value: "", ...options, maxAge: 0 })
+        },
+      },
+    }
+  )
+
+  await supabase.auth.getUser()
   return res
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 }
