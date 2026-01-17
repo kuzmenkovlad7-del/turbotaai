@@ -90,16 +90,13 @@ export default function Header() {
   const mainLinks: MainLink[] = useMemo(
     () => [
       { href: "/", label: t("Home") },
-      { href: "/programs", label: t("Programs") },
-      { href: "/client-stories", label: t("Stories") },
       { href: "/about", label: t("About") },
       { href: "/contacts", label: t("Contacts") },
       { href: "/pricing", label: t("Pricing") },
     ],
     [t]
   )
-
-  const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
+const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
 
   useEffect(() => {
     let alive = true
