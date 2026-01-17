@@ -39,9 +39,9 @@ export async function POST(req: Request) {
   let amount = Number(body?.amount ?? 499)
   const currency = String(body?.currency ?? "UAH")
 
-  // ✅ local-only override (НЕ влияет на прод Vercel)
+  // ✅ override работает ВЕЗДЕ если задано WAYFORPAY_TEST_AMOUNT_UAH
   const __testAmount = Number(process.env.WAYFORPAY_TEST_AMOUNT_UAH || "")
-  if (process.env.NODE_ENV !== "production" && Number.isFinite(__testAmount) && __testAmount > 0) {
+  if (Number.isFinite(__testAmount) && __testAmount > 0) {
     amount = __testAmount
   }
 
@@ -133,6 +133,7 @@ export async function POST(req: Request) {
           currency,
           serviceUrl,
           returnUrl,
+          testAmountApplied: Number.isFinite(__testAmount) && __testAmount > 0,
         },
       },
       { status: 400 }
@@ -144,5 +145,9 @@ export async function POST(req: Request) {
     orderReference,
     invoiceUrl,
     raw: data,
+    debug: {
+      amount,
+      testAmountApplied: Number.isFinite(__testAmount) && __testAmount > 0,
+    },
   })
 }
