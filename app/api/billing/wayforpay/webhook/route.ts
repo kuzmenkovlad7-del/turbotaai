@@ -1,139 +1,136 @@
-import { NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabaseAdmin"
+import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
+import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "nodejs"
-export const dynamic = "force-dynamic"
+export const runtime = "nodejs";
 
-function mapWfpStatus(transactionStatus?: string) {
-  const s = (transactionStatus || "").toLowerCase()
-  if (s === "approved") return "paid"
-  if (s === "declined") return "failed"
-  if (s === "expired") return "expired"
-  if (s === "refunded") return "refunded"
-  if (s === "inprocessing" || s === "pending") return "pending"
-  return s || "unknown"
+function getSupabaseAdmin() {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL;
+
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE ||
+    process.env.SUPABASE_SERVICE_KEY;
+
+  if (!url || !key) {
+    throw new Error("Supabase env missing: NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY");
+  }
+
+  return createClient(url, key, {
+    auth: { persistSession: false },
+  });
 }
 
-async function readBodySmart(req: Request): Promise<any> {
-  const ct = (req.headers.get("content-type") || "").toLowerCase()
+function hmacMd5(message: string, secret: string) {
+  return crypto.createHmac("md5", secret).update(message, "utf8").digest("hex");
+}
 
-  // 1) JSON
+async function readWayForPayBody(req: NextRequest): Promise<Record<string, any>> {
+  const ct = (req.headers.get("content-type") || "").toLowerCase();
+
+  // JSON
   if (ct.includes("application/json")) {
     try {
-      return await req.json()
+      return await req.json();
     } catch {
-      return {}
+      return {};
     }
   }
 
-  // 2) multipart/form-data (без итераторов)
-  if (ct.includes("multipart/form-data")) {
-    try {
-      const fd = await req.formData()
-      const obj: Record<string, string> = {}
-      fd.forEach((v, k) => {
-        obj[k] = String(v)
-      })
+  // FormData (multipart OR x-www-form-urlencoded)
+  if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
+    const fd = await req.formData();
+    const obj: Record<string, any> = {};
 
-      // Частый кейс: JSON лежит внутри одного поля
-      const keys = Object.keys(obj)
-      if (keys.length === 1) {
-        const onlyKey = keys[0]
-        const onlyVal = obj[onlyKey]
+    // важно: fd.forEach без итераторов (чтобы не ломался билд)
+    fd.forEach((value, key) => {
+      obj[key] = typeof value === "string" ? value : value.name;
+    });
 
-        if (onlyKey.trim().startsWith("{")) {
-          try { return JSON.parse(onlyKey) } catch {}
-        }
-        if ((onlyVal || "").trim().startsWith("{")) {
-          try { return JSON.parse(onlyVal) } catch {}
-        }
-      }
-
-      for (const k of ["payment", "data", "payload", "json"]) {
-        const v = obj[k]
-        if ((v || "").trim().startsWith("{")) {
-          try { return JSON.parse(v) } catch {}
+    // ✅ ВАЖНО: WayForPay иногда шлёт весь JSON как ОДИН КЛЮЧ
+    // {'{...json...}': ''}
+    if (!obj.orderReference && !obj.order_reference && Object.keys(obj).length === 1) {
+      const onlyKey = Object.keys(obj)[0].trim();
+      if (onlyKey.startsWith("{") && onlyKey.endsWith("}")) {
+        try {
+          return JSON.parse(onlyKey);
+        } catch {
+          // ignore
         }
       }
-
-      return obj
-    } catch {
-      return {}
     }
+
+    return obj;
   }
 
-  // 3) x-www-form-urlencoded / text fallback
-  let raw = ""
+  // Fallback: raw text
   try {
-    raw = await req.text()
-  } catch {
-    return {}
-  }
+    const text = (await req.text()) || "";
+    const t = text.trim();
+    if (!t) return {};
 
-  const text = (raw || "").trim()
-  if (!text) return {}
+    if (t.startsWith("{") && t.endsWith("}")) {
+      return JSON.parse(t);
+    }
 
-  // Иногда WayForPay присылает JSON строкой даже без JSON content-type
-  if (text.startsWith("{")) {
-    try {
-      return JSON.parse(text)
-    } catch {}
-  }
+    const params = new URLSearchParams(t);
+    const obj: Record<string, any> = {};
+    params.forEach((v, k) => (obj[k] = v));
 
-  // URL encoded
-  try {
-    const params = new URLSearchParams(text)
-    const obj = Object.fromEntries(params.entries()) as Record<string, string>
-
-    // ВАЖНО: твой кейс из логов — JSON пришёл как "ключ" и пустое значение
-    const keys = Object.keys(obj)
-    if (keys.length === 1) {
-      const onlyKey = keys[0]
-      const onlyVal = obj[onlyKey]
-
-      if (onlyKey.trim().startsWith("{")) {
-        try { return JSON.parse(onlyKey) } catch {}
-      }
-      if ((onlyVal || "").trim().startsWith("{")) {
-        try { return JSON.parse(onlyVal) } catch {}
+    // ещё один шанс распаковать "json ключом"
+    if (!obj.orderReference && Object.keys(obj).length === 1) {
+      const onlyKey = Object.keys(obj)[0].trim();
+      if (onlyKey.startsWith("{") && onlyKey.endsWith("}")) {
+        try {
+          return JSON.parse(onlyKey);
+        } catch {}
       }
     }
 
-    for (const k of ["payment", "data", "payload", "json"]) {
-      const v = obj[k]
-      if ((v || "").trim().startsWith("{")) {
-        try { return JSON.parse(v) } catch {}
-      }
-    }
-
-    return obj
+    return obj;
   } catch {
-    return { raw: text }
+    return {};
   }
+}
+
+function mapStatus(transactionStatus?: string) {
+  const s = (transactionStatus || "").toLowerCase();
+
+  if (s === "approved") return "paid";
+  if (s === "inprocessing" || s === "processing") return "processing";
+  if (s === "pending") return "pending";
+  if (s === "declined") return "declined";
+  if (s === "expired") return "expired";
+  if (s === "refunded") return "refunded";
+
+  return s || "unknown";
 }
 
 export async function GET() {
-  return NextResponse.json({ ok: true, endpoint: "wayforpay-webhook" })
+  return NextResponse.json({ ok: true, endpoint: "wayforpay-webhook" });
 }
 
-export async function POST(req: Request) {
-  const payload = await readBodySmart(req)
+export async function POST(req: NextRequest) {
+  const body = await readWayForPayBody(req);
 
   const orderReference =
-    payload?.orderReference ||
-    payload?.order_reference ||
-    payload?.orderref ||
-    ""
+    body.orderReference ||
+    body.order_reference ||
+    body.orderRef ||
+    "";
 
   const transactionStatus =
-    payload?.transactionStatus ||
-    payload?.transaction_status ||
-    ""
+    body.transactionStatus ||
+    body.transaction_status ||
+    body.status ||
+    "";
 
-  const amount = payload?.amount
-  const currency = payload?.currency
-  const reason = payload?.reason
-  const reasonCode = payload?.reasonCode
+  const reason = body.reason;
+  const reasonCode = body.reasonCode;
+  const amount = body.amount;
+  const currency = body.currency;
 
   console.log("✅ WFP webhook in:", {
     orderReference,
@@ -142,30 +139,66 @@ export async function POST(req: Request) {
     reasonCode,
     amount,
     currency,
-  })
+  });
 
-  // ВАЖНО: чтобы WayForPay не ретраил бесконечно — лучше отвечать 200 даже на кривой payload
   if (!orderReference) {
-    console.error("❌ Missing orderReference in webhook payload", payload)
-    return NextResponse.json({ ok: false, error: "missing orderReference" }, { status: 200 })
+    console.error("❌ Missing orderReference in webhook payload", body);
+    return NextResponse.json({ ok: false, error: "Missing orderReference" }, { status: 400 });
   }
 
-  const newStatus = mapWfpStatus(transactionStatus)
+  // опциональная проверка merchant
+  const expectedMerchant =
+    process.env.WAYFORPAY_MERCHANT_ACCOUNT ||
+    process.env.WAYFORPAY_MERCHANT ||
+    "";
 
-  const { error: updErr } = await supabaseAdmin
-    .from("billing_orders")
-    .update({
-      status: newStatus,
-      raw: payload,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("order_reference", orderReference)
-
-  if (updErr) {
-    console.error("❌ Supabase update failed:", updErr)
-    return NextResponse.json({ ok: false, error: "supabase update failed" }, { status: 200 })
+  if (expectedMerchant && body.merchantAccount && body.merchantAccount !== expectedMerchant) {
+    console.error("❌ Wrong merchantAccount", {
+      got: body.merchantAccount,
+      expected: expectedMerchant,
+    });
+    return NextResponse.json({ ok: false, error: "Wrong merchantAccount" }, { status: 400 });
   }
 
-  console.log("✅ Billing order updated:", { orderReference, status: newStatus })
-  return NextResponse.json({ ok: true })
+  const newStatus = mapStatus(transactionStatus);
+
+  try {
+    const supabase = getSupabaseAdmin();
+
+    const { error } = await supabase
+      .from("billing_orders")
+      .update({
+        status: newStatus,
+        raw: body,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("order_reference", orderReference);
+
+    if (error) {
+      console.error("❌ Supabase update error", error);
+      return NextResponse.json({ ok: false, error: "DB update failed" }, { status: 500 });
+    }
+
+    console.log("✅ Billing order updated:", { orderReference, status: newStatus });
+
+    // ✅ WayForPay ждёт accept-ответ с подписью, иначе может ретраить webhook
+    const secret =
+      process.env.WAYFORPAY_SECRET_KEY ||
+      process.env.WAYFORPAY_MERCHANT_SECRET_KEY ||
+      "";
+
+    const time = Math.floor(Date.now() / 1000);
+    const status = "accept";
+
+    if (secret) {
+      // правильная схема: HMAC_MD5(orderReference;status;time, secret)
+      const signature = hmacMd5(`${orderReference};${status};${time}`, secret);
+      return NextResponse.json({ orderReference, status, time, signature });
+    }
+
+    return NextResponse.json({ orderReference, status, time });
+  } catch (e: any) {
+    console.error("❌ Webhook error", e);
+    return NextResponse.json({ ok: false, error: "Webhook error" }, { status: 500 });
+  }
 }
