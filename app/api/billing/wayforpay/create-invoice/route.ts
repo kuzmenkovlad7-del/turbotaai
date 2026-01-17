@@ -1,75 +1,81 @@
-import { NextResponse } from "next/server"
-import { headers } from "next/headers"
-import { makeInvoiceSignature } from "@/lib/wayforpay"
+import { NextRequest, NextResponse } from "next/server"
+import crypto from "crypto"
+import { supabaseAdmin } from "@/lib/supabaseAdmin"
+import { makeCreateInvoiceSignature } from "@/lib/wayforpay"
+
+export const runtime = "nodejs"
 
 const WFP_API = "https://api.wayforpay.com/api"
 
-function missingEnv() {
-  const required = ["WAYFORPAY_MERCHANT_ACCOUNT", "WAYFORPAY_SECRET_KEY"]
-  const missing = required.filter((k) => !process.env[k])
-  return missing
+function getBaseUrl(req: NextRequest) {
+  const proto = req.headers.get("x-forwarded-proto") || "https"
+  const host =
+    req.headers.get("x-forwarded-host") ||
+    req.headers.get("host") ||
+    ""
+
+  if (!host) return ""
+  return `${proto}://${host}`
 }
 
-export async function POST(req: Request) {
-  const missing = missingEnv()
-  if (missing.length) {
+function cleanDomain(hostOrUrl: string) {
+  return String(hostOrUrl || "")
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "")
+    .trim()
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({} as any))
+
+  const planId = String(body.planId ?? body.plan_id ?? "")
+  const userId = body.userId ?? body.user_id ?? null
+  const deviceHash = body.deviceHash ?? body.device_hash ?? null
+
+  const currency = String(body.currency ?? "UAH").toUpperCase()
+
+  let amount = Number(body.amount ?? 0)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    amount = 1
+  }
+
+  const testAmount = Number(process.env.WAYFORPAY_TEST_AMOUNT_UAH ?? "")
+  if (Number.isFinite(testAmount) && testAmount > 0) {
+    amount = testAmount
+  }
+
+  const merchantAccount = process.env.WAYFORPAY_MERCHANT_ACCOUNT || ""
+  const secret = process.env.WAYFORPAY_SECRET_KEY || ""
+
+  if (!merchantAccount || !secret) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: "WayForPay is not configured",
-        missing,
-        hint:
-          "Add env vars in .env.local (and Vercel). Required: WAYFORPAY_MERCHANT_ACCOUNT, WAYFORPAY_SECRET_KEY. Optional: WAYFORPAY_MERCHANT_DOMAIN_NAME, WAYFORPAY_WEBHOOK_URL, WAYFORPAY_RETURN_URL",
-      },
-      { status: 400 }
+      { ok: false, error: "WayForPay env missing (WAYFORPAY_MERCHANT_ACCOUNT / WAYFORPAY_SECRET_KEY)" },
+      { status: 500 }
     )
   }
 
-  const merchantAccount = process.env.WAYFORPAY_MERCHANT_ACCOUNT!
-  const secretKey = process.env.WAYFORPAY_SECRET_KEY!
+  const baseUrl = getBaseUrl(req)
+  const host = req.headers.get("host") || "turbotaai.com"
 
   const merchantDomainName =
-    process.env.WAYFORPAY_MERCHANT_DOMAIN_NAME ||
-    process.env.WAYFORPAY_MERCHANT_DOMAIN ||
-    headers().get("host") ||
-    "localhost:3000"
-
-  const body = await req.json().catch(() => ({} as any))
-
-  let amount = Number(body?.amount ?? 499)
-  const currency = String(body?.currency ?? "UAH")
-
-  // ✅ override работает ВЕЗДЕ если задано WAYFORPAY_TEST_AMOUNT_UAH
-  const __testAmount = Number(process.env.WAYFORPAY_TEST_AMOUNT_UAH || "")
-  if (Number.isFinite(__testAmount) && __testAmount > 0) {
-    amount = __testAmount
-  }
-
-  const productName = [String(body?.productName ?? "TurbotaAI Monthly")]
-  const productCount = [Number(body?.productCount ?? 1)]
-  const productPrice = [amount]
-
-  const orderReference =
-    body?.orderReference
-      ? String(body.orderReference)
-      : `TAI-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    cleanDomain(process.env.WAYFORPAY_MERCHANT_DOMAIN || "") ||
+    cleanDomain(host) ||
+    "turbotaai.com"
 
   const orderDate = Math.floor(Date.now() / 1000)
+  const orderReference = `ta_${planId || "plan"}_${orderDate}_${crypto.randomBytes(4).toString("hex")}`
 
-  const serviceUrl =
-    process.env.WAYFORPAY_SERVICE_URL ||
-    process.env.WAYFORPAY_WEBHOOK_URL ||
-    (headers().get("x-forwarded-proto") && headers().get("host")
-      ? `${headers().get("x-forwarded-proto")}://${headers().get("host")}/api/billing/wayforpay/webhook`
-      : undefined)
+  // returnUrl только для UI редиректа, но сделаем удобным
+  const returnUrl = `${baseUrl}/payment/return?orderReference=${encodeURIComponent(orderReference)}`
 
-  const returnUrl =
-    process.env.WAYFORPAY_RETURN_URL ||
-    (headers().get("x-forwarded-proto") && headers().get("host")
-      ? `${headers().get("x-forwarded-proto")}://${headers().get("host")}/payment/return`
-      : undefined)
+  // serviceUrl = webhook который реально заносит оплату в Supabase
+  const serviceUrl = `${baseUrl}/api/billing/wayforpay/webhook`
 
-  const merchantSignature = makeInvoiceSignature({
+  const productName = [`TurbotaAI ${planId || "Plan"}`]
+  const productCount = [1]
+  const productPrice = [amount]
+
+  const merchantSignature = makeCreateInvoiceSignature(secret, {
     merchantAccount,
     merchantDomainName,
     orderReference,
@@ -79,27 +85,26 @@ export async function POST(req: Request) {
     productName,
     productCount,
     productPrice,
-    secretKey,
   })
 
-  const payload: any = {
+  const payload = {
     transactionType: "CREATE_INVOICE",
     merchantAccount,
+    merchantAuthType: "SimpleSignature",
     merchantDomainName,
     merchantSignature,
     apiVersion: 1,
+    language: "EN",
+    serviceUrl,
+    returnUrl,
     orderReference,
     orderDate,
     amount,
     currency,
     productName,
-    productCount,
     productPrice,
-    language: "EN",
+    productCount,
   }
-
-  if (serviceUrl) payload.serviceUrl = serviceUrl
-  if (returnUrl) payload.returnUrl = returnUrl
 
   const r = await fetch(WFP_API, {
     method: "POST",
@@ -108,16 +113,28 @@ export async function POST(req: Request) {
     cache: "no-store",
   })
 
-  const data = await r.json().catch(() => ({}))
+  const data = await r.json().catch(() => ({} as any))
 
-  const invoiceUrl = data?.invoiceUrl || data?.url || data?.paymentUrl
+  const invoiceUrl = data?.invoiceUrl || data?.url || data?.paymentUrl || ""
   const reason = String(data?.reason ?? "")
   const reasonCode = String(data?.reasonCode ?? "")
+
+  const reasonNorm = reason.toLowerCase()
+  const reasonCodeNorm = reasonCode.toLowerCase()
 
   const ok =
     r.ok &&
     !!invoiceUrl &&
-    (reason.toLowerCase() === "ok" || reasonCode === "1100" || reasonCode === "")
+    (
+      reasonNorm === "ok" ||
+      reasonCodeNorm === "ok" ||
+      reason === "1100" ||
+      reasonCode === "1100" ||
+      reasonNorm === "1100" ||
+      reasonCodeNorm === "1100" ||
+      reason === "" ||
+      reasonCode === ""
+    )
 
   if (!ok) {
     return NextResponse.json(
@@ -133,11 +150,30 @@ export async function POST(req: Request) {
           currency,
           serviceUrl,
           returnUrl,
-          testAmountApplied: Number.isFinite(__testAmount) && __testAmount > 0,
+          testAmountApplied: Number.isFinite(testAmount) && testAmount > 0,
         },
       },
       { status: 400 }
     )
+  }
+
+  // ✅ Сразу заносим order в Supabase (даже до оплаты, статус invoice_created)
+  try {
+    await supabaseAdmin.from("billing_orders").insert({
+      order_reference: orderReference,
+      user_id: userId,
+      device_hash: deviceHash,
+      plan_id: planId,
+      amount,
+      currency,
+      status: "invoice_created",
+      raw: {
+        invoice: data,
+        wfpPayload: payload,
+      },
+    })
+  } catch (e) {
+    console.error("billing_orders insert failed", e)
   }
 
   return NextResponse.json({
@@ -147,7 +183,9 @@ export async function POST(req: Request) {
     raw: data,
     debug: {
       amount,
-      testAmountApplied: Number.isFinite(__testAmount) && __testAmount > 0,
+      testAmountApplied: Number.isFinite(testAmount) && testAmount > 0,
+      serviceUrl,
+      returnUrl,
     },
   })
 }

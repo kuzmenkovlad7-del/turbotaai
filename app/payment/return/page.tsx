@@ -1,71 +1,48 @@
-"use client"
+import Link from "next/link"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-
-type Summary = {
-  ok?: boolean
-  access?: string
-  paidUntil?: string | null
-  promoUntil?: string | null
-}
-
-export default function PaymentReturnPage() {
-  const router = useRouter()
-  const [status, setStatus] = useState<"checking" | "waiting" | "ok" | "error">("checking")
-
-  useEffect(() => {
-    let alive = true
-
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
-    const check = async () => {
-      try {
-        for (let i = 0; i < 16; i++) {
-          const r = await fetch("/api/account/summary", { cache: "no-store" })
-          const j = (await r.json().catch(() => ({}))) as Summary
-          const access = String(j.access || "").toLowerCase()
-
-          if (access === "active") {
-            setStatus("ok")
-            await sleep(600)
-            if (alive) router.replace("/profile")
-            return
-          }
-
-          setStatus("waiting")
-          await sleep(1500)
-        }
-
-        if (alive) router.replace("/pricing")
-      } catch {
-        if (!alive) return
-        setStatus("error")
-        router.replace("/pricing")
-      }
-    }
-
-    check()
-    return () => {
-      alive = false
-    }
-  }, [router])
+export default function PaymentReturnPage({
+  searchParams,
+}: {
+  searchParams: { [key: string]: string | string[] | undefined }
+}) {
+  const orderReference = Array.isArray(searchParams.orderReference)
+    ? searchParams.orderReference[0]
+    : searchParams.orderReference
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <h1 className="text-2xl font-semibold">Processing payment</h1>
-      <p className="mt-3 text-muted-foreground">
-        Please wait. We are confirming your payment and activating access.
+    <main className="max-w-2xl mx-auto px-6 py-16">
+      <h1 className="text-2xl font-semibold">Payment processing</h1>
+
+      <p className="mt-4 text-gray-700">
+        {orderReference
+          ? <>Order reference: <span className="font-mono">{orderReference}</span></>
+          : <>Order reference not provided</>
+        }
       </p>
 
-      <div className="mt-8 rounded-xl border p-4">
-        <div className="text-sm">
-          Status:{" "}
-          {status === "checking" && "Checking..."}
-          {status === "waiting" && "Waiting for confirmation..."}
-          {status === "ok" && "Activated. Redirecting..."}
-          {status === "error" && "Error. Redirecting..."}
-        </div>
+      <div className="mt-6 space-y-3 text-gray-700">
+        <p>
+          If payment was successful, access will be activated automatically.
+        </p>
+        <p>
+          Usually it takes 5–30 seconds. If you do not see access, refresh the page or open Profile.
+        </p>
+      </div>
+
+      <div className="mt-8 flex gap-3">
+        <Link
+          href="/profile"
+          className="px-4 py-2 rounded-md bg-black text-white"
+        >
+          Go to Profile
+        </Link>
+
+        <Link
+          href="/pricing"
+          className="px-4 py-2 rounded-md border border-gray-300"
+        >
+          Back to Pricing
+        </Link>
       </div>
     </main>
   )

@@ -1,39 +1,100 @@
-import { NextResponse } from "next/server";
-import { makeWebhookSignature } from "@/lib/wayforpay";
+import { NextResponse } from "next/server"
+import { supabaseAdmin } from "@/lib/supabaseAdmin"
+import { makeServiceWebhookSignature, makeServiceResponseSignature } from "@/lib/wayforpay"
 
-/**
- * Webhook stub:
- * - verifies signature if possible
- * - logs payload for now
- * Next step: map orderReference -> user, store payment status + recToken for recurring
- */
+export const runtime = "nodejs"
+
+function normalizeStr(x: any) {
+  return String(x ?? "").trim()
+}
+
+async function readPayload(req: Request) {
+  const ct = req.headers.get("content-type") || ""
+  try {
+    if (ct.includes("application/json")) {
+      return await req.json()
+    }
+    if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
+      const fd = await req.formData()
+      return Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]))
+    }
+    return await req.json().catch(() => ({}))
+  } catch {
+    return {}
+  }
+}
+
 export async function POST(req: Request) {
-  const secretKey = process.env.WAYFORPAY_SECRET_KEY;
+  const payload = await readPayload(req)
 
-  const payload = await req.json().catch(() => ({} as any));
-
-  // payload fields vary by integration mode; try common ones
-  const orderReference = payload?.orderReference;
-  const status = payload?.transactionStatus || payload?.status;
-  const time = Number(payload?.createdDate || payload?.time || 0);
-  const receivedSignature = payload?.merchantSignature;
-
-  let signatureOk: boolean | null = null;
-
-  if (secretKey && orderReference && status && time && receivedSignature) {
-    const expected = makeWebhookSignature({ orderReference, status, time, secretKey });
-    signatureOk = expected === receivedSignature;
+  const secret = process.env.WAYFORPAY_SECRET_KEY || ""
+  if (!secret) {
+    console.error("WAYFORPAY_SECRET_KEY missing")
+    return NextResponse.json({ ok: false, error: "Server misconfigured" }, { status: 500 })
   }
 
-  console.log("WayForPay webhook:", {
-    signatureOk,
-    orderReference,
-    status,
-    time,
-    recToken: payload?.recToken,
-    payload,
-  });
+  const orderReference = normalizeStr(payload?.orderReference)
+  if (!orderReference) {
+    console.error("WayForPay webhook: missing orderReference", payload)
+    return NextResponse.json({ ok: false, error: "Bad payload" }, { status: 400 })
+  }
 
-  // always respond 200 to prevent retries while we're testing locally
-  return NextResponse.json({ ok: true, signatureOk });
+  const got = normalizeStr(payload?.merchantSignature).toLowerCase()
+  const expected = makeServiceWebhookSignature(secret, payload).toLowerCase()
+
+  if (!got || got !== expected) {
+    console.error("WayForPay webhook: INVALID SIGNATURE", {
+      orderReference,
+      got,
+      expected,
+      payload,
+    })
+    // пусть WayForPay ретраит, если подпись не совпала
+    return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 400 })
+  }
+
+  const transactionStatus = normalizeStr(payload?.transactionStatus)
+  const isApproved = transactionStatus.toLowerCase() === "approved"
+
+  // 1) Обновляем billing_orders по order_reference
+  try {
+    await supabaseAdmin
+      .from("billing_orders")
+      .update({
+        status: isApproved ? "approved" : (transactionStatus || "unknown"),
+        raw: payload,
+      })
+      .eq("order_reference", orderReference)
+  } catch (e) {
+    console.error("WayForPay webhook: billing_orders update failed", e)
+  }
+
+  // 2) (опционально) выдаём доступ через access_grants - если таблица подходит
+  if (isApproved) {
+    try {
+      const { data: orderRow } = await supabaseAdmin
+        .from("billing_orders")
+        .select("user_id, device_hash, plan_id")
+        .eq("order_reference", orderReference)
+        .maybeSingle()
+
+      if (orderRow?.user_id) {
+        await supabaseAdmin.from("access_grants").insert({
+          user_id: orderRow.user_id,
+          device_hash: orderRow.device_hash ?? null,
+          plan_id: orderRow.plan_id ?? null,
+        })
+      }
+    } catch (e) {
+      // не ломаем webhook из-за access_grants
+      console.error("WayForPay webhook: access_grants insert skipped/failed", e)
+    }
+  }
+
+  // WayForPay ждёт такой ответ: status=accept + signature(orderReference;status;time)
+  const status = "accept"
+  const time = Math.floor(Date.now() / 1000)
+  const signature = makeServiceResponseSignature(secret, orderReference, status, time)
+
+  return NextResponse.json({ orderReference, status, time, signature })
 }
