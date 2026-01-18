@@ -3,65 +3,65 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-type State = "checking" | "paid" | "processing" | "failed" | "error";
+type State = "checking" | "processing" | "paid" | "failed" | "error";
 
-export default function PaymentReturnPage() {
-  const params = useSearchParams();
-  const orderReference = params.get("orderReference") || "";
+export default function PaymentResultPage() {
+  const sp = useSearchParams();
+  const orderReference = sp.get("orderReference") || "";
 
   const [state, setState] = useState<State>("checking");
   const [details, setDetails] = useState<any>(null);
 
   useEffect(() => {
-    if (!orderReference) {
-      setState("error");
-      return;
-    }
-
     let cancelled = false;
 
-    const run = async () => {
-      try {
-        const r = await fetch("/api/billing/wayforpay/check", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ orderReference }),
-        });
-
-        const j = await r.json();
-        if (cancelled) return;
-
-        setDetails(j);
-
-        const dbStatus = j?.db?.status || "";
-        const wfpStatus = j?.wayforpay?.transactionStatus || "";
-        const s = String(dbStatus || wfpStatus).toLowerCase();
-
-        if (s === "paid" || s === "approved") setState("paid");
-        else if (s === "processing" || s === "inprocessing" || s === "pending")
-          setState("processing");
-        else if (s) setState("failed");
-        else setState("error");
-      } catch {
-        if (!cancelled) setState("error");
+    async function run() {
+      if (!orderReference) {
+        setState("error");
+        setDetails({ ok: false, error: "missing_orderReference" });
+        return;
       }
-    };
+
+      try {
+        setState("checking");
+
+        // 1) Сразу делаем CHECK_STATUS (он же обновит Supabase)
+        const res = await fetch(
+          `/api/billing/wayforpay/check?orderReference=${encodeURIComponent(orderReference)}`,
+          { cache: "no-store" }
+        );
+
+        const json = await res.json().catch(() => null);
+
+        if (cancelled) return;
+        setDetails(json);
+
+        const status =
+          json?.db?.status ||
+          json?.status ||
+          json?.wayforpay?.transactionStatus ||
+          "";
+
+        if (status === "paid") setState("paid");
+        else if (status === "processing") setState("processing");
+        else if (status === "failed") setState("failed");
+        else setState("error");
+      } catch (e: any) {
+        if (cancelled) return;
+        setState("error");
+        setDetails({ ok: false, error: "check_failed", message: String(e?.message || e) });
+      }
+    }
 
     run();
-
-    const t = setInterval(run, 3000);
-    const stop = setTimeout(() => clearInterval(t), 30000);
-
     return () => {
       cancelled = true;
-      clearInterval(t);
-      clearTimeout(stop);
     };
   }, [orderReference]);
 
   return (
     <main className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-black/40 p-6 text-white">
+      <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-white/5 p-6">
         <h1 className="text-xl font-semibold">Оплата</h1>
 
         <div className="mt-2 text-xs text-white/60 break-all">
