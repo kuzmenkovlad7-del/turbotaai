@@ -4,80 +4,87 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type BillingStatus = "paid" | "failed" | "processing" | "not_found";
+type BillingStatus = "paid" | "failed" | "processing" | "invoice_created" | "not_found";
 
 function pickBestStatus(statuses: string[]): BillingStatus {
-  const s = statuses.map((x) => String(x || "").toLowerCase());
-  if (s.includes("paid")) return "paid";
-  if (s.includes("processing")) return "processing";
-  if (s.length === 0) return "not_found";
+  if (statuses.includes("paid")) return "paid";
+  if (statuses.includes("processing")) return "processing";
+  if (statuses.includes("invoice_created")) return "invoice_created";
+  if (statuses.length === 0) return "not_found";
   return "failed";
 }
 
-function safeSupabaseHost() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    "";
-  try {
-    return url ? new URL(url).host : "";
-  } catch {
-    return "";
+function safeJson(raw: any) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
   }
+  return null;
 }
 
 export async function GET(req: NextRequest) {
-  const urlObj = new URL(req.url);
-  const orderReference = urlObj.searchParams.get("orderReference")?.trim() || "";
-  const debug = urlObj.searchParams.get("debug") === "1";
+  const url = new URL(req.url);
+
+  const orderReference =
+    (url.searchParams.get("orderReference") ||
+      url.searchParams.get("order_reference") ||
+      "").trim();
+
+  const debug = url.searchParams.get("debug") === "1";
 
   if (!orderReference) {
     return NextResponse.json({ ok: false, error: "missing_orderReference" }, { status: 400 });
   }
 
-  console.info("[billing][status] request", {
-    orderReference,
-    supabaseHost: safeSupabaseHost(),
-  });
-
   const supabase = getSupabaseAdmin();
 
   const { data, error } = await supabase
     .from("billing_orders")
-    .select("status, updated_at")
+    .select("status, updated_at, raw")
     .eq("order_reference", orderReference)
     .order("updated_at", { ascending: false })
-    .limit(10);
+    .limit(20);
 
   if (error) {
     console.error("[billing][status] db error", { orderReference, error });
     return NextResponse.json({ ok: false, error: "db_error" }, { status: 500 });
   }
 
-  const statuses = (data || []).map((r: any) => String(r.status || ""));
+  const rows = data || [];
+  const statuses = rows.map((r: any) => String(r.status || "")).filter(Boolean);
   const best = pickBestStatus(statuses);
 
-  console.info("[billing][status] result", {
-    orderReference,
-    best,
-    statuses,
-    rows: (data || []).length,
-  });
+  const last = rows[0] as any;
+  const raw = safeJson(last?.raw);
 
-  if (debug) {
-    return NextResponse.json({
-      ok: true,
-      orderReference,
-      status: best,
-      statuses,
-      supabaseHost: safeSupabaseHost(),
-      rows: (data || []).length,
-    });
-  }
+  const lastTx =
+    raw?.check?.transactionStatus ||
+    raw?.webhook?.transactionStatus ||
+    raw?.transactionStatus ||
+    null;
 
-  return NextResponse.json({
+  const payload: any = {
     ok: true,
     orderReference,
     status: best,
-  });
+    lastTransactionStatus: lastTx,
+  };
+
+  if (debug) {
+    payload.debug = {
+      rows: rows.length,
+      statuses,
+      lastUpdatedAt: last?.updated_at || null,
+      lastEvent: raw?.last_event || null,
+    };
+  }
+
+  console.info("[billing][status]", { orderReference, best, lastTx });
+
+  return NextResponse.json(payload);
 }
