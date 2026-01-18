@@ -2,245 +2,154 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
-import { MissionSuccessDialog } from "@/components/ui/mission-success-dialog";
+import { CheckCircle2, XCircle, Loader2, RefreshCw } from "lucide-react";
 
-type BillingStatus = "paid" | "failed" | "processing" | "pending" | "not_found" | "unknown";
-
-type StatusResp = {
-  ok: boolean;
-  status?: BillingStatus;
-  orderReference?: string;
-  updatedAt?: string;
-  createdAt?: string;
-  raw?: any;
-  error?: string;
-};
+type UiStatus = "checking" | "paid" | "failed" | "processing" | "not_found" | "error";
 
 export default function PaymentResultPage() {
-  const sp = useSearchParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const orderReference = sp.get("orderReference") || "";
-  const debug = sp.get("debug") === "1";
+  const orderReference = useMemo(() => {
+    return (searchParams.get("orderReference") || "").trim();
+  }, [searchParams]);
 
-  const [status, setStatus] = useState<BillingStatus | "checking" | "error">("checking");
-  const [details, setDetails] = useState<StatusResp | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [status, setStatus] = useState<UiStatus>("checking");
+  const [loading, setLoading] = useState(false);
 
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const autoCheckDoneRef = useRef(false);
 
-  const pollRef = useRef<number | null>(null);
-  const didAutoCheckRef = useRef(false);
+  const goHome = () => router.push("/");
+  const goProfile = () => router.push("/profile");
 
-  const statusTitle = useMemo(() => {
-    if (status === "paid") return "Оплата подтверждена";
-    if (status === "failed") return "Оплата не прошла";
-    if (status === "processing" || status === "pending" || status === "checking") return "Проверяем оплату";
-    if (status === "not_found") return "Платёж не найден";
-    return "Ошибка проверки";
-  }, [status]);
-
-  const statusDesc = useMemo(() => {
-    if (status === "paid") return "Доступ активирован. Можете переходить в кабинет.";
-    if (status === "failed") return "Оплата не подтверждена. Попробуйте ещё раз или обратитесь в поддержку.";
-    if (status === "processing" || status === "pending") return "Платёж обрабатывается. Обычно это занимает несколько секунд.";
-    if (status === "checking") return "Получаем статус заказа…";
-    if (status === "not_found") return "Заказ пока не появился в системе. Нажмите Проверить ещё раз.";
-    return "Не удалось получить статус. Нажмите Проверить ещё раз.";
-  }, [status]);
-
-  async function fetchStatus() {
+  const fetchStatus = async () => {
     if (!orderReference) {
       setStatus("error");
       return;
     }
 
     try {
-      console.log("[billing][result] fetchStatus start", { orderReference });
+      const r = await fetch(
+        `/api/billing/orders/status?orderReference=${encodeURIComponent(orderReference)}`,
+        { cache: "no-store" }
+      );
+      const j = await r.json().catch(() => null);
 
-      const url = `/api/billing/orders/status?orderReference=${encodeURIComponent(orderReference)}${
-        debug ? "&debug=1" : ""
-      }`;
-
-      const res = await fetch(url, { method: "GET", cache: "no-store" });
-      const json = (await res.json().catch(() => null)) as StatusResp | null;
-
-      if (!res.ok || !json) {
-        console.log("[billing][result] fetchStatus bad response", { status: res.status, json });
-        setStatus("error");
-        return;
+      const next = (j?.status as UiStatus) || "processing";
+      if (j?.ok) {
+        setStatus(next);
+      } else {
+        setStatus("processing");
       }
-
-      setDetails(json);
-
-      const nextStatus = (json.status || "unknown") as BillingStatus;
-      setStatus(nextStatus);
-
-      console.log("[billing][result] fetchStatus ok", { orderReference, nextStatus });
-
-      // Если подтвердилось — открываем красивый попап
-      if (nextStatus === "paid") setDialogOpen(true);
-    } catch (e) {
-      console.log("[billing][result] fetchStatus exception", e);
+    } catch {
       setStatus("error");
     }
-  }
+  };
 
-  async function forceCheck() {
+  const forceCheck = async () => {
     if (!orderReference) return;
 
+    setLoading(true);
     try {
-      console.log("[billing][result] forceCheck start", { orderReference });
-
-      const res = await fetch(
+      await fetch(
         `/api/billing/wayforpay/check?orderReference=${encodeURIComponent(orderReference)}`,
-        { method: "GET", cache: "no-store" }
+        { cache: "no-store" }
       );
-
-      const json = await res.json().catch(() => null);
-      console.log("[billing][result] forceCheck response", { httpStatus: res.status, json });
-
+    } catch {
+      // ignore - status will show error if needed
+    } finally {
       await fetchStatus();
-    } catch (e) {
-      console.log("[billing][result] forceCheck exception", e);
+      setLoading(false);
     }
-  }
-
-  function startPolling() {
-    if (pollRef.current) window.clearInterval(pollRef.current);
-
-    let ticks = 0;
-    pollRef.current = window.setInterval(async () => {
-      ticks += 1;
-
-      // максимум ~30 секунд
-      if (ticks > 15) {
-        if (pollRef.current) window.clearInterval(pollRef.current);
-        pollRef.current = null;
-        return;
-      }
-
-      await fetchStatus();
-    }, 2000);
-  }
+  };
 
   useEffect(() => {
-    // старт
     fetchStatus();
+    // ✅ один авто-check, без интервалов и спама
+    const t = setTimeout(async () => {
+      if (autoCheckDoneRef.current) return;
+      autoCheckDoneRef.current = true;
 
-    // авто-пулл если статус не paid/failed
-    startPolling();
+      // если статус еще не paid — делаем один check
+      await forceCheck();
+    }, 800);
 
-    return () => {
-      if (pollRef.current) window.clearInterval(pollRef.current);
-      pollRef.current = null;
-    };
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderReference]);
 
-  useEffect(() => {
-    // Один раз делаем принудительный checkStatus в WayForPay,
-    // чтобы не ждать webhook если он задержался.
-    if (
-      !didAutoCheckRef.current &&
-      (status === "processing" || status === "pending" || status === "not_found" || status === "checking")
-    ) {
-      didAutoCheckRef.current = true;
-      setTimeout(() => {
-        forceCheck();
-      }, 1200);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  const title =
+    status === "paid"
+      ? "Оплата подтверждена"
+      : status === "failed"
+      ? "Оплата не прошла"
+      : status === "processing" || status === "checking"
+      ? "Проверяем оплату"
+      : status === "not_found"
+      ? "Оплата не найдена"
+      : "Ошибка проверки";
 
-  const Icon = useMemo(() => {
-    if (status === "paid") return <CheckCircle2 className="h-7 w-7 text-emerald-600" />;
-    if (status === "failed") return <XCircle className="h-7 w-7 text-red-500" />;
-    if (status === "checking" || status === "processing" || status === "pending")
-      return <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />;
-    return <XCircle className="h-7 w-7 text-muted-foreground" />;
-  }, [status]);
+  const subtitle =
+    status === "paid"
+      ? "Доступ активирован. Можете переходить в кабинет."
+      : status === "failed"
+      ? "Оплата не подтверждена. Попробуйте ещё раз или обратитесь в поддержку."
+      : status === "processing" || status === "checking"
+      ? "Это может занять несколько секунд."
+      : status === "not_found"
+      ? "Не удалось найти заказ. Проверьте ссылку или повторите проверку."
+      : "Не удалось проверить статус. Повторите попытку.";
 
   return (
-    <div className="min-h-[70vh] w-full px-4">
-      <div className="mx-auto mt-16 w-full max-w-xl rounded-2xl border bg-card p-6 shadow-sm">
+    <div className="flex min-h-[70vh] items-center justify-center px-4 py-10">
+      <div className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-xl">
         <div className="flex items-start gap-3">
-          <div className="mt-1">{Icon}</div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-semibold">{statusTitle}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{statusDesc}</p>
-
-            {orderReference && (
-              <div className="mt-3 text-xs text-muted-foreground">
-                orderReference: <span className="font-mono">{orderReference}</span>
-              </div>
+          <div className="mt-0.5">
+            {status === "paid" ? (
+              <CheckCircle2 className="h-7 w-7 text-green-600" />
+            ) : status === "failed" ? (
+              <XCircle className="h-7 w-7 text-red-600" />
+            ) : (
+              <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
             )}
+          </div>
+
+          <div className="flex-1">
+            <h1 className="text-xl font-semibold text-card-foreground">{title}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+
+            {orderReference ? (
+              <p className="mt-2 text-xs text-muted-foreground/70">
+                orderReference: {orderReference}
+              </p>
+            ) : null}
           </div>
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Button
-            className="min-w-[140px]"
-            onClick={() => router.push("/profile")}
-            disabled={status !== "paid"}
-          >
+        <div className="mt-5 flex gap-3">
+          <Button className="flex-1" onClick={goProfile}>
             В кабинет
           </Button>
-
-          <Button variant="outline" className="min-w-[140px]" onClick={() => router.push("/")}>
+          <Button variant="outline" className="flex-1" onClick={goHome}>
             На главную
-          </Button>
-
-          <Button
-            variant="secondary"
-            className="min-w-[170px]"
-            onClick={() => fetchStatus()}
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Проверить ещё раз
           </Button>
         </div>
 
-        {debug && details?.raw && (
-          <div className="mt-6">
-            <button
-              className="text-sm text-muted-foreground underline underline-offset-4"
-              onClick={() => setDetailsOpen((v) => !v)}
-            >
-              {detailsOpen ? "Скрыть детали" : "Показать детали"}
-            </button>
+        <Button
+          variant="ghost"
+          className="mt-3 w-full gap-2"
+          onClick={forceCheck}
+          disabled={loading}
+        >
+          <RefreshCw className="h-4 w-4" />
+          {loading ? "Проверяем..." : "Проверить ещё раз"}
+        </Button>
 
-            {detailsOpen && (
-              <pre className="mt-3 max-h-72 overflow-auto rounded-xl bg-secondary p-4 text-xs text-secondary-foreground">
-{JSON.stringify(details.raw, null, 2)}
-              </pre>
-            )}
-          </div>
-        )}
-
-        <div className="mt-6 text-xs text-muted-foreground">
+        <div className="mt-5 text-center text-xs text-muted-foreground">
           support@turbotaai.com
         </div>
       </div>
-
-      {/* Красивый попап только на успех */}
-      <MissionSuccessDialog
-        isOpen={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        illustration={<CheckCircle2 className="h-12 w-12 text-emerald-600" />}
-        title="Оплата прошла успешно"
-        titleIcon={<CheckCircle2 className="h-5 w-5 text-emerald-600" />}
-        description="Доступ к тарифу активирован. Можете сразу перейти в кабинет."
-        showInput={false}
-        primaryButtonText="Перейти в кабинет"
-        onPrimaryClick={() => router.push("/profile")}
-        secondaryButtonText="На главную"
-        onSecondaryClick={() => router.push("/")}
-        badgeText="TurbotaAI"
-      />
     </div>
   );
 }

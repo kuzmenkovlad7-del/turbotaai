@@ -1,164 +1,177 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-function getSupabaseAdmin() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    "";
+type BillingStatus = "paid" | "failed" | "processing";
 
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_KEY ||
-    "";
-
-  if (!url || !key) throw new Error("Missing SUPABASE envs for admin client");
-
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+function hmacMd5(str: string, key: string) {
+  return crypto.createHmac("md5", key).update(str, "utf8").digest("hex");
 }
 
-function hmacMd5(data: string, secret: string) {
-  return crypto.createHmac("md5", secret).update(data, "utf8").digest("hex");
+function mapWayforpayStatus(txStatus?: string | null): BillingStatus {
+  const s = (txStatus || "").toLowerCase();
+
+  if (s === "approved" || s === "paid") return "paid";
+  if (s === "inprocessing" || s === "processing" || s === "pending") return "processing";
+
+  // declined / expired / refunded / unknown -> failed
+  return "failed";
 }
 
-function getWfpEnv() {
+function pickBestStatus(statuses: string[]): BillingStatus {
+  // paid always wins, never downgrade
+  if (statuses.includes("paid")) return "paid";
+  if (statuses.includes("processing")) return "processing";
+  return "failed";
+}
+
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const orderReference = url.searchParams.get("orderReference")?.trim() || "";
+
+  if (!orderReference) {
+    return NextResponse.json({ ok: false, error: "missing_orderReference" }, { status: 400 });
+  }
+
   const merchantAccount =
     process.env.WAYFORPAY_MERCHANT_ACCOUNT ||
     process.env.WFP_MERCHANT_ACCOUNT ||
     "";
 
-  const secret =
+  const secretKey =
     process.env.WAYFORPAY_SECRET_KEY ||
     process.env.WFP_SECRET_KEY ||
-    process.env.WAYFORPAY_SECRET ||
     "";
 
-  return { merchantAccount, secret };
-}
-
-function mapStatus(transactionStatus?: string) {
-  const st = String(transactionStatus || "").toLowerCase();
-  if (st === "approved") return "paid";
-  if (st === "inprocessing" || st === "processing" || st === "pending") return "processing";
-  if (st === "declined" || st === "expired" || st === "refunded" || st === "voided" || st === "rejected")
-    return "failed";
-  return "processing";
-}
-
-async function checkStatus(orderReference: string) {
-  const { merchantAccount, secret } = getWfpEnv();
-  if (!merchantAccount || !secret) {
-    return { ok: false, error: "missing_wfp_env" as const };
+  if (!merchantAccount || !secretKey) {
+    console.error("[billing][check] missing env", {
+      hasMerchantAccount: Boolean(merchantAccount),
+      hasSecretKey: Boolean(secretKey),
+    });
+    return NextResponse.json({ ok: false, error: "missing_wayforpay_env" }, { status: 500 });
   }
 
-  const payload = {
+  // ✅ WayForPay CHECK_STATUS signature: HMAC_MD5("merchantAccount;orderReference", secretKey)
+  const signStr = `${merchantAccount};${orderReference}`;
+  const merchantSignature = hmacMd5(signStr, secretKey);
+
+  const requestBody = {
     transactionType: "CHECK_STATUS",
     merchantAccount,
-    apiVersion: 1,
     orderReference,
-    merchantSignature: hmacMd5(`${merchantAccount};${orderReference}`, secret),
+    apiVersion: 1,
+    merchantSignature,
   };
 
-  const res = await fetch("https://api.wayforpay.com/api", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  console.info("[billing][check] start", { orderReference });
 
-  const json = await res.json().catch(() => null);
-
-  return {
-    ok: res.ok,
-    httpStatus: res.status,
-    json,
-  };
-}
-
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const orderReference = url.searchParams.get("orderReference") || "";
-
-  if (!orderReference) {
-    return NextResponse.json(
-      { ok: false, error: "missing_orderReference" },
-      { status: 400, headers: { "Cache-Control": "no-store" } }
-    );
-  }
-
-  console.log("[billing][wfp] checkStatus start", { orderReference });
-
-  const result = await checkStatus(orderReference);
-
-  if (!result.ok || !result.json) {
-    console.log("[billing][wfp] checkStatus failed", result);
-    return NextResponse.json(
-      { ok: false, error: "wayforpay_check_failed", result },
-      { status: 502, headers: { "Cache-Control": "no-store" } }
-    );
-  }
-
-  const finalStatus = mapStatus(result.json.transactionStatus);
-
+  let wfpJson: any = null;
   try {
-    const sb = getSupabaseAdmin();
+    const r = await fetch("https://api.wayforpay.com/api", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+      cache: "no-store",
+    });
 
-    const existing = await sb
-      .from("billing_orders")
-      .select("raw")
-      .eq("order_reference", orderReference)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    wfpJson = await r.json().catch(() => null);
 
-    const prevRaw = (existing.data?.raw as any) || {};
-
-    const mergedRaw = {
-      ...prevRaw,
-      check: result.json,
-      last_event: {
-        source: "wayforpay_check",
-        at: new Date().toISOString(),
-        status: finalStatus,
-      },
-    };
-
-    const upd = await sb
-      .from("billing_orders")
-      .update({
-        status: finalStatus,
-        raw: mergedRaw,
-      })
-      .eq("order_reference", orderReference);
-
-    if (upd.error) {
-      console.log("[billing][wfp] supabase update error", { orderReference, error: upd.error });
+    if (!r.ok || !wfpJson) {
+      console.error("[billing][check] bad response", {
+        orderReference,
+        httpStatus: r.status,
+        body: wfpJson,
+      });
       return NextResponse.json(
-        { ok: false, error: "db_update_failed" },
-        { status: 500, headers: { "Cache-Control": "no-store" } }
+        { ok: false, error: "wayforpay_check_failed", httpStatus: r.status },
+        { status: 502 }
       );
     }
+  } catch (e: any) {
+    console.error("[billing][check] fetch error", { orderReference, error: String(e?.message || e) });
+    return NextResponse.json({ ok: false, error: "wayforpay_fetch_error" }, { status: 502 });
+  }
 
+  const txStatus: string | null =
+    wfpJson.transactionStatus || wfpJson.status || null;
+
+  if (!txStatus) {
+    console.error("[billing][check] missing transactionStatus", { orderReference, wfpJson });
     return NextResponse.json(
-      {
-        ok: true,
-        status: finalStatus,
-        orderReference,
-        transactionStatus: result.json.transactionStatus,
-      },
-      { status: 200, headers: { "Cache-Control": "no-store" } }
-    );
-  } catch (e) {
-    console.log("[billing][wfp] checkStatus exception", e);
-    return NextResponse.json(
-      { ok: false, error: "server_error" },
-      { status: 500, headers: { "Cache-Control": "no-store" } }
+      { ok: false, error: "missing_transactionStatus" },
+      { status: 502 }
     );
   }
+
+  const nextStatus = mapWayforpayStatus(txStatus);
+
+  const supabase = getSupabaseAdmin();
+
+  // ✅ читаем все статусы (если вдруг дубли есть)
+  const existing = await supabase
+    .from("billing_orders")
+    .select("status, raw, updated_at")
+    .eq("order_reference", orderReference)
+    .order("updated_at", { ascending: false })
+    .limit(10);
+
+  if (existing.error) {
+    console.error("[billing][check] db read error", { orderReference, error: existing.error });
+    return NextResponse.json({ ok: false, error: "db_read_failed" }, { status: 500 });
+  }
+
+  const existingStatuses = (existing.data || []).map((r: any) => String(r.status || ""));
+  const bestExisting = pickBestStatus(existingStatuses);
+
+  // ✅ НЕ даем “понижать” paid → failed
+  if (bestExisting === "paid" && nextStatus !== "paid") {
+    console.info("[billing][check] protected paid (no downgrade)", {
+      orderReference,
+      bestExisting,
+      nextStatus,
+      txStatus,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      orderReference,
+      status: "paid",
+      protected: true,
+      transactionStatus: txStatus,
+    });
+  }
+
+  const latestRaw = (existing.data?.[0] as any)?.raw || {};
+  const mergedRaw = {
+    ...(latestRaw || {}),
+    check: wfpJson,
+    check_received_at: new Date().toISOString(),
+  };
+
+  // ✅ обновляем все строки с order_reference (если были дубли)
+  const upd = await supabase
+    .from("billing_orders")
+    .update({
+      status: nextStatus,
+      raw: mergedRaw,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("order_reference", orderReference);
+
+  if (upd.error) {
+    console.error("[billing][check] db update error", { orderReference, error: upd.error });
+    return NextResponse.json({ ok: false, error: "db_update_failed" }, { status: 500 });
+  }
+
+  console.info("[billing][check] done", { orderReference, status: nextStatus, txStatus });
+
+  return NextResponse.json({
+    ok: true,
+    orderReference,
+    status: nextStatus,
+    transactionStatus: txStatus,
+  });
 }

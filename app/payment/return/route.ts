@@ -1,105 +1,47 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function pickOrderReferenceFromObj(obj: any): string {
-  if (!obj) return "";
-  return (
-    obj.orderReference ||
-    obj.order_reference ||
-    obj?.webhook?.orderReference ||
-    obj?.webhook?.order_reference ||
-    ""
-  );
-}
+async function extractOrderReference(req: NextRequest) {
+  const url = new URL(req.url);
+  const fromQuery = url.searchParams.get("orderReference")?.trim();
+  if (fromQuery) return fromQuery;
 
-async function readBodyAny(req: Request): Promise<any> {
-  const ct = (req.headers.get("content-type") || "").toLowerCase();
+  const contentType = req.headers.get("content-type") || "";
 
   try {
-    if (ct.includes("application/json")) {
-      return await req.json();
+    if (contentType.includes("application/json")) {
+      const j: any = await req.json();
+      return String(j?.orderReference || "").trim() || null;
     }
 
-    if (ct.includes("multipart/form-data")) {
-      const fd = await req.formData();
-      const out: Record<string, any> = {};
-      fd.forEach((v, k) => (out[k] = typeof v === "string" ? v : "[file]"));
-
-      // иногда JSON лежит в одном поле
-      if (out.data && typeof out.data === "string") {
-        const t = out.data.trim();
-        if (t.startsWith("{")) {
-          try {
-            return JSON.parse(t);
-          } catch {}
-        }
-      }
-      return out;
-    }
-
-    const text = await req.text().catch(() => "");
-    const trimmed = text.trim();
-
-    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-      try {
-        return JSON.parse(trimmed);
-      } catch {}
-    }
-
+    const text = await req.text();
     const params = new URLSearchParams(text);
-    const obj: Record<string, any> = {};
-    params.forEach((v, k) => (obj[k] = v));
-
-    // кейс: тело = один ключ, который является JSON-строкой
-    if (Object.keys(obj).length === 1) {
-      const onlyKey = Object.keys(obj)[0];
-      const maybeJson = onlyKey.trim();
-      if (maybeJson.startsWith("{") && maybeJson.endsWith("}")) {
-        try {
-          return JSON.parse(maybeJson);
-        } catch {}
-      }
-    }
-
-    return obj;
+    const v = params.get("orderReference");
+    return v ? v.trim() : null;
   } catch {
-    return {};
+    return null;
   }
 }
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const orderReference =
-    url.searchParams.get("orderReference") ||
-    url.searchParams.get("order_reference") ||
-    "";
+function redirectToResult(req: NextRequest, orderReference: string | null) {
+  const base = new URL(req.url);
+  const to = new URL("/payment/result", base.origin);
 
-  console.log("[billing][return] GET", { orderReference });
-
-  if (!orderReference) {
-    return NextResponse.redirect(new URL("/payment/result?status=processing", url), 307);
+  if (orderReference) {
+    to.searchParams.set("orderReference", orderReference);
   }
 
-  return NextResponse.redirect(
-    new URL(`/payment/result?orderReference=${encodeURIComponent(orderReference)}`, url),
-    307
-  );
+  return NextResponse.redirect(to, 302);
 }
 
-export async function POST(req: Request) {
-  const url = new URL(req.url);
-  const body = await readBodyAny(req);
-  const orderReference = pickOrderReferenceFromObj(body);
+export async function GET(req: NextRequest) {
+  const orderReference = await extractOrderReference(req);
+  return redirectToResult(req, orderReference);
+}
 
-  console.log("[billing][return] POST", { orderReference });
-
-  if (!orderReference) {
-    return NextResponse.redirect(new URL("/payment/result?status=processing", url), 307);
-  }
-
-  return NextResponse.redirect(
-    new URL(`/payment/result?orderReference=${encodeURIComponent(orderReference)}`, url),
-    307
-  );
+export async function POST(req: NextRequest) {
+  const orderReference = await extractOrderReference(req);
+  return redirectToResult(req, orderReference);
 }

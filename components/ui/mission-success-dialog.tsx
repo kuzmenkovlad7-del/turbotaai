@@ -1,9 +1,6 @@
-"use client";
-
 import * as React from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, CheckCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,27 +9,21 @@ interface MissionSuccessDialogProps {
   isOpen: boolean;
   onClose: () => void;
 
-  /** Optional: image url (if you want a picture) */
-  imageUrl?: string;
-
-  /** Preferred: illustration ReactNode (icons, etc) */
-  illustration?: React.ReactNode;
-
   title: string;
   description: string;
 
-  /** Optional title icon */
-  titleIcon?: React.ReactNode;
-
-  /** Input can be hidden for payment success */
-  showInput?: boolean;
-  inputPlaceholder?: string;
-
   primaryButtonText: string;
-  onPrimaryClick?: (inputValue: string) => void;
+  onPrimaryClick: (inputValue: string) => void;
 
   secondaryButtonText: string;
-  onSecondaryClick?: () => void;
+  onSecondaryClick: () => void;
+
+  // optional UI
+  imageUrl?: string;
+  heroIcon?: React.ReactNode;
+
+  showInput?: boolean;
+  inputPlaceholder?: string;
 
   badgeText?: string;
   badgeIcon?: React.ReactNode;
@@ -42,11 +33,10 @@ export const MissionSuccessDialog: React.FC<MissionSuccessDialogProps> = ({
   isOpen,
   onClose,
   imageUrl,
-  illustration,
+  heroIcon,
   title,
-  titleIcon,
   description,
-  showInput = true,
+  showInput = false,
   inputPlaceholder = "Enter a value",
   primaryButtonText,
   onPrimaryClick,
@@ -57,17 +47,13 @@ export const MissionSuccessDialog: React.FC<MissionSuccessDialogProps> = ({
 }) => {
   const [inputValue, setInputValue] = React.useState("");
 
-  React.useEffect(() => {
-    if (!isOpen) setInputValue("");
-  }, [isOpen]);
-
   const handlePrimaryClick = () => {
-    onPrimaryClick?.(inputValue);
+    onPrimaryClick(inputValue);
     onClose();
   };
 
   const handleSecondaryClick = () => {
-    onSecondaryClick?.();
+    onSecondaryClick();
     onClose();
   };
 
@@ -84,10 +70,10 @@ export const MissionSuccessDialog: React.FC<MissionSuccessDialogProps> = ({
           />
 
           <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 16 }}
+            initial={{ opacity: 0, scale: 0.92, y: 18 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 16 }}
-            transition={{ duration: 0.22, ease: "easeInOut" }}
+            exit={{ opacity: 0, scale: 0.92, y: 18 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
             className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border bg-card shadow-xl"
           >
             <div className="relative p-8 text-center">
@@ -108,29 +94,21 @@ export const MissionSuccessDialog: React.FC<MissionSuccessDialogProps> = ({
                 <X className="h-4 w-4" />
               </Button>
 
-              <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center">
-                {illustration ? (
-                  <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-secondary">
-                    {illustration}
-                  </div>
-                ) : imageUrl ? (
+              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center">
+                {imageUrl ? (
                   <img
                     src={imageUrl}
-                    alt="Illustration"
-                    className={cn(
-                      "max-h-full max-w-full object-contain",
-                      "drop-shadow-[0_10px_15px_rgba(150,120,255,0.25)]"
-                    )}
+                    alt="illustration"
+                    className="max-h-full max-w-full object-contain"
                   />
                 ) : (
-                  <div className="h-24 w-24 rounded-2xl bg-secondary" />
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-secondary">
+                    {heroIcon ?? <CheckCircle2 className="h-7 w-7 text-green-600" />}
+                  </div>
                 )}
               </div>
 
-              <h2 className="mb-2 flex items-center justify-center gap-2 text-2xl font-bold text-card-foreground">
-                {titleIcon}
-                {title}
-              </h2>
+              <h2 className="mb-2 text-2xl font-bold text-card-foreground">{title}</h2>
 
               <p className="mb-6 text-sm text-muted-foreground">{description}</p>
 
