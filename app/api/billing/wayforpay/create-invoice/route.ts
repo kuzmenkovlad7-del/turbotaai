@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
+import { cookies } from "next/headers"
+import { createServerClient } from "@supabase/ssr"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import { makeCreateInvoiceSignature } from "@/lib/wayforpay"
 
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 const WFP_API = "https://api.wayforpay.com/api"
 
 function getBaseUrl(req: NextRequest) {
+  // ✅ продакшен-оверрайд если надо
+  const envBase =
+    process.env.PUBLIC_BASE_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.SITE_URL ||
+    ""
+
+  if (envBase) return String(envBase).replace(/\/+$/, "")
+
   const proto = req.headers.get("x-forwarded-proto") || "https"
   const host =
     req.headers.get("x-forwarded-host") ||
@@ -25,23 +37,63 @@ function cleanDomain(hostOrUrl: string) {
     .trim()
 }
 
-export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({} as any))
+async function getUserIdFromSession() {
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  const planId = String(body.planId ?? body.plan_id ?? "")
-  const userId = body.userId ?? body.user_id ?? null
-  const deviceHash = body.deviceHash ?? body.device_hash ?? null
-
-  const currency = String(body.currency ?? "UAH").toUpperCase()
-
-  let amount = Number(body.amount ?? 0)
-  if (!Number.isFinite(amount) || amount <= 0) {
-    amount = 1
+  if (!SUPABASE_URL || !SUPABASE_ANON) {
+    return { userId: null as string | null, error: "Missing Supabase public env" }
   }
 
+  const cookieStore = cookies()
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value
+      },
+      set() {},
+      remove() {},
+    },
+  })
+
+  const { data, error } = await supabase.auth.getUser()
+  if (error || !data?.user?.id) {
+    return { userId: null, error: error?.message || "Unauthorized" }
+  }
+
+  return { userId: data.user.id, error: null }
+}
+
+function resolveAmountUAH(planId: string, requestAmount?: number) {
+  // ✅ прод-цена по умолчанию (и через env можно менять)
+  const monthly = Number(process.env.BILLING_MONTHLY_PRICE_UAH ?? "499") || 499
+
+  let amount = Number(requestAmount ?? 0)
+  if (!Number.isFinite(amount) || amount <= 0) amount = monthly
+
+  // если пришел planId=monthly — всегда ставим месячную цену
+  if (String(planId || "").toLowerCase() === "monthly") {
+    amount = monthly
+  }
+
+  // ✅ тестовый оверрайд (на проде просто НЕ ставить)
   const testAmount = Number(process.env.WAYFORPAY_TEST_AMOUNT_UAH ?? "")
   if (Number.isFinite(testAmount) && testAmount > 0) {
     amount = testAmount
+  }
+
+  return amount
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({} as any))
+
+  const planId = String(body.planId ?? body.plan_id ?? "monthly")
+  const currency = String(body.currency ?? "UAH").toUpperCase()
+
+  const { userId, error } = await getUserIdFromSession()
+  if (!userId) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 })
   }
 
   const merchantAccount = process.env.WAYFORPAY_MERCHANT_ACCOUNT || ""
@@ -55,23 +107,30 @@ export async function POST(req: NextRequest) {
   }
 
   const baseUrl = getBaseUrl(req)
-  const host = req.headers.get("host") || "turbotaai.com"
+  if (!baseUrl) {
+    return NextResponse.json(
+      { ok: false, error: "Base URL is empty. Set PUBLIC_BASE_URL in production." },
+      { status: 500 }
+    )
+  }
 
+  const host = req.headers.get("host") || "turbotaai.com"
   const merchantDomainName =
     cleanDomain(process.env.WAYFORPAY_MERCHANT_DOMAIN || "") ||
     cleanDomain(host) ||
     "turbotaai.com"
 
+  const amount = resolveAmountUAH(planId, Number(body.amount ?? 0))
+
   const orderDate = Math.floor(Date.now() / 1000)
-  const orderReference = `ta_${planId || "plan"}_${orderDate}_${crypto.randomBytes(4).toString("hex")}`
+  const orderReference = `ta_${planId}_${orderDate}_${crypto.randomBytes(4).toString("hex")}`
 
-  // returnUrl только для UI редиректа, но сделаем удобным
+  // UI return
   const returnUrl = `${baseUrl}/payment/return?orderReference=${encodeURIComponent(orderReference)}`
-
-  // serviceUrl = webhook который реально заносит оплату в Supabase
+  // webhook для фактического занесения оплаты
   const serviceUrl = `${baseUrl}/api/billing/wayforpay/webhook`
 
-  const productName = [`TurbotaAI ${planId || "Plan"}`]
+  const productName = [`TurbotaAI ${planId}`]
   const productCount = [1]
   const productPrice = [amount]
 
@@ -143,26 +202,18 @@ export async function POST(req: NextRequest) {
         error: "WayForPay create invoice failed",
         status: r.status,
         response: data,
-        debug: {
-          merchantDomainName,
-          orderReference,
-          amount,
-          currency,
-          serviceUrl,
-          returnUrl,
-          testAmountApplied: Number.isFinite(testAmount) && testAmount > 0,
-        },
+        debug: { merchantDomainName, orderReference, amount, currency, serviceUrl, returnUrl },
       },
       { status: 400 }
     )
   }
 
-  // ✅ Сразу заносим order в Supabase (даже до оплаты, статус invoice_created)
+  // ✅ критично: user_id ВСЕГДА должен быть записан
   try {
     await supabaseAdmin.from("billing_orders").insert({
       order_reference: orderReference,
       user_id: userId,
-      device_hash: deviceHash,
+      device_hash: null,
       plan_id: planId,
       amount,
       currency,
@@ -181,11 +232,6 @@ export async function POST(req: NextRequest) {
     orderReference,
     invoiceUrl,
     raw: data,
-    debug: {
-      amount,
-      testAmountApplied: Number.isFinite(testAmount) && testAmount > 0,
-      serviceUrl,
-      returnUrl,
-    },
+    debug: { amount, serviceUrl, returnUrl },
   })
 }

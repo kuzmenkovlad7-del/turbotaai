@@ -95,7 +95,7 @@ export default function ProfilePage() {
           <Button
             variant="outline"
             className="rounded-full border border-slate-200"
-            onClick={() => router.push("/pricing")}
+            onClick={() => router.push("/subscription")}
           >
             Pricing
           </Button>
@@ -153,7 +153,7 @@ export default function ProfilePage() {
                   <Button
                     variant="outline"
                     className="w-full rounded-full border border-slate-200"
-                    onClick={() => router.push("/pricing")}
+                    onClick={() => router.push("/subscription")}
                   >
                     Manage subscription
                   </Button>
