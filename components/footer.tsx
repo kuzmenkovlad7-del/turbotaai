@@ -13,8 +13,6 @@ type FooterLink = {
 
 const mainLinks: FooterLink[] = [
   { href: "/", labelKey: "nav.home" },
-  { href: "/programs", labelKey: "nav.programs" },
-  { href: "/client-stories", labelKey: "nav.clientStories" },
   { href: "/about", labelKey: "nav.about" },
   { href: "/contacts", labelKey: "nav.contacts" },
 ]
@@ -48,7 +46,7 @@ export default function Footer() {
 
             <p className="max-w-md text-sm text-slate-600">
               {t(
-                "Psychological support based on AI for everyday emotional difficulties.",
+                "Gentle AI support for everyday conversations and emotional care.",
               )}
             </p>
 
@@ -58,7 +56,7 @@ export default function Footer() {
               </p>
               <p className="mt-1">
                 {t(
-                  "TurbotaAI is not a replacement for a licensed psychologist or psychiatrist.",
+                  "TurbotaAI is a support tool and does not replace professional help.",
                 )}
               </p>
               <p className="mt-1">

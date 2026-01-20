@@ -226,7 +226,7 @@ const router = useRouter();
 
           <Card>
             <CardHeader className="pb-4">
-              <CardTitle className="text-2xl">Promo for doctors</CardTitle>
+              <CardTitle className="text-2xl">Promo code</CardTitle>
               <CardDescription>12 months free access by promo code</CardDescription>
             </CardHeader>
 

@@ -46,12 +46,12 @@ export function HomeHero() {
           </div>
 
           <h1 className="mb-5 text-3xl font-bold leading-tight text-slate-900 sm:text-4xl md:text-5xl">
-            {t("Psychological support when it feels hard, powered by AI")}
+            {t("Support for everyday conversations, powered by AI")}
           </h1>
 
           <p className="mb-7 max-w-lg text-sm text-slate-600 sm:text-base">
             {t(
-              "TurbotaAI listens without judgement, asks clarifying questions and gently guides you through breathing, grounding and simple exercises based on psychological books. In chat, voice or video — when you feel anxious, exhausted or alone.",
+              "TurbotaAI listens carefully, asks gentle clarifying questions and helps you take the next step at your own pace.",
             )}
           </p>
 
@@ -63,19 +63,6 @@ export function HomeHero() {
                 <ArrowRight className="h-4 w-4" />
               </RainbowButton>
             </a>
-
-            <Link
-              href="/about"
-              className="
-                inline-flex h-12 items-center justify-center rounded-full
-                border border-slate-200 bg-white px-6 text-sm font-semibold
-                text-slate-900 shadow-sm
-                transition-colors
-                hover:bg-slate-100 hover:text-slate-900
-              "
-            >
-              {t("How it works")}
-            </Link>
           </div>
 
           {/* чипы под кнопками */}
@@ -104,7 +91,7 @@ export function HomeHero() {
           <div className="relative z-10 flex items-end">
             <Image
               src="/ai-psychology-hero.png"
-              alt="TurbotaAI AI psychologist"
+              alt="TurbotaAI AI companion"
               width={520}
               height={720}
               priority

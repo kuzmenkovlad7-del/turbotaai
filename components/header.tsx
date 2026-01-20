@@ -118,7 +118,7 @@ const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", cre
               : d?.access === "Paid"
               ? "Unlimited"
               : d?.access === "Promo"
-              ? "Doctor access"
+              ? "Promo code"
               : null
 
           setTrialText(txt)

@@ -19,9 +19,9 @@ export const en: Record<string, string> = {
   "nav.termsOfUse": "Terms of Use",
 
   // Hero TurbotaAI
-  "AI-psychologist nearby 24/7": "AI psychologist nearby 24/7",
-  "Psychological support when it feels hard, powered by AI":
-    "Psychological support when it feels hard, powered by AI",
+  "AI companion nearby 24/7": "AI companion nearby 24/7",
+  "emotional support when it feels hard, powered by AI":
+    "emotional support when it feels hard, powered by AI",
   "TurbotaAI listens without judgement, asks clarifying questions and gently guides you through breathing, grounding and simple exercises based on psychological books. In chat, voice or video — when you feel anxious, exhausted or alone.":
     "TurbotaAI listens without judgement, asks clarifying questions and gently guides you through breathing, grounding and simple exercises based on psychological books. In chat, voice or video — when you feel anxious, exhausted or alone.",
   "Start for free": "Start for free",
@@ -38,10 +38,10 @@ export const en: Record<string, string> = {
 
   // Old Myitra block (kept)
   "Myitra Platform · AI + Psychology": "Myitra Platform · AI + Psychology",
-  "Live Psychological Support,": "Live psychological support,",
+  "Live emotional support,": "Live emotional support,",
   "AI-Enhanced": "AI-enhanced",
-  "Licensed psychologists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
-    "Licensed psychologists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.",
+  "Licensed specialists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
+    "Licensed specialists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.",
   "Talk Now": "Talk Now",
   "View Services": "View Services",
   "AI Chat 24/7": "AI Chat 24/7",
@@ -54,10 +54,10 @@ export const en: Record<string, string> = {
   // Home: three communication formats
   "Choose how you want to talk": "Choose how you want to talk",
   "How would you like to contact us?": "How would you like to contact us?",
-  "Start with a quick chat, a voice call or a video session with our AI-psychologist — choose the format that feels safest right now.":
-    "Start with a quick chat, a voice call or a video session with our AI psychologist — choose the format that feels safest right now.",
+  "Start with a quick chat, a voice call or a video session with our AI companion — choose the format that feels safest right now.":
+    "Start with a quick chat, a voice call or a video session with our AI companion — choose the format that feels safest right now.",
 
-  "Chat with AI-psychologist": "Chat with AI psychologist",
+  "Chat with AI companion": "Chat with AI companion",
   "Write what is happening in your own words and get structured support in a few minutes.":
     "Write what is happening in your own words and get structured support in a few minutes.",
   "Best when you need privacy and want to stay silent around other people.":
@@ -66,7 +66,7 @@ export const en: Record<string, string> = {
     "You can return to the conversation history and exercises at any time.",
   "Start chat": "Start chat",
 
-  "Call AI-psychologist": "Call AI psychologist",
+  "Call AI companion": "Call AI companion",
   "Voice format for more lively support when you want to hear a calm voice.":
     "Voice format for more lively support when you want to hear a calm voice.",
   "Helps reduce the feeling of loneliness in difficult moments.":
@@ -143,8 +143,8 @@ export const en: Record<string, string> = {
 
   "Support, partnerships and press": "Support, partnerships and press",
   "Contact TurbotaAI team": "Contact the TurbotaAI team",
-  "Have questions about how the AI-psychologist works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible.":
-    "Have questions about how the AI psychologist works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible.",
+  "Have questions about how the AI companion works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible.":
+    "Have questions about how the AI companion works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible.",
 
   "For urgent situations, please contact local emergency services or a crisis line in your country. TurbotaAI is not a substitute for emergency medical help.":
     "For urgent situations, please contact local emergency services or a crisis line in your country. TurbotaAI is not a substitute for emergency medical help.",
@@ -164,11 +164,11 @@ export const en: Record<string, string> = {
     "We've received your inquiry and will get back to you as soon as possible.",
 
   // Footer & disclaimer
-  "AI Psychological Support": "AI psychological support",
+  "AI emotional support": "AI emotional support",
   "Professional, scalable, and aesthetically pleasing online service that utilizes AI to deliver quality psychological care.":
     "A professional, scalable and aesthetically pleasing online service that uses AI to deliver quality psychological care.",
-  "Psychological support based on AI for everyday emotional difficulties.":
-    "Psychological support based on AI for everyday emotional difficulties.",
+  "emotional support based on AI for everyday emotional difficulties.":
+    "emotional support based on AI for everyday emotional difficulties.",
 
   "Quick Links": "Quick Links",
   Legal: "Legal",
@@ -178,8 +178,8 @@ export const en: Record<string, string> = {
 
   "This is not an emergency service":
     "This is not an emergency service",
-  "TurbotaAI is not a replacement for a licensed psychologist or psychiatrist.":
-    "TurbotaAI is not a replacement for a licensed psychologist or psychiatrist.",
+  "TurbotaAI is not a replacement for a licensed specialist or specialist.":
+    "TurbotaAI is not a replacement for a licensed specialist or specialist.",
   "If you are in immediate danger, contact emergency services or a crisis hotline in your country.":
     "If you are in immediate danger, contact emergency services or a crisis hotline in your country.",
 
@@ -201,7 +201,7 @@ export const en: Record<string, string> = {
     "Real stories of people who received support through Myitra.",
   "Story 1 Name": "Anna M.",
   "Story 1 Text":
-    "Myitra helped me go through a difficult period. The AI psychologist was always available when I needed support.",
+    "Myitra helped me go through a difficult period. The AI companion was always available when I needed support.",
   "Story 2 Name": "Olena K.",
   "Story 2 Text":
     "The combination of professional psychology and AI technologies is impressive. I feel heard and understood.",
@@ -277,8 +277,8 @@ export const en: Record<string, string> = {
   // Login / no-account
   "During the testing phase you can use the platform without creating an account.":
     "During the testing phase you can use the platform without creating an account.",
-  "Now you can start a chat, voice call or video session with the AI-psychologist directly from the main page.":
-    "Now you can start a chat, voice call or video session with the AI psychologist directly from the main page.",
+  "Now you can start a chat, voice call or video session with the AI companion directly from the main page.":
+    "Now you can start a chat, voice call or video session with the AI companion directly from the main page.",
   "Later this page will be used for full registration, saving programs and personal settings.":
     "Later this page will be used for full registration, saving programs and personal settings.",
   "Back to main page": "Back to main page",
@@ -371,8 +371,8 @@ export const en: Record<string, string> = {
 
   // About / product
   "About the product": "About the product",
-  "TurbotaAI — AI-psychologist that stays nearby when it feels hard":
-    "TurbotaAI — an AI psychologist that stays nearby when it feels hard",
+  "TurbotaAI — AI companion that stays nearby when it feels hard":
+    "TurbotaAI — an AI companion that stays nearby when it feels hard",
   "TurbotaAI is a digital assistant built on psychological literature and modern AI. It does not replace a live therapist, but gives gentle, structured support when it is difficult to reach someone or when you need to talk right now — in chat, voice or video.":
     "TurbotaAI is a digital assistant built on psychological literature and modern AI. It does not replace a live therapist, but gives gentle, structured support when it is difficult to reach someone or when you need to talk right now — in chat, voice or video.",
   "Who TurbotaAI is for": "Who TurbotaAI is for",
@@ -398,20 +398,20 @@ export const en: Record<string, string> = {
     "• Breathing exercises, grounding, short practices, an emotion diary, small daily steps.",
   "• Short programs for 7–21 days to gently change habits and support you regularly.":
     "• Short programs for 7–21 days to gently change habits and support you regularly.",
-  "• Answers are based on selected psychological books and materials that were tested with a psychologist.":
-    "• Answers are based on selected psychological books and materials that we tested together with a psychologist.",
+  "• Answers are based on selected psychological books and materials that were tested with a specialist.":
+    "• Answers are based on selected psychological books and materials that we tested together with a specialist.",
 
   "What TurbotaAI is not": "What TurbotaAI is not",
   "It is important to be honest about the limits of technology.":
     "It is important to be honest about the limits of technology.",
-  "• TurbotaAI is not a doctor and not a psychiatrist.":
-    "• TurbotaAI is not a doctor and not a psychiatrist.",
+  "• TurbotaAI is not a specialist and not a specialist.":
+    "• TurbotaAI is not a specialist and not a specialist.",
   "• It does not make diagnoses and does not replace emergency help.":
     "• It does not make diagnoses and does not replace emergency help.",
   "• In crisis or risk of harm to yourself or others, you should contact emergency services or a human specialist.":
     "• In crisis or if there is a risk of harm to yourself or others, you should contact emergency services or a human specialist.",
-  "• The assistant is a supportive tool that can live alongside individual or group therapy.":
-    "• The assistant is a supportive tool that can live alongside individual or group therapy.",
+  "• The assistant is a supportive tool that can live alongside individual or group support.":
+    "• The assistant is a supportive tool that can live alongside individual or group support.",
 
   "Sessions, test period and subscription":
     "Sessions, test period and subscription",
@@ -460,22 +460,22 @@ export const en: Record<string, string> = {
     "Write here what is happening to you...",
 
   // Voice modal
-  "Voice session with AI-psychologist":
-    "Voice session with AI psychologist",
+  "Voice session with AI companion":
+    "Voice session with AI companion",
   "You can talk out loud, the assistant will listen, answer and voice the reply.":
     "You can talk out loud — the assistant will listen, respond and voice the reply.",
-  "Press the button to start the call. Allow microphone access, then speak as if with a real psychologist.":
-    "Press the button to start the call. Allow microphone access, then speak as if with a real psychologist.",
+  "Press the button to start the call. Allow microphone access, then speak as if with a real specialist.":
+    "Press the button to start the call. Allow microphone access, then speak as if with a real specialist.",
   "Your e-mail will be used only to personalize the session. (guest@example.com)":
     "Your e-mail will be used only to personalize the session. (guest@example.com)",
   "Start voice session": "Start voice session",
 
   // Video modal
-  "AI Psychologist Video Call": "AI psychologist video call",
+  "AI Companion Video Call": "AI companion video call",
   "Video session in Ukrainian · ➟": "Video session in Ukrainian · ➟",
-  "Choose Your AI Psychologist": "Choose your AI psychologist",
-  "Select the AI psychologist you'd like to speak with during your video call.":
-    "Select the AI psychologist you'd like to speak with during your video call.",
+  "Choose Your AI Companion": "Choose your AI companion",
+  "Select the AI companion you'd like to speak with during your video call.":
+    "Select the AI companion you'd like to speak with during your video call.",
   "Video call language:": "Video call language:",
   Ukrainian: "Ukrainian",
   "All characters use Google TTS for authentic native accent.":
@@ -509,8 +509,8 @@ export const en: Record<string, string> = {
   "are responsible for maintaining the confidentiality of your account credentials (if an account is created) and for all activity that occurs under your account.":
     "are responsible for maintaining the confidentiality of your account credentials (if an account is created) and for all activity that occurs under your account.",
 
-  "TurbotaAI provides AI-based psychological support tools. The Service is not a medical facility and does not provide services that qualify as medical or psychiatric treatment.":
-    "TurbotaAI provides AI-based psychological support tools. The Service is not a medical facility and does not provide services that qualify as medical or psychiatric treatment.",
+  "TurbotaAI provides AI-based emotional support tools. The Service is not a medical facility and does not provide services that qualify as medical or psychiatric treatment.":
+    "TurbotaAI provides AI-based emotional support tools. The Service is not a medical facility and does not provide services that qualify as medical or psychiatric treatment.",
 
   "You agree to use the Service only for personal, non-commercial purposes, unless otherwise agreed with us in a separate written agreement. You must not:":
     "You agree to use the Service only for personal, non-commercial purposes, unless otherwise agreed with us in a separate written agreement. You must not:",
@@ -551,8 +551,8 @@ export const en: Record<string, string> = {
   "The TurbotaAI Service is provided \"as is\" without any express or implied warranties regarding its accuracy, completeness or fitness for your particular purposes. We aim to keep the Service stable but do not guarantee that it will be available without interruptions or errors.":
     "The TurbotaAI Service is provided \"as is\" without any express or implied warranties regarding its accuracy, completeness or fitness for your particular purposes. We aim to keep the Service stable but do not guarantee that it will be available without interruptions or errors.",
 
-  "TurbotaAI is not an emergency service and does not replace consultations with a doctor, psychiatrist or other licensed healthcare professional. If you are in danger or may harm yourself or others, you must immediately contact emergency services or a human specialist.":
-    "TurbotaAI is not an emergency service and does not replace consultations with a doctor, psychiatrist or other licensed healthcare professional. If you are in danger or may harm yourself or others, you must immediately contact emergency services or a human specialist.",
+  "TurbotaAI is not an emergency service and does not replace consultations with a specialist, specialist or other licensed healthcare professional. If you are in danger or may harm yourself or others, you must immediately contact emergency services or a human specialist.":
+    "TurbotaAI is not an emergency service and does not replace consultations with a specialist, specialist or other licensed healthcare professional. If you are in danger or may harm yourself or others, you must immediately contact emergency services or a human specialist.",
 
   "To the maximum extent permitted by law, we shall not be liable for any direct, indirect, incidental, punitive or consequential damages arising out of or in connection with your use of, or inability to use, the Service.":
     "To the maximum extent permitted by law, we shall not be liable for any direct, indirect, incidental, punitive or consequential damages arising out of or in connection with your use of, or inability to use, the Service.",
@@ -719,7 +719,7 @@ export const en: Record<string, string> = {
   "terms.eligibility.item4": "provide accurate and up-to-date information when requested for registration or identification;",
   "terms.eligibility.item5": "are responsible for maintaining the confidentiality of your account credentials (if an account is created) and for all activity that occurs under your account.",
   "terms.use.title": "Use of Services",
-  "terms.use.p1": "TurbotaAI provides AI-based psychological support tools. The Service is not a medical facility and does not provide services that qualify as medical or psychiatric treatment.",
+  "terms.use.p1": "TurbotaAI provides AI-based emotional support tools. The Service is not a medical facility and does not provide services that qualify as medical or psychiatric treatment.",
   "terms.use.p2": "You agree to use the Service only for personal, non-commercial purposes, unless otherwise agreed with us in a separate written agreement. You must not:",
   "terms.use.item1": "copy, modify or distribute the Service;",
   "terms.use.item2": "attempt to gain unauthorized access to our systems or other users' data;",
@@ -736,7 +736,7 @@ export const en: Record<string, string> = {
   "terms.payment.p3": "Refund conditions (if available) will be described in a separate section of the pricing page or in our refund policy. Please review these terms carefully before making a payment.",
   "terms.liability.title": "Limitation of Liability",
   "terms.liability.p1": "The TurbotaAI Service is provided as is without any express or implied warranties regarding its accuracy, completeness or fitness for your particular purposes. We aim to keep the Service stable but do not guarantee that it will be available without interruptions or errors.",
-  "terms.liability.p2": "TurbotaAI is not an emergency service and does not replace consultations with a doctor, psychiatrist or other licensed healthcare professional. If you are in danger or may harm yourself or others, you must immediately contact emergency services or a human specialist.",
+  "terms.liability.p2": "TurbotaAI is not an emergency service and does not replace consultations with a specialist, specialist or other licensed healthcare professional. If you are in danger or may harm yourself or others, you must immediately contact emergency services or a human specialist.",
   "terms.liability.p3": "To the maximum extent permitted by law, we shall not be liable for any direct, indirect, incidental, punitive or consequential damages arising out of or in connection with your use of, or inability to use, the Service.",
   "terms.changes.title": "Changes to Terms",
   "terms.changes.p1": "We may update these Terms from time to time. The date of the latest update is indicated at the top of this page. In case of material changes, we may additionally notify you through the Service or by e-mail (if available).",
@@ -810,8 +810,8 @@ export const en: Record<string, string> = {
   "AI will understand and respond in this language with voice and text.": "AI will understand and respond in this language with voice and text.",
   "Video session in {{language}}": "Video session in {{language}}",
   "Video call language": "Video call language",
-  "Senior psychologist specializing in cognitive behavioral therapy with 15+ years of experience": "Senior psychologist specializing in cognitive behavioral therapy with 15+ years of experience",
-  "Clinical psychologist specializing in anxiety, depression, and workplace stress management": "Clinical psychologist specializing in anxiety, depression, and workplace stress management",
+  "Senior specialist specializing in cognitive behavioral support with 15+ years of experience": "Senior specialist specializing in cognitive behavioral support with 15+ years of experience",
+  "Clinical specialist specializing in anxiety, depression, and workplace stress management": "Clinical specialist specializing in anxiety, depression, and workplace stress management",
   "Psychotherapist specializing in emotional regulation, trauma recovery, and relationship counseling": "Psychotherapist specializing in emotional regulation, trauma recovery, and relationship counseling",
 
 
@@ -863,6 +863,6 @@ export const en: Record<string, string> = {
   "Work stress & perfectionism": "Work stress & perfectionism",
   "“The hardest part was starting. The assistant made it feel safe.”": "“The hardest part was starting. The assistant made it feel safe.”",
   "Marta, 25 — trainee": "Marta, 25 — trainee",
-  "First steps in therapy & anxiety": "First steps in therapy & anxiety",
+  "First steps in support & anxiety": "First steps in support & anxiety",
 }
 

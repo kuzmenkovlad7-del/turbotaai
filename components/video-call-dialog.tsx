@@ -46,7 +46,7 @@ const AI_CHARACTERS: AICharacter[] = [
     name: "Dr. Alexander",
     gender: "male",
     description:
-      "Senior psychologist specializing in cognitive behavioral therapy with 15+ years of experience",
+      "Senior specialist specializing in cognitive behavioral therapy with 15+ years of experience",
     avatar:
       "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-19%D1%83-iWDrUd3gH9sLBeOjmIvu8wX3yxwBuq.jpg",
     animated: true,
@@ -74,7 +74,7 @@ const AI_CHARACTERS: AICharacter[] = [
     name: "Dr. Sophia",
     gender: "female",
     description:
-      "Clinical psychologist specializing in anxiety, depression, and workplace stress management",
+      "Clinical specialist specializing in anxiety, depression, and workplace stress management",
     avatar:
       "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-ds8y3Pe7RedqJBqZMDPltEeFI149ki.jpg",
     animated: true,
@@ -1810,7 +1810,7 @@ if (res.status === 402) {
   const micOn = isCallActive && !isMicMuted && isListening && !isAiSpeaking
 
   const statusText = (() => {
-    if (!isCallActive) return t("Choose an AI psychologist and press “Start video call” to begin.")
+    if (!isCallActive) return t("Choose an AI specialist and press “Start video call” to begin.")
     if (isAvatarSpeaking) return t("Assistant is speaking. Please wait a moment.")
     if (activityStatus === "thinking") return t("Thinking...")
     if (micOn) return t("Listening… you can speak.")
@@ -1829,7 +1829,7 @@ if (res.status === 402) {
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
                 <Video className="h-4 w-4" />
               </span>
-              {t("AI Psychologist Video Call")}
+              {t("AI specialist Video Call")}
             </h3>
             <div className="text-xs text-indigo-100 mt-1 truncate">
               {t("Video session in {{language}}", { language: languageDisplayName })} ·{" "}
@@ -1855,10 +1855,10 @@ if (res.status === 402) {
             <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center">
               <div className="text-center mb-6 sm:mb-8 px-2">
                 <h3 className="text-xl sm:text-2xl font-semibold mb-2 sm:mb-3">
-                  {t("Choose Your AI Psychologist")}
+                  {t("Choose Your AI specialist")}
                 </h3>
                 <p className="text-sm sm:text-base text-gray-600 max-w-md mx-auto">
-                  {t("Select the AI psychologist you'd like to speak with during your video call.")}
+                  {t("Select the AI specialist you'd like to speak with during your video call.")}
                 </p>
               </div>
 

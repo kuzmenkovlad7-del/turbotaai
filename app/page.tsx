@@ -91,7 +91,7 @@ export default function Home() {
                 </h2>
                 <p className="mx-auto max-w-2xl text-sm text-slate-600 md:text-base">
                   {t(
-                    "Start with a quick chat, a voice call or a video session with our AI-psychologist — choose the format that feels safest right now.",
+                    "Start with a quick chat, a voice call or a video session with our AI companion — choose the format that feels safest right now.",
                   )}
                 </p>
               </div>
@@ -99,7 +99,7 @@ export default function Home() {
               <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                 <ContactMethodCard
                   icon={MessageSquare}
-                  title={t("Chat with AI-psychologist")}
+                  title={t("Chat with AI companion")}
                   description={t(
                     "Write what is happening in your own words and get structured support in a few minutes.",
                   )}
@@ -117,7 +117,7 @@ export default function Home() {
 
                 <ContactMethodCard
                   icon={PhoneCall}
-                  title={t("Call AI-psychologist")}
+                  title={t("Call AI companion")}
                   description={t(
                     "Voice format for more lively support when you want to hear a calm voice.",
                   )}

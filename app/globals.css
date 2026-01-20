@@ -435,13 +435,6 @@ video {
   animation: pulse-glow-violet 2.5s ease-in-out infinite;
 }
 
-/* Voiceflow чат-баббл: фиксировано снизу справа, под всеми модальными окнами приложения */
-#vf-chat,
-#voiceflow-chat {
-  position: fixed !important;
-  inset: auto 1rem 1rem auto !important;
-  z-index: 40 !important;
-}
 
 /* Disable soft grid background pattern (safe override) */
 body::before,

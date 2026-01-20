@@ -23,29 +23,29 @@ export const uk: Record<string, string> = {
   // ─────────────────────
   // Hero TurbotaAI (верх головної)
   // ─────────────────────
-  "AI-psychologist nearby 24/7": "AI-психолог поруч 24/7",
+  "AI-psychologist nearby 24/7": "Підтримка 24/7",
   "Psychological support when it feels hard, powered by AI":
-    "Психологічна підтримка, коли важко, з підсиленням ШІ",
+    "AI-співрозмовник, який завжди поруч.",
   "TurbotaAI listens without judgement, asks clarifying questions and gently guides you through breathing, grounding and simple exercises based on psychological books. In chat, voice or video — when you feel anxious, exhausted or alone.":
-    "TurbotaAI слухає без осуду, ставить мʼякі уточнювальні запитання та мʼяко проводить через дихальні вправи, ґраундинг і прості практики з психологічних книжок. У чаті, голосом чи по відео — коли тривожно, виснажено або самотньо.",
-  "Start for free": "Почати безкоштовно",
+    "Спокійний і безпечний простір для розмови. Поговори, заспокойся і відчуй підтримку з AI, створеним для емоційної турботи.",
+  "Start for free": "Поговорити з AI",
   "How it works": "Як це працює",
 
-  "When it feels bad right now": "Коли погано просто зараз",
-  "Anxiety, stress & burnout": "Тривога, стрес та вигорання",
-  "7–21 day support programs": "Підтримувальні програми на 7–21 день",
+  "When it feels bad right now": "Для спокійних розмов",
+  "Anxiety, stress & burnout": "Для внутрішнього балансу",
+  "7–21 day support programs": "Для моментів, коли важлива підтримка",
 
   "3 assistant modes · chat · voice · video":
-    "3 режими асистента · чат · голос · відео",
+    "Твій AI співрозмовник у будь-якому форматі - текст, голос або відео.",
   "Choose how it's more comfortable for you to talk.":
-    "Обирайте формат, у якому вам комфортніше говорити.",
+    "Просто почни",
 
   // Старий блок Myitra — залишаємо, але адаптовано
-  "Myitra Platform · AI + Psychology": "Платформа Myitra · ШІ + психологія",
-  "Live Psychological Support,": "Жива психологічна підтримка,",
+  "Myitra Platform · AI + Psychology": "Платформа Myitra · ШІ + співрозмовникія",
+  "Live Psychological Support,": "Жива емоційна підтримка,",
   "AI-Enhanced": "посилена ШІ",
   "Licensed psychologists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
-    "Ліцензовані психологи, яких підсилюють AI-асистенти. Ми допомагаємо збирати історію, вести щоденники та нагадувати про сесії.",
+    "Ліцензовані співрозмовники, яких підсилюють AI-асистенти. Ми допомагаємо збирати історію, вести щоденники та нагадувати про сесії.",
   "Talk Now": "Поговорити зараз",
   "View Services": "Переглянути послуги",
   "AI Chat 24/7": "AI-чат 24/7",
@@ -58,32 +58,32 @@ export const uk: Record<string, string> = {
   // ─────────────────────
   // Home: блок з трьома форматами спілкування
   // ─────────────────────
-  "Choose how you want to talk": "Обирайте, як вам зручніше говорити",
-  "How would you like to contact us?": "Як вам зручніше вийти на звʼязок?",
+  "Choose how you want to talk": "Обери як тобі зручніше бути на звʼязку.",
+  "How would you like to contact us?": "Як тобі зараз зручніше почати розмову?",
   "Start with a quick chat, a voice call or a video session with our AI-psychologist — choose the format that feels safest right now.":
-    "Почніть із швидкого чату, голосового дзвінка або відеосесії з AI-психологом — оберіть формат, який зараз відчувається найбезпечнішим.",
+    "Можна написати, поговорити чи побачити AI співрозмовника - обери те, що зараз для тебе найспокійніше.",
 
-  "Chat with AI-psychologist": "Чат із AI-психологом",
+  "Chat with AI-psychologist": "Чат з AI співрозмовником",
   "Write what is happening in your own words and get structured support in a few minutes.":
-    "Опишіть, що з вами відбувається, своїми словами й отримайте структуровану підтримку за кілька хвилин.",
+    "Опиши своїми словами, що відбувається - і отримай мʼяку, зрозумілу підтримку вже за кілька хвилин.",
   "Best when you need privacy and want to stay silent around other people.":
     "Найкращий формат, коли потрібна приватність і не хочеться говорити вголос поруч з іншими.",
   "You can return to the conversation history and exercises at any time.":
     "У будь-який момент можна повернутися до історії діалогу та вправ.",
   "Start chat": "Почати чат",
 
-  "Call AI-psychologist": "Подзвонити AI-психологу",
+  "Call AI-psychologist": "Голосова розмова з AI співрозмовником",
   "Voice format for more lively support when you want to hear a calm voice.":
-    "Голосовий формат для живішої підтримки, коли хочеться почути спокійний голос.",
+    "Коли хочеться почути спокійний голос і відчути, що хтось поруч.",
   "Helps reduce the feeling of loneliness in difficult moments.":
     "Допомагає зменшити відчуття самотності у складні моменти.",
   "Suitable when emotions are strong and you need to speak out quickly.":
     "Підходить, коли емоції дуже сильні й потрібно швидко виговоритися.",
   "Start voice call": "Почати голосовий дзвінок",
 
-  "Video session with AI": "Відеосесія з AI",
+  "Video session with AI": "Відео розмова з AI співрозмовником",
   "Face-to-face session with a 3D-avatar when you want to feel presence and eye contact.":
-    "Сесія «обличчям до обличчя» з 3D-аватаром, коли важливо відчути присутність та зоровий контакт.",
+    "Формат, коли важливо бачити і відчувати когось поруч.",
   "Gives a stronger feeling that someone is really next to you.":
     "Дарує відчуття, що поряд справді є хтось, хто підтримує.",
   "Best for deeper work, body reactions and long-term processes.":
@@ -91,7 +91,7 @@ export const uk: Record<string, string> = {
   "Start video call": "Почати відеодзвінок",
 
   "Not sure which format? Start with a safe chat":
-    "Якщо сумніваєтеся — почніть із безпечного чату",
+    "Не впевнені з чого почати? Просто почніть",
 
   "Your browser may not fully support voice features. For the best experience, please use Chrome, Edge, or Safari.":
     "Ваш браузер може некоректно підтримувати голосові функції. Для найкращої роботи скористайтеся Chrome, Edge або Safari.",
@@ -111,27 +111,27 @@ export const uk: Record<string, string> = {
   "Open chat, voice or video exactly when it feels bad right now — без очередей, анкет и ожидания записи.":
     "Відкрийте чат, голос або відео саме в той момент, коли погано просто зараз — без черг, анкет і очікування запису.",
   "Feels like a calm, respectful human conversation":
-    "Відчувається як спокійна, поважна розмова з людиною",
+    "Відчувається, як спокійна розмова з тим, хто поруч.",
   "Ассистент сначала слушает и задаёт мягкие уточняющие вопросы, а уже потом предлагает короткие упражнения и шаги.":
-    "Асистент спочатку уважно слухає й ставить мʼякі уточнювальні запитання, а вже потім пропонує короткі вправи та наступні кроки.",
+    "TurbotaAI уважно слухає, ставить мʼякі запитання і допомагає знайти наступні кроки у власному темпі.",
   "Works in 10+ languages": "Працює більш ніж 10 мовами",
   "Украинский, русский, английский и другие популярные языки. Язык можно менять прямо во время диалога.":
     "Українська, російська, англійська та інші популярні мови. Мову можна змінювати прямо під час діалогу.",
   "From quick help to 7–21 day programs":
-    "Від швидкої допомоги до програм на 7–21 день",
+    "Від розмови до персональної підтримки.",
   "Готовые сценарии: «когда плохо прямо сейчас», работа с тревогой и стрессом, а также мягкие программы на 7–21 день с регулярными чек-инами.":
-    "Готові сценарії: «коли погано просто зараз», робота з тривогою та стресом, а також мʼякі програми на 7–21 день із регулярними чек-інами.",
-  "Safe and confidential space": "Безпечний і конфіденційний простір",
+    "TurbotaAI може бути уважним співрозмовником, коли нудно, важко або просто хочеться поговорити. Короткі розмови, мʼякі вправи та персональні рекомендації підлаштовуються під вас у процесі спілкування.",
+  "Safe and confidential space": "Приватний та захищений простір",
   "Разговоры шифруются и не используются для рекламы. Вы сами решаете, что рассказывать и когда удалять историю.":
-    "Розмови шифруються й не використовуються для реклами. Ви самі вирішуєте, що розповідати й коли видаляти історію.",
+    "Ваші розмови залишаються між вами та TurbotaAI. Вони не використовуються для реклами і ви самі вирішуєте, що зберігати.",
   "Simple pricing with a free start":
-    "Просте ціноутворення з безкоштовним стартом",
+    "Почніть безкоштовно",
   "На запуске: тестовый период и несколько бесплатных вопросов. Затем — прозрачные тарифы без скрытых платежей: разовый доступ и помесячная подписка.":
-    "На старті — тестовий період і кілька безкоштовних запитань. Далі — прозорі тарифи без прихованих платежів: разові сесії та помісячна підписка.",
+    "Продовжуйте, якщо вам підійде - без прихованих платежів.",
 
-  "Why people choose TurbotaAI": "Чому люди обирають TurbotaAI",
+  "Why people choose TurbotaAI": "TurbotaAI - коли потрібна розмова.",
   "TurbotaAI is built for moments when you have no strength to search for a therapist or wait for an appointment, but really need someone to talk to right now.":
-    "TurbotaAI створена для моментів, коли немає сил шукати терапевта чи чекати запису, але дуже потрібно з кимось поговорити прямо зараз.",
+    "TurbotaAI створена для моментів, коли важливо знати, що ти не один. Це простір, де можна відчути справжню підтримку. Почніть розмову тоді, коли це справді потрібно, без очікування і складних форм.",
 
   // ─────────────────────
   // Контактний блок / сторінка
@@ -154,7 +154,7 @@ export const uk: Record<string, string> = {
   "Support, partnerships and press": "Підтримка, партнерства та преса",
   "Contact TurbotaAI team": "Звʼяжіться з командою TurbotaAI",
   "Have questions about how the AI-psychologist works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible.":
-    "Є запитання про роботу AI-психолога, хочете обговорити партнерство чи потрібна допомога з акаунтом? Залиште заявку — ми відповімо якнайшвидше.",
+    "Є запитання про роботу AI співрозмовника, хочете обговорити партнерство чи потрібна допомога з акаунтом? Залиште заявку — ми відповімо якнайшвидше.",
 
   "For urgent situations, please contact local emergency services or a crisis line in your country. TurbotaAI is not a substitute for emergency medical help.":
     "В екстрених ситуаціях звертайтеся до місцевих служб порятунку або на кризову лінію вашої країни. TurbotaAI не є заміною невідкладної медичної допомоги.",
@@ -176,9 +176,9 @@ export const uk: Record<string, string> = {
   // ─────────────────────
   // Футер і дисклеймер
   // ─────────────────────
-  "AI Psychological Support": "AI-психологічна підтримка",
+  "AI Psychological Support": "AI-емоційна підтримка",
   "Professional, scalable, and aesthetically pleasing online service that utilizes AI to deliver quality psychological care.":
-    "Професійний, масштабований та естетичний онлайн-сервіс, який використовує ШІ для якісної психологічної допомоги.",
+    "Професійний, масштабований та естетичний онлайн-сервіс, який використовує ШІ для якісної співрозмовникічної допомоги.",
   "Psychological support based on AI for everyday emotional difficulties.":
     "Психологічна підтримка на основі ШІ для щоденних емоційних труднощів.",
 
@@ -191,7 +191,7 @@ export const uk: Record<string, string> = {
   "This is not an emergency service":
     "Це не сервіс екстреної допомоги",
   "TurbotaAI is not a replacement for a licensed psychologist or psychiatrist.":
-    "TurbotaAI не замінює консультації ліцензованого психолога чи психіатра.",
+    "TurbotaAI не замінює консультації ліцензованого співрозмовника чи фахівецьа.",
   "If you are in immediate danger, contact emergency services or a crisis hotline in your country.":
     "Якщо ви в небезпеці — зверніться до екстрених служб або на кризову лінію у вашій країні.",
 
@@ -215,10 +215,10 @@ export const uk: Record<string, string> = {
     "Реальні відгуки людей, які отримали підтримку через Myitra.",
   "Story 1 Name": "Анна М.",
   "Story 1 Text":
-    "Myitra допомогла мені пройти складний період. AI-психолог завжди був доступний, коли мені потрібна була підтримка.",
+    "Myitra допомогла мені пройти складний період. AI співрозмовник завжди був доступний, коли мені потрібна була підтримка.",
   "Story 2 Name": "Олена К.",
   "Story 2 Text":
-    "Поєднання професійної психології та технологій ШІ вражає. Я відчуваю, що мене чують і розуміють.",
+    "Поєднання професійної емоційного добробуту та технологій ШІ вражає. Я відчуваю, що мене чують і розуміють.",
   "Story 3 Name": "Дмитро С.",
   "Story 3 Text":
     "Корпоративна програма змінила підхід нашої команди до ментального здоровʼя. Дуже рекомендую!",
@@ -241,13 +241,13 @@ export const uk: Record<string, string> = {
     "Вигорання після переїзду та тривога перед сном",
   "Before TurbotaAI": "До TurbotaAI",
   "For several months Anna had been falling asleep at 3–4 a.m. She moved to another city, changed jobs and constantly replayed conversations in her head. She was too tired to look for a therapist, fill in forms or wait for an appointment.":
-    "Кілька місяців Анна засинала о 3–4 ночі. Вона переїхала в інше місто, змінила роботу й постійно прокручувала в голові розмови. У неї не було сил шукати терапевта, заповнювати анкети чи чекати на запис.",
+    "Кілька місяців Анна засинала о 3–4 ночі. Вона переїхала в інше місто, змінила роботу й постійно прокручувала в голові розмови. У неї не було сил шукати фахівецьа, заповнювати анкети чи чекати на запис.",
   "How the sessions looked": "Як виглядали сесії",
   "Anna opened the chat when it felt worst — usually late at night. The assistant helped her name what was happening, notice body sensations and try short breathing and grounding exercises. When she wanted, they switched to Ukrainian from English without losing the thread.":
     "Анна відкривала чат у ті моменти, коли було найважче — зазвичай пізно ввечері. Асистент допомагав назвати те, що з нею відбувається, помічати відчуття в тілі й пробувати короткі дихальні та ґраундинг-вправи. Коли їй хотілося, вони переключалися з англійської на українську, не втрачаючи нитку розмови.",
   "What changed after 3 weeks": "Що змінилося за 3 тижні",
   "She started going to bed earlier and noticed that panic peaks became shorter. Anna still plans to work with a human therapist, but now she feels she has a safe backup option in her pocket for nights when everything “collapses” again.":
-    "Вона почала лягати спати раніше й помітила, що піки паніки стали коротшими. Анна й надалі планує працювати з живим терапевтом, але тепер відчуває, що має безпечний запасний варіант у кишені на ті ночі, коли «все знову валиться».",
+    "Вона почала лягати спати раніше й помітила, що піки паніки стали коротшими. Анна й надалі планує працювати з живим фахівецьом, але тепер відчуває, що має безпечний запасний варіант у кишені на ті ночі, коли «все знову валиться».",
 
   "Max, 35 — team lead in IT":
     "Макс, 35 — тімлід в IT",
@@ -288,7 +288,7 @@ export const uk: Record<string, string> = {
   "Tap a card to open a detailed story in a calm, full-screen view. You can close it at any time with the button or the Escape key.":
     "Натисніть на картку, щоб відкрити детальну історію в спокійному повноекранному форматі. Ви можете закрити її в будь-який момент кнопкою або клавішею Escape.",
   "Stories are based on real patterns from TurbotaAI testing, but names and details are changed. TurbotaAI does not replace emergency mental health care.":
-    "Історії засновані на реальних патернах із тестування TurbotaAI, але імена й деталі змінені. TurbotaAI не замінює екстрену психіатричну чи медичну допомогу.",
+    "Історії засновані на реальних патернах із тестування TurbotaAI, але імена й деталі змінені. TurbotaAI не замінює екстрену фахівецьичну чи медичну допомогу.",
 
   // ─────────────────────
   // Login / доступ без акаунта
@@ -296,7 +296,7 @@ export const uk: Record<string, string> = {
   "During the testing phase you can use the platform without creating an account.":
     "На етапі тестування ви можете користуватися платформою без створення акаунта.",
   "Now you can start a chat, voice call or video session with the AI-psychologist directly from the main page.":
-    "Зараз ви можете розпочати чат, голосовий дзвінок або відеосесію з AI-психологом прямо з головної сторінки.",
+    "Зараз ви можете розпочати чат, голосовий дзвінок або відеосесію з AI співрозмовником прямо з головної сторінки.",
   "Later this page will be used for full registration, saving programs and personal settings.":
     "Пізніше ця сторінка буде використовуватися для повної реєстрації, збереження програм та особистих налаштувань.",
   "Back to main page": "Повернутися на головну",
@@ -362,7 +362,7 @@ export const uk: Record<string, string> = {
   "Access to TurbotaAI for teams and organizations that want to support employees or clients.":
     "Доступ до TurbotaAI для команд та організацій, які хочуть підтримувати співробітників або клієнтів.",
   "Medical and psychological centers.":
-    "Медичні та психологічні центри.",
+    "Медичні та співрозмовникічні центри.",
   "NGOs and initiatives that work with vulnerable groups.":
     "Громадські організації та ініціативи, що працюють із вразливими групами.",
   "Companies that care about emotional state of employees.":
@@ -398,9 +398,9 @@ export const uk: Record<string, string> = {
   // ─────────────────────
   "About the product": "Про продукт",
   "TurbotaAI — AI-psychologist that stays nearby when it feels hard":
-    "TurbotaAI — AI-психолог, який залишається поруч, коли важко",
+    "TurbotaAI — AI співрозмовник, який залишається поруч, коли важко",
   "TurbotaAI is a digital assistant built on psychological literature and modern AI. It does not replace a live therapist, but gives gentle, structured support when it is difficult to reach someone or when you need to talk right now — in chat, voice or video.":
-    "TurbotaAI — це цифровий асистент, побудований на психологічній літературі та сучасному ШІ. Він не замінює живого терапевта, але дає мʼяку, структуровану підтримку, коли складно дотягнутися до когось або потрібно терміново виговоритися — у чаті, голосом чи по відео.",
+    "TurbotaAI — це цифровий асистент, побудований на співрозмовникічній літературі та сучасному ШІ. Він не замінює живого фахівецьа, але дає мʼяку, структуровану підтримку, коли складно дотягнутися до когось або потрібно терміново виговоритися — у чаті, голосом чи по відео.",
   "Who TurbotaAI is for": "Для кого створена TurbotaAI",
   "On the first versions we focus on people who need emotional support in everyday life — without stigma and without long waiting.":
     "У перших версіях ми фокусуємося на людях, яким потрібна емоційна підтримка в повсякденному житті — без стигми й без довгого очікування.",
@@ -425,13 +425,13 @@ export const uk: Record<string, string> = {
   "• Short programs for 7–21 days to gently change habits and support you regularly.":
     "• Короткі програми на 7–21 день, щоб мʼяко змінювати звички й регулярно підтримувати вас.",
   "• Answers are based on selected psychological books and materials that were tested with a psychologist.":
-    "• Відповіді ґрунтуються на добірці психологічних книжок і матеріалів, які ми тестували разом із психологом.",
+    "• Відповіді ґрунтуються на добірці співрозмовникічних книжок і матеріалів, які ми тестували разом із співрозмовником.",
 
   "What TurbotaAI is not": "Чим TurbotaAI не є",
   "It is important to be honest about the limits of technology.":
     "Важливо чесно говорити про обмеження технологій.",
   "• TurbotaAI is not a doctor and not a psychiatrist.":
-    "• TurbotaAI — не лікар і не психіатр.",
+    "• TurbotaAI — не спеціаліст і не фахівець.",
   "• It does not make diagnoses and does not replace emergency help.":
     "• Вона не ставить діагнозів і не замінює невідкладну допомогу.",
   "• In crisis or risk of harm to yourself or others, you should contact emergency services or a human specialist.":
@@ -491,21 +491,21 @@ export const uk: Record<string, string> = {
 
   // Voice modal
   "Voice session with AI-psychologist":
-    "Голосова сесія з AI-психологом",
+    "Голосова сесія з AI співрозмовником",
   "You can talk out loud, the assistant will listen, answer and voice the reply.":
     "Ви можете говорити вголос — асистент слухатиме, відповідатиме й озвучуватиме відповіді.",
   "Press the button to start the call. Allow microphone access, then speak as if with a real psychologist.":
-    "Натисніть кнопку, щоб розпочати дзвінок. Дозвольте доступ до мікрофона й говоріть так, ніби спілкуєтеся зі справжнім психологом.",
+    "Натисніть кнопку, щоб розпочати дзвінок. Дозвольте доступ до мікрофона й говоріть так, ніби спілкуєтеся зі справжнім співрозмовником.",
   "Your e-mail will be used only to personalize the session. (guest@example.com)":
     "Ваш e-mail буде використано лише для персоналізації сесії. (guest@example.com)",
   "Start voice session": "Почати голосову сесію",
 
   // Video modal
-  "AI Psychologist Video Call": "Відеодзвінок з AI-психологом",
+  "AI Psychologist Video Call": "Відеодзвінок з AI співрозмовником",
   "Video session in Ukrainian · ➟": "Відеосесія українською · ➟",
-  "Choose Your AI Psychologist": "Обирайте свого AI-психолога",
+  "Choose Your AI Psychologist": "Обирайте свого AI співрозмовника",
   "Select the AI psychologist you'd like to speak with during your video call.":
-    "Оберіть AI-психолога, з яким хочете поспілкуватися під час відеодзвінка.",
+    "Оберіть AI співрозмовника, з яким хочете поспілкуватися під час відеодзвінка.",
   "Video call language:": "Мова відеодзвінка:",
   "All characters use Google TTS for authentic native accent.":
     "Усі персонажі використовують Google TTS для природного, автентичного акценту.",
@@ -524,7 +524,7 @@ export const uk: Record<string, string> = {
     "Оновлено: листопад 2025 року",
 
   "By accessing or using TurbotaAI's AI psychology services (the \"Service\"), you agree to be bound by these Terms of Use and all applicable laws and regulations. If you do not agree with any part of these Terms, you must not use the Service.":
-    "Користуючись сервісами AI-психології TurbotaAI (далі — «Сервіс»), ви підтверджуєте, що погоджуєтеся з цими Умовами користування та всіма чинними законами й нормативними актами. Якщо ви не згодні з будь-якою частиною цих Умов, будь ласка, не використовуйте Сервіс.",
+    "Користуючись сервісами AI-емоційного добробуту TurbotaAI (далі — «Сервіс»), ви підтверджуєте, що погоджуєтеся з цими Умовами користування та всіма чинними законами й нормативними актами. Якщо ви не згодні з будь-якою частиною цих Умов, будь ласка, не використовуйте Сервіс.",
 
   "These Terms constitute a legally binding agreement between you and the operator of TurbotaAI Psychology Services. Your continued use of the Service after we publish updates means that you accept the revised Terms.":
     "Ці Умови є юридично зобов'язувальною угодою між вами та оператором сервісу TurbotaAI Psychology Services. Ваше подальше користування Сервісом після публікації оновлень означає, що ви приймаєте змінені Умови.",
@@ -548,7 +548,7 @@ export const uk: Record<string, string> = {
     "ви самостійно відповідаєте за конфіденційність своїх облікових даних (якщо акаунт створено) та за всі дії, що відбуваються під вашим обліковим записом.",
 
   "TurbotaAI provides AI-based psychological support tools. The Service is not a medical facility and does not provide services that qualify as medical or psychiatric treatment.":
-    "TurbotaAI надає інструменти психологічної підтримки на основі штучного інтелекту. Сервіс не є медичним закладом і не надає послуг, що прирівнюються до лікарського чи психіатричного лікування.",
+    "TurbotaAI надає інструменти співрозмовникічної підтримки на основі штучного інтелекту. Сервіс не є медичним закладом і не надає послуг, що прирівнюються до спеціалістського чи фахівецьичного лікування.",
 
   "You agree to use the Service only for personal, non-commercial purposes, unless otherwise agreed with us in a separate written agreement. You must not:":
     "Ви погоджуєтеся використовувати Сервіс виключно для особистих, некомерційних цілей, якщо інше не передбачено окремою письмовою угодою з нами. Ви не можете:",
@@ -588,7 +588,7 @@ export const uk: Record<string, string> = {
 
 
   "TurbotaAI is not an emergency service and does not replace consultations with a doctor, psychiatrist or other licensed healthcare professional. If you are in danger or may harm yourself or others, you must immediately contact emergency services or a human specialist.":
-    "TurbotaAI не є екстреною службою та не замінює консультацію лікаря, психіатра або іншого ліцензованого фахівця в галузі охорони здоров'я. Якщо ви в небезпеці або можете завдати шкоди собі чи іншим, негайно зверніться до служб екстреної допомоги або до живого спеціаліста.",
+    "TurbotaAI не є екстреною службою та не замінює консультацію спеціалістя, фахівецьа або іншого ліцензованого фахівця в галузі охорони здоров'я. Якщо ви в небезпеці або можете завдати шкоди собі чи іншим, негайно зверніться до служб екстреної допомоги або до живого спеціаліста.",
 
   "To the maximum extent permitted by law, we shall not be liable for any direct, indirect, incidental, punitive or consequential damages arising out of or in connection with your use of, or inability to use, the Service.":
     "У межах, дозволених законом, ми не несемо відповідальності за будь-які прямі, непрямі, випадкові, штрафні або опосередковані збитки, що виникають унаслідок або у зв'язку з користуванням Сервісом чи неможливістю його використання.",
@@ -740,7 +740,7 @@ export const uk: Record<string, string> = {
 
   // Voice modal – тексти на першому екрані
   "Choose a voice and start the session. The assistant will listen to you and answer like a real psychologist.":
-    "Оберіть голос і розпочніть сесію. Асистент слухатиме вас і відповідатиме, як справжній психолог.",
+    "Оберіть голос і розпочніть сесію. Асистент слухатиме вас і відповідатиме, як справжній співрозмовник.",
   "You can switch between female and male voice by ending the call and starting again with a different option.":
     "Ви можете перемикатися між жіночим і чоловічим голосом, завершивши дзвінок і розпочавши новий з іншим варіантом.",
   "CHOOSE VOICE FOR THIS SESSION":
@@ -751,7 +751,7 @@ export const uk: Record<string, string> = {
   "Start with male voice": "Почати з чоловічим голосом",
 
   // Плашки та статуси в голосовому/чат/відео асистентах
-  "AI Psychologist": "AI-психолог",
+  "AI Psychologist": "AI співрозмовник",
   "Female voice": "ЖІНОЧИЙ ГОЛОС",
   "Male voice": "ЧОЛОВІЧИЙ ГОЛОС",
   "Assistant online": "Асистент онлайн",
@@ -767,7 +767,7 @@ export const uk: Record<string, string> = {
   "Paused. Turn on microphone to continue.":
     "Пауза. Увімкніть мікрофон, щоб продовжити.",
   "Choose an AI psychologist and press “Start video call” to begin.":
-    "Оберіть AI-психолога та натисніть «Почати відеодзвінок», щоб розпочати.",
+    "Оберіть AI співрозмовника та натисніть «Почати відеодзвінок», щоб розпочати.",
   "Assistant is speaking. Please wait a moment.":
     "Асистент говорить. Будь ласка, зачекайте трохи.",
   "Listening...": "Слухаю...",
@@ -785,7 +785,7 @@ export const uk: Record<string, string> = {
   "Your browser does not support voice recognition. Please use Chrome or another modern browser.": "Ваш браузер не підтримує розпізнавання голосу. Будь ласка, використайте Chrome або інший сучасний браузер.",
   "Microphone access was blocked. Please allow it in your browser settings and restart the call.": "Доступ до мікрофона було заблоковано. Дозвольте його в налаштуваннях браузера та перезапустіть дзвінок.",
   "terms.acceptance.title": "Прийняття умов",
-  "terms.acceptance.p1": "Отримуючи доступ до психологічних сервісів TurbotaAI на базі штучного інтелекту (Сервіс), ви погоджуєтеся дотримуватися цих Умов використання та всіх чинних законів і правил. Якщо ви не згодні з будь-якою частиною Умов, не користуйтеся Сервісом.",
+  "terms.acceptance.p1": "Отримуючи доступ до співрозмовникічних сервісів TurbotaAI на базі штучного інтелекту (Сервіс), ви погоджуєтеся дотримуватися цих Умов використання та всіх чинних законів і правил. Якщо ви не згодні з будь-якою частиною Умов, не користуйтеся Сервісом.",
   "terms.acceptance.p2": "Ці Умови є юридично зобовʼязуючою угодою між вами та оператором сервісу TurbotaAI Psychology Services. Подальше використання Сервісу після публікації оновлень означає, що ви приймаєте змінені Умови.",
   "terms.eligibility.title": "Право користування Сервісом",
   "terms.eligibility.intro": "Щоб користуватися Сервісом, ви підтверджуєте, що:",
@@ -795,7 +795,7 @@ export const uk: Record<string, string> = {
   "terms.eligibility.item4": "ви надаєте правдиву, точну та актуальну інформацію, коли це потрібно для реєстрації чи ідентифікації;",
   "terms.eligibility.item5": "ви самостійно відповідаєте за конфіденційність своїх облікових даних (якщо акаунт створено) та за всі дії, що відбуваються від вашого імені.",
   "terms.use.title": "Використання Сервісу",
-  "terms.use.p1": "TurbotaAI надає інструменти психологічної підтримки на основі штучного інтелекту. Сервіс не є медичним закладом і не надає послуг, які прирівнюються до медичного чи психіатричного лікування.",
+  "terms.use.p1": "TurbotaAI надає інструменти співрозмовникічної підтримки на основі штучного інтелекту. Сервіс не є медичним закладом і не надає послуг, які прирівнюються до медичного чи фахівецьичного лікування.",
   "terms.use.p2": "Ви погоджуєтеся використовувати Сервіс виключно для особистих, некомерційних цілей, якщо інше не передбачено окремою письмовою угодою з нами. Вам заборонено:",
   "terms.use.item1": "копіювати, змінювати або розповсюджувати Сервіс;",
   "terms.use.item2": "намагатися отримати несанкціонований доступ до наших систем або даних інших користувачів;",
@@ -812,7 +812,7 @@ export const uk: Record<string, string> = {
   "terms.payment.p3": "Умови повернення коштів (якщо вони передбачені) описуються в окремому розділі сторінки тарифу або в нашій політиці повернень. Перед оплатою уважно ознайомтеся з ними.",
   "terms.liability.title": "Обмеження відповідальності",
   "terms.liability.p1": "Сервіс TurbotaAI надається «як є» без будь-яких прямих чи неявних гарантій щодо його точності, повноти або придатності для ваших конкретних цілей. Ми прагнемо підтримувати стабільну роботу Сервісу, але не гарантуємо, що він буде доступний без перебоїв і помилок.",
-  "terms.liability.p2": "TurbotaAI не є екстреною службою і не замінює консультації лікаря, психіатра чи іншого ліцензованого фахівця у сфері охорони здоровʼя. Якщо ви в небезпеці або можете завдати шкоди собі чи іншим, негайно зверніться до екстрених служб або до живого спеціаліста.",
+  "terms.liability.p2": "TurbotaAI не є екстреною службою і не замінює консультації спеціалістя, фахівецьа чи іншого ліцензованого фахівця у сфері охорони здоровʼя. Якщо ви в небезпеці або можете завдати шкоди собі чи іншим, негайно зверніться до екстрених служб або до живого спеціаліста.",
   "terms.liability.p3": "У межах, дозволених законом, ми не несемо відповідальності за будь-які прямі, непрямі, випадкові, штрафні чи опосередковані збитки, що виникли внаслідок використання вами Сервісу або неможливості його використання.",
   "terms.changes.title": "Зміни до умов",
   "terms.changes.p1": "Ми можемо час від часу оновлювати ці Умови. Дата останнього оновлення зазначається у верхній частині сторінки. У разі суттєвих змін ми можемо додатково повідомити вас через Сервіс або електронною поштою (якщо вона у нас є).",
@@ -894,9 +894,9 @@ export const uk: Record<string, string> = {
   "English": "Англійська",
   "Russian": "Російська",
   "Ukrainian": "Українська",
-  "Senior psychologist specializing in cognitive behavioral therapy with 15+ years of experience": "Старший психолог, спеціаліст з когнітивно-поведінкової терапії (15+ років досвіду)",
-  "Clinical psychologist specializing in anxiety, depression, and workplace stress management": "Клінічний психолог: тривожність, депресія та керування стресом на роботі",
-  "Psychotherapist specializing in emotional regulation, trauma recovery, and relationship counseling": "Психотерапевт: емоційна регуляція, відновлення після травми та консультування стосунків",
+  "Senior psychologist specializing in cognitive behavioral therapy with 15+ years of experience": "Старший співрозмовник, спеціаліст з когнітивно-поведінкової терапії (15+ років досвіду)",
+  "Clinical psychologist specializing in anxiety, depression, and workplace stress management": "Клінічний співрозмовник: тривожність, депресія та керування стресом на роботі",
+  "Psychotherapist specializing in emotional regulation, trauma recovery, and relationship counseling": "Психофахівець: емоційна регуляція, відновлення після травми та консультування стосунків",
 
 
   // ─────────────────────

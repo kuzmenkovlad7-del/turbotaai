@@ -23,11 +23,11 @@ export const ru: Record<string, string> = {
   // ─────────────────────
   // Hero TurbotaAI (верх главной)
   // ─────────────────────
-  "AI-psychologist nearby 24/7": "AI-психолог рядом 24/7",
+  "AI-psychologist nearby 24/7": "AI-собеседник рядом 24/7",
   "Psychological support when it feels hard, powered by AI":
     "Психологическая поддержка, когда тяжело, с усилением ИИ",
   "TurbotaAI listens without judgement, asks clarifying questions and gently guides you through breathing, grounding and simple exercises based on psychological books. In chat, voice or video — when you feel anxious, exhausted or alone.":
-    "TurbotaAI слушает без осуждения, задаёт мягкие уточняющие вопросы и аккуратно проводит через дыхательные упражнения, граундинг и простые практики из психологических книг. В чате, голосом или по видео — когда тревожно, вымотанно или одиноко.",
+    "TurbotaAI слушает без осуждения, задаёт мягкие уточняющие вопросы и аккуратно проводит через дыхательные упражнения, граундинг и простые практики из собеседникических книг. В чате, голосом или по видео — когда тревожно, вымотанно или одиноко.",
   "Start for free": "Начать бесплатно",
   "How it works": "Как это работает",
 
@@ -41,11 +41,11 @@ export const ru: Record<string, string> = {
     "Выберите формат, в котором вам сейчас комфортнее говорить.",
 
   // Старый блок Myitra — оставляем, но адаптировано
-  "Myitra Platform · AI + Psychology": "Платформа Myitra · ИИ + психология",
-  "Live Psychological Support,": "Живая психологическая поддержка,",
+  "Myitra Platform · AI + Psychology": "Платформа Myitra · ИИ + собеседникия",
+  "Live Psychological Support,": "Живая эмоциональная поддержка,",
   "AI-Enhanced": "усиленная ИИ",
   "Licensed psychologists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
-    "Лицензированные психологи, которых усиливают AI-ассистенты. Мы помогаем собирать историю, вести дневники и напоминать о сессиях.",
+    "Лицензированные собеседники, которых усиливают AI-ассистенты. Мы помогаем собирать историю, вести дневники и напоминать о сессиях.",
   "Talk Now": "Поговорить сейчас",
   "View Services": "Посмотреть услуги",
   "AI Chat 24/7": "AI-чат 24/7",
@@ -61,9 +61,9 @@ export const ru: Record<string, string> = {
   "Choose how you want to talk": "Выберите, как вам удобнее говорить",
   "How would you like to contact us?": "Как вам удобнее выйти на связь?",
   "Start with a quick chat, a voice call or a video session with our AI-psychologist — choose the format that feels safest right now.":
-    "Начните с быстрого чата, голосового звонка или видеосессии с AI-психологом — выберите формат, который сейчас ощущается самым безопасным.",
+    "Начните с быстрого чата, голосового звонка или видеосессии с AI-собеседником — выберите формат, который сейчас ощущается самым безопасным.",
 
-  "Chat with AI-psychologist": "Чат с AI-психологом",
+  "Chat with AI-psychologist": "Чат с AI-собеседником",
   "Write what is happening in your own words and get structured support in a few minutes.":
     "Опишите, что с вами происходит, своими словами и получите структурированную поддержку за несколько минут.",
   "Best when you need privacy and want to stay silent around other people.":
@@ -72,7 +72,7 @@ export const ru: Record<string, string> = {
     "В любой момент можно вернуться к истории диалога и упражнениям.",
   "Start chat": "Начать чат",
 
-  "Call AI-psychologist": "Позвонить AI-психологу",
+  "Call AI-psychologist": "Позвонить AI-собеседнику",
   "Voice format for more lively support when you want to hear a calm voice.":
     "Голосовой формат для более «живой» поддержки, когда хочется услышать спокойный голос.",
   "Helps reduce the feeling of loneliness in difficult moments.":
@@ -131,7 +131,7 @@ export const ru: Record<string, string> = {
 
   "Why people choose TurbotaAI": "Почему люди выбирают TurbotaAI",
   "TurbotaAI is built for moments when you have no strength to search for a therapist or wait for an appointment, but really need someone to talk to right now.":
-    "TurbotaAI создана для моментов, когда нет сил искать терапевта или ждать записи, но очень нужно с кем-то поговорить прямо сейчас.",
+    "TurbotaAI создана для моментов, когда нет сил искать специалиста или ждать записи, но очень нужно с кем-то поговорить прямо сейчас.",
 
   // ─────────────────────
   // Контактный блок / страница
@@ -154,7 +154,7 @@ export const ru: Record<string, string> = {
   "Support, partnerships and press": "Поддержка, партнёрства и пресса",
   "Contact TurbotaAI team": "Свяжитесь с командой TurbotaAI",
   "Have questions about how the AI-psychologist works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible.":
-    "Хотите уточнить, как работает AI-психолог, обсудить партнёрство или нужна помощь с аккаунтом? Оставьте заявку — мы ответим как можно быстрее.",
+    "Хотите уточнить, как работает AI-собеседник, обсудить партнёрство или нужна помощь с аккаунтом? Оставьте заявку — мы ответим как можно быстрее.",
 
   "For urgent situations, please contact local emergency services or a crisis line in your country. TurbotaAI is not a substitute for emergency medical help.":
     "В экстренных ситуациях обращайтесь в местные службы спасения или на кризисную линию вашей страны. TurbotaAI не заменяет неотложную медицинскую помощь.",
@@ -176,9 +176,9 @@ export const ru: Record<string, string> = {
   // ─────────────────────
   // Футер и дисклеймер
   // ─────────────────────
-  "AI Psychological Support": "AI-психологическая поддержка",
+  "AI Psychological Support": "AI-эмоциональная поддержка",
   "Professional, scalable, and aesthetically pleasing online service that utilizes AI to deliver quality psychological care.":
-    "Профессиональный, масштабируемый и эстетичный онлайн-сервис, который использует ИИ для качественной психологической помощи.",
+    "Профессиональный, масштабируемый и эстетичный онлайн-сервис, который использует ИИ для качественной собеседникической помощи.",
   "Psychological support based on AI for everyday emotional difficulties.":
     "Психологическая поддержка на основе ИИ для повседневных эмоциональных трудностей.",
 
@@ -191,7 +191,7 @@ export const ru: Record<string, string> = {
   "This is not an emergency service":
     "Это не сервис экстренной помощи",
   "TurbotaAI is not a replacement for a licensed psychologist or psychiatrist.":
-    "TurbotaAI не заменяет консультацию лицензированного психолога или психиатра.",
+    "TurbotaAI не заменяет консультацию лицензированного собеседника или специалиста.",
   "If you are in immediate danger, contact emergency services or a crisis hotline in your country.":
     "Если вы в опасности — обратитесь в экстренные службы или на кризисную линию в вашей стране.",
 
@@ -215,10 +215,10 @@ export const ru: Record<string, string> = {
     "Реальные отзывы людей, которые получили поддержку через Myitra.",
   "Story 1 Name": "Анна М.",
   "Story 1 Text":
-    "Myitra помогла мне пройти сложный период. AI-психолог всегда был доступен, когда мне нужна была поддержка.",
+    "Myitra помогла мне пройти сложный период. AI-собеседник всегда был доступен, когда мне нужна была поддержка.",
   "Story 2 Name": "Елена К.",
   "Story 2 Text":
-    "Сочетание профессиональной психологии и технологий ИИ впечатляет. Я чувствую, что меня слышат и понимают.",
+    "Сочетание профессиональной эмоционального благополучия и технологий ИИ впечатляет. Я чувствую, что меня слышат и понимают.",
   "Story 3 Name": "Дмитрий С.",
   "Story 3 Text":
     "Корпоративная программа изменила отношение нашей команды к ментальному здоровью. Очень рекомендую!",
@@ -241,13 +241,13 @@ export const ru: Record<string, string> = {
     "Выгорание после переезда и тревога перед сном",
   "Before TurbotaAI": "До TurbotaAI",
   "For several months Anna had been falling asleep at 3–4 a.m. She moved to another city, changed jobs and constantly replayed conversations in her head. She was too tired to look for a therapist, fill in forms or wait for an appointment.":
-    "Несколько месяцев Анна засыпала в 3–4 ночи. Она переехала в другой город, сменила работу и постоянно прокручивала в голове разговоры. У неё не было сил искать терапевта, заполнять анкеты или ждать записи.",
+    "Несколько месяцев Анна засыпала в 3–4 ночи. Она переехала в другой город, сменила работу и постоянно прокручивала в голове разговоры. У неё не было сил искать специалиста, заполнять анкеты или ждать записи.",
   "How the sessions looked": "Как проходили сессии",
   "Anna opened the chat when it felt worst — usually late at night. The assistant helped her name what was happening, notice body sensations and try short breathing and grounding exercises. When she wanted, they switched to Ukrainian from English without losing the thread.":
     "Анна открывала чат в те моменты, когда было тяжелее всего — обычно поздно вечером. Ассистент помогал назвать то, что с ней происходит, замечать ощущения в теле и пробовать короткие дыхательные и граунд-упражнения. Когда ей хотелось, они переключались с английского на украинский, не теряя нить разговора.",
   "What changed after 3 weeks": "Что изменилось за 3 недели",
   "She started going to bed earlier and noticed that panic peaks became shorter. Anna still plans to work with a human therapist, but now she feels she has a safe backup option in her pocket for nights when everything “collapses” again.":
-    "Она стала ложиться спать раньше и заметила, что пики паники стали короче. Анна по-прежнему планирует работать с живым терапевтом, но теперь чувствует, что у неё есть безопасный запасной вариант в кармане на те ночи, когда «всё снова рушится».",
+    "Она стала ложиться спать раньше и заметила, что пики паники стали короче. Анна по-прежнему планирует работать с живым специалистом, но теперь чувствует, что у неё есть безопасный запасной вариант в кармане на те ночи, когда «всё снова рушится».",
 
   "Max, 35 — team lead in IT":
     "Макс, 35 — тимлид в IT",
@@ -288,7 +288,7 @@ export const ru: Record<string, string> = {
   "Tap a card to open a detailed story in a calm, full-screen view. You can close it at any time with the button or the Escape key.":
     "Нажмите на карточку, чтобы открыть подробную историю в спокойном полноэкранном формате. Закрыть её можно в любой момент кнопкой или клавишей Escape.",
   "Stories are based on real patterns from TurbotaAI testing, but names and details are changed. TurbotaAI does not replace emergency mental health care.":
-    "Истории основаны на реальных паттернах из тестирования TurbotaAI, но имена и детали изменены. TurbotaAI не заменяет экстренную психиатрическую или медицинскую помощь.",
+    "Истории основаны на реальных паттернах из тестирования TurbotaAI, но имена и детали изменены. TurbotaAI не заменяет экстренную специалистическую или медицинскую помощь.",
 
   // ─────────────────────
   // Login / доступ без аккаунта
@@ -296,7 +296,7 @@ export const ru: Record<string, string> = {
   "During the testing phase you can use the platform without creating an account.":
     "На этапе тестирования вы можете пользоваться платформой без создания аккаунта.",
   "Now you can start a chat, voice call or video session with the AI-psychologist directly from the main page.":
-    "Сейчас вы можете начать чат, голосовой звонок или видеосессию с AI-психологом прямо с главной страницы.",
+    "Сейчас вы можете начать чат, голосовой звонок или видеосессию с AI-собеседником прямо с главной страницы.",
   "Later this page will be used for full registration, saving programs and personal settings.":
     "Позже эта страница будет использоваться для полной регистрации, сохранения программ и личных настроек.",
   "Back to main page": "Вернуться на главную",
@@ -362,7 +362,7 @@ export const ru: Record<string, string> = {
   "Access to TurbotaAI for teams and organizations that want to support employees or clients.":
     "Доступ к TurbotaAI для команд и организаций, которые хотят поддерживать сотрудников или клиентов.",
   "Medical and psychological centers.":
-    "Медицинские и психологические центры.",
+    "Медицинские и собеседникические центры.",
   "NGOs and initiatives that work with vulnerable groups.":
     "НКО и инициативы, работающие с уязвимыми группами.",
   "Companies that care about emotional state of employees.":
@@ -399,9 +399,9 @@ export const ru: Record<string, string> = {
   // ─────────────────────
   "About the product": "О продукте",
   "TurbotaAI — AI-psychologist that stays nearby when it feels hard":
-    "TurbotaAI — AI-психолог, который остаётся рядом, когда тяжело",
+    "TurbotaAI — AI-собеседник, который остаётся рядом, когда тяжело",
   "TurbotaAI is a digital assistant built on psychological literature and modern AI. It does not replace a live therapist, but gives gentle, structured support when it is difficult to reach someone or when you need to talk right now — in chat, voice or video.":
-    "TurbotaAI — это цифровой ассистент, основанный на психологической литературе и современном ИИ. Он не заменяет живого терапевта, но даёт мягкую, структурированную поддержку, когда сложно дотянуться до кого-то или нужно срочно выговориться — в чате, голосом или по видео.",
+    "TurbotaAI — это цифровой ассистент, основанный на собеседникической литературе и современном ИИ. Он не заменяет живого специалиста, но даёт мягкую, структурированную поддержку, когда сложно дотянуться до кого-то или нужно срочно выговориться — в чате, голосом или по видео.",
   "Who TurbotaAI is for": "Для кого создана TurbotaAI",
   "On the first versions we focus on people who need emotional support in everyday life — without stigma and without long waiting.":
     "В первых версиях мы фокусируемся на людях, которым нужна эмоциональная поддержка в повседневной жизни — без стигмы и долгого ожидания.",
@@ -426,13 +426,13 @@ export const ru: Record<string, string> = {
   "• Short programs for 7–21 days to gently change habits and support you regularly.":
     "• Короткие программы на 7–21 день, чтобы мягко менять привычки и регулярно поддерживать вас.",
   "• Answers are based on selected psychological books and materials that were tested with a psychologist.":
-    "• Ответы основаны на подборке психологических книг и материалов, которые мы тестировали вместе с психологом.",
+    "• Ответы основаны на подборке собеседникических книг и материалов, которые мы тестировали вместе с собеседником.",
 
   "What TurbotaAI is not": "Чем TurbotaAI не является",
   "It is important to be honest about the limits of technology.":
     "Важно честно говорить об ограничениях технологий.",
   "• TurbotaAI is not a doctor and not a psychiatrist.":
-    "• TurbotaAI — не врач и не психиатр.",
+    "• TurbotaAI — не врач и не специалист.",
   "• It does not make diagnoses and does not replace emergency help.":
     "• Сервис не ставит диагнозы и не заменяет экстренную помощь.",
   "• In crisis or risk of harm to yourself or others, you should contact emergency services or a human specialist.":
@@ -491,21 +491,21 @@ export const ru: Record<string, string> = {
 
   // Voice modal
   "Voice session with AI-psychologist":
-    "Голосовая сессия с AI-психологом",
+    "Голосовая сессия с AI-собеседником",
   "You can talk out loud, the assistant will listen, answer and voice the reply.":
     "Вы можете говорить вслух — ассистент будет слушать, отвечать и озвучивать ответы.",
   "Press the button to start the call. Allow microphone access, then speak as if with a real psychologist.":
-    "Нажмите кнопку, чтобы начать звонок. Разрешите доступ к микрофону и говорите так, как будто общаетесь с настоящим психологом.",
+    "Нажмите кнопку, чтобы начать звонок. Разрешите доступ к микрофону и говорите так, как будто общаетесь с настоящим собеседником.",
   "Your e-mail will be used only to personalize the session. (guest@example.com)":
     "Ваш e-mail будет использован только для персонализации сессии. (guest@example.com)",
   "Start voice session": "Начать голосовую сессию",
 
   // Video modal
-  "AI Psychologist Video Call": "Видеозвонок с AI-психологом",
+  "AI Psychologist Video Call": "Видеозвонок с AI-собеседником",
   "Video session in Ukrainian · ➟": "Видеосессия на украинском · ➟",
-  "Choose Your AI Psychologist": "Выберите своего AI-психолога",
+  "Choose Your AI Psychologist": "Выберите своего AI-собеседника",
   "Select the AI psychologist you'd like to speak with during your video call.":
-    "Выберите AI-психолога, с которым хотите поговорить во время видеозвонка.",
+    "Выберите AI-собеседника, с которым хотите поговорить во время видеозвонка.",
   "Video call language:": "Язык видеозвонка:",
   "All characters use Google TTS for authentic native accent.":
     "Все персонажи используют Google TTS для естественного, аутентичного акцента.",
@@ -521,7 +521,7 @@ export const ru: Record<string, string> = {
   // Terms of Use – полные абзацы
   // ─────────────────────
   "By accessing or using TurbotaAI's AI psychology services (the \"Service\"), you agree to be bound by these Terms of Use and all applicable laws and regulations. If you do not agree with any part of these Terms, you must not use the Service.":
-    "Пользуясь сервисами AI-психологии TurbotaAI (далее — «Сервис»), вы подтверждаете, что соглашаетесь с этими Условиями пользования и всеми применимыми законами и нормативными актами. Если вы не согласны с какой-либо частью этих Условий, пожалуйста, не используйте Сервис.",
+    "Пользуясь сервисами AI-эмоционального благополучия TurbotaAI (далее — «Сервис»), вы подтверждаете, что соглашаетесь с этими Условиями пользования и всеми применимыми законами и нормативными актами. Если вы не согласны с какой-либо частью этих Условий, пожалуйста, не используйте Сервис.",
 
   "These Terms constitute a legally binding agreement between you and the operator of TurbotaAI Psychology Services. Your continued use of the Service after we publish updates means that you accept the revised Terms.":
     "Эти Условия являются юридически обязательным соглашением между вами и оператором сервиса TurbotaAI Psychology Services. Ваше дальнейшее использование Сервиса после публикации обновлений означает, что вы принимаете изменённые Условия.",
@@ -545,7 +545,7 @@ export const ru: Record<string, string> = {
     "вы самостоятельно отвечаете за конфиденциальность своих учётных данных (если аккаунт создан) и за все действия, которые совершаются под вашей учётной записью.",
 
   "TurbotaAI provides AI-based psychological support tools. The Service is not a medical facility and does not provide services that qualify as medical or psychiatric treatment.":
-    "TurbotaAI предоставляет инструменты психологической поддержки на основе искусственного интеллекта. Сервис не является медицинским учреждением и не оказывает услуги, приравниваемые к медицинскому или психиатрическому лечению.",
+    "TurbotaAI предоставляет инструменты собеседникической поддержки на основе искусственного интеллекта. Сервис не является медицинским учреждением и не оказывает услуги, приравниваемые к медицинскому или специалистическому лечению.",
 
   "You agree to use the Service only for personal, non-commercial purposes, unless otherwise agreed with us in a separate written agreement. You must not:":
     "Вы соглашаетесь использовать Сервис исключительно для личных, некоммерческих целей, если иное не предусмотрено отдельным письменным соглашением с нами. Вам запрещено:",
@@ -585,7 +585,7 @@ export const ru: Record<string, string> = {
 
 
   "TurbotaAI is not an emergency service and does not replace consultations with a doctor, psychiatrist or other licensed healthcare professional. If you are in danger or may harm yourself or others, you must immediately contact emergency services or a human specialist.":
-    "TurbotaAI не является экстренной службой и не заменяет консультацию врача, психиатра или другого лицензированного специалиста в области здравоохранения. Если вы в опасности или можете причинить вред себе или другим, немедленно обратитесь в экстренные службы или к живому специалисту.",
+    "TurbotaAI не является экстренной службой и не заменяет консультацию врача, специалиста или другого лицензированного специалиста в области здравоохранения. Если вы в опасности или можете причинить вред себе или другим, немедленно обратитесь в экстренные службы или к живому специалисту.",
 
   "To the maximum extent permitted by law, we shall not be liable for any direct, indirect, incidental, punitive or consequential damages arising out of or in connection with your use of, or inability to use, the Service.":
     "В максимально допустимых законом пределах мы не несём ответственности за какие-либо прямые, косвенные, случайные, штрафные или косвенно причинённые убытки, возникающие из-за или в связи с использованием вами Сервиса или невозможностью его использования.",
@@ -737,7 +737,7 @@ export const ru: Record<string, string> = {
 
   // Voice modal – тексты на первом экране
   "Choose a voice and start the session. The assistant will listen to you and answer like a real psychologist.":
-    "Выберите голос и начните сессию. Ассистент будет слушать вас и отвечать, как настоящий психолог.",
+    "Выберите голос и начните сессию. Ассистент будет слушать вас и отвечать, как настоящий собеседник.",
   "You can switch between female and male voice by ending the call and starting again with a different option.":
     "Вы можете переключаться между женским и мужским голосом, завершив звонок и начав новый с другим вариантом.",
   "CHOOSE VOICE FOR THIS SESSION":
@@ -748,7 +748,7 @@ export const ru: Record<string, string> = {
   "Start with male voice": "Начать с мужским голосом",
 
   // Плашки и статусы в голосовом / чат / видео-ассистентах
-  "AI Psychologist": "AI-психолог",
+  "AI Psychologist": "AI-собеседник",
   "FEMALE VOICE": "ЖЕНСКИЙ ГОЛОС",
   "MALE VOICE": "МУЖСКОЙ ГОЛОС",
   "Assistant online": "Ассистент онлайн",
@@ -764,7 +764,7 @@ export const ru: Record<string, string> = {
   "Paused. Turn on microphone to continue.":
     "Пауза. Включите микрофон, чтобы продолжить.",
   "Choose an AI psychologist and press “Start video call” to begin.":
-    "Выберите AI-психолога и нажмите «Начать видеозвонок», чтобы начать.",
+    "Выберите AI-собеседника и нажмите «Начать видеозвонок», чтобы начать.",
   "Assistant is speaking. Please wait a moment.":
     "Ассистент говорит. Пожалуйста, подождите немного.",
   "Listening...": "Слушаю...",
@@ -786,7 +786,7 @@ export const ru: Record<string, string> = {
   "Your browser does not support voice recognition. Please use Chrome or another modern browser.": "Ваш браузер не поддерживает распознавание голоса. Пожалуйста, используйте Chrome или другой современный браузер.",
   "Microphone access was blocked. Please allow it in your browser settings and restart the call.": "Доступ к микрофону был заблокирован. Разрешите его в настройках браузера и перезапустите звонок.",
   "terms.acceptance.title": "Принятие условий",
-  "terms.acceptance.p1": "Получая доступ к психологическим сервисам TurbotaAI на базе искусственного интеллекта (Сервис), вы соглашаетесь соблюдать настоящие Условия использования и все применимые законы и правила. Если вы не согласны с какой-либо частью Условий, вы не должны пользоваться Сервисом.",
+  "terms.acceptance.p1": "Получая доступ к собеседникическим сервисам TurbotaAI на базе искусственного интеллекта (Сервис), вы соглашаетесь соблюдать настоящие Условия использования и все применимые законы и правила. Если вы не согласны с какой-либо частью Условий, вы не должны пользоваться Сервисом.",
   "terms.acceptance.p2": "Эти Условия являются юридически обязательным соглашением между вами и оператором сервиса TurbotaAI Psychology Services. Ваше дальнейшее использование Сервиса после публикации обновлений означает, что вы принимаете изменённые Условия.",
   "terms.eligibility.title": "Право использования сервиса",
   "terms.eligibility.intro": "Чтобы пользоваться Сервисом, вы подтверждаете, что:",
@@ -796,7 +796,7 @@ export const ru: Record<string, string> = {
   "terms.eligibility.item4": "вы предоставляете правдивую, точную и актуальную информацию, когда она запрашивается для регистрации или идентификации;",
   "terms.eligibility.item5": "вы самостоятельно отвечаете за конфиденциальность своих учётных данных (если аккаунт создан) и за все действия, совершаемые под вашей учётной записью.",
   "terms.use.title": "Использование сервиса",
-  "terms.use.p1": "TurbotaAI предоставляет инструменты психологической поддержки на основе искусственного интеллекта. Сервис не является медицинским учреждением и не оказывает услуги, приравниваемые к медицинскому или психиатрическому лечению.",
+  "terms.use.p1": "TurbotaAI предоставляет инструменты собеседникической поддержки на основе искусственного интеллекта. Сервис не является медицинским учреждением и не оказывает услуги, приравниваемые к медицинскому или специалистическому лечению.",
   "terms.use.p2": "Вы соглашаетесь использовать Сервис исключительно для личных, некоммерческих целей, если иное не предусмотрено отдельным письменным соглашением с нами. Вам запрещено:",
   "terms.use.item1": "копировать, изменять или распространять Сервис;",
   "terms.use.item2": "пытаться получить несанкционированный доступ к нашим системам или данным других пользователей;",
@@ -813,7 +813,7 @@ export const ru: Record<string, string> = {
   "terms.payment.p3": "Условия возврата средств (если они предусмотрены) описываются в отдельном разделе страницы тарифа или в нашей политике возвратов. Пожалуйста, внимательно ознакомьтесь с ними перед оплатой.",
   "terms.liability.title": "Ограничение ответственности",
   "terms.liability.p1": "Сервис TurbotaAI предоставляется «как есть» без каких-либо прямых или подразумеваемых гарантий относительно его точности, полноты или пригодности для ваших конкретных целей. Мы стремимся поддерживать стабильную работу Сервиса, но не гарантируем, что он будет доступен без перебоев и ошибок.",
-  "terms.liability.p2": "TurbotaAI не является экстренной службой и не заменяет консультации врача, психиатра или другого лицензированного специалиста в области здравоохранения. Если вы в опасности или можете причинить вред себе или другим, немедленно обратитесь в экстренные службы или к живому специалисту.",
+  "terms.liability.p2": "TurbotaAI не является экстренной службой и не заменяет консультации врача, специалиста или другого лицензированного специалиста в области здравоохранения. Если вы в опасности или можете причинить вред себе или другим, немедленно обратитесь в экстренные службы или к живому специалисту.",
   "terms.liability.p3": "В максимально допустимых законом пределах мы не несём ответственности за какие-либо прямые, косвенные, случайные, штрафные или косвенно причинённые убытки, возникшие из-за использования вами Сервиса или невозможности его использования.",
   "terms.changes.title": "Изменение условий",
   "terms.changes.p1": "Мы можем время от времени обновлять эти Условия. Дата последнего обновления указана в верхней части страницы. В случае существенных изменений мы можем дополнительно уведомить вас через Сервис или по электронной почте (если она у нас есть).",
@@ -895,9 +895,9 @@ export const ru: Record<string, string> = {
   "English": "Английский",
   "Russian": "Русский",
   "Ukrainian": "Украинский",
-  "Senior psychologist specializing in cognitive behavioral therapy with 15+ years of experience": "Старший психолог, специалист по когнитивно-поведенческой терапии (15+ лет опыта)",
-  "Clinical psychologist specializing in anxiety, depression, and workplace stress management": "Клинический психолог: тревожность, депрессия и управление стрессом на работе",
-  "Psychotherapist specializing in emotional regulation, trauma recovery, and relationship counseling": "Психотерапевт: эмоциональная регуляция, восстановление после травмы и консультации по отношениям",
+  "Senior psychologist specializing in cognitive behavioral therapy with 15+ years of experience": "Старший собеседник, специалист по когнитивно-поведенческой терапии (15+ лет опыта)",
+  "Clinical psychologist specializing in anxiety, depression, and workplace stress management": "Клинический собеседник: тревожность, депрессия и управление стрессом на работе",
+  "Psychotherapist specializing in emotional regulation, trauma recovery, and relationship counseling": "Психоспециалист: эмоциональная регуляция, восстановление после травмы и консультации по отношениям",
 
 
   // ─────────────────────

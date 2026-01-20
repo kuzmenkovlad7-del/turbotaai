@@ -1,7 +1,6 @@
 import { Suspense } from "react"
 import type { ReactNode } from "react"
 import type { Metadata, Viewport } from "next"
-import Script from "next/script"
 import { Inter } from "next/font/google"
 
 import "./globals.css"
@@ -13,28 +12,33 @@ import { PaywallToast } from "@/components/paywall-toast"
 import Header from "@/components/header"
 import Footer from "@/components/footer"
 import { APP_NAME } from "@/lib/app-config"
+import AssistantFab from "@/components/assistant-fab"
 
 const inter = Inter({ subsets: ["latin"] })
 
-const fullTitle = `${APP_NAME} — AI-psychologist nearby 24/7`
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+  "https://turbotaai.com"
+
+const fullTitle = `${APP_NAME} — AI companion nearby 24/7`
 
 export const metadata: Metadata = {
   title: {
-    default: "TurbotaAI — AI-psychologist nearby 24/7",
+    default: fullTitle,
     template: "%s | TurbotaAI",
   },
   description:
-    "TurbotaAI — AI-psychologist nearby 24/7. Live psychological support in chat, voice or video when you feel exhausted, anxious or alone.",
+    "TurbotaAI — always-on AI companion. Talk in chat, voice or video when you need calm support.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.ico",
     apple: "/apple-touch-icon.png",
   },
   openGraph: {
-    title: "TurbotaAI — AI-psychologist nearby 24/7",
+    title: fullTitle,
     description:
-      "Talk to an AI-powered psychologist in chat, voice or video. Gentle, always-on support when it feels bad, anxious or lonely.",
-    url: "https://turbotaai.com",
+      "Talk to an AI companion in chat, voice or video. Gentle, always-on support when it feels hard.",
+    url: siteUrl,
     siteName: "TurbotaAI",
     type: "website",
     images: [
@@ -42,21 +46,21 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "TurbotaAI — AI-powered psychological support",
+        alt: "TurbotaAI — AI companion",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
     title: fullTitle,
-    description: "AI-psychologist nearby 24/7. Talk in chat, voice or video when you need support.",
+    description:
+      "AI companion nearby 24/7. Talk in chat, voice or video when you need support.",
     images: ["/og-image.png"],
   },
   robots: {
     index: true,
     follow: true,
   },
-  generator: "v0.app",
 }
 
 export const viewport: Viewport = {
@@ -76,16 +80,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         suppressHydrationWarning
       >
         <Suspense fallback={null}>
-          {/* Voiceflow site-assistant widget */}
           <AuthProvider>
             <LanguageProvider>
               <RTLWrapper>
                 <AutoTranslate>
                   <div className="flex min-h-screen flex-col bg-soft-grid">
                     <PaywallToast />
-                  <Header />
+                    <Header />
                     <main className="flex-1">{children}</main>
                     <Footer />
+                    <AssistantFab />
                   </div>
                 </AutoTranslate>
               </RTLWrapper>

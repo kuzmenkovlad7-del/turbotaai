@@ -254,7 +254,7 @@ export default function SubscriptionClient() {
 
         <Card className="rounded-2xl border border-slate-200">
           <CardHeader>
-            <CardTitle className="text-2xl">How it works</CardTitle>
+            <CardTitle className="text-2xl">Getting started</CardTitle>
             <CardDescription>Production recurring flow</CardDescription>
           </CardHeader>
 
