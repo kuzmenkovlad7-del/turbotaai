@@ -1245,7 +1245,7 @@ if (res.status === 402) {
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
                 <Phone className="h-4 w-4" />
               </span>
-              {t("Voice session with AI-psychologist")}
+              {t("Voice session with AI companion")}
             </DialogTitle>
             <DialogDescription className="mt-1 text-xs text-indigo-100">
               {t("You can talk out loud, the assistant will listen, answer and voice the reply.")}

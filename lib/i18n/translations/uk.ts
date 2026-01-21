@@ -23,7 +23,7 @@ export const uk: Record<string, string> = {
   // ─────────────────────
   // Hero TurbotaAI (верх головної)
   // ─────────────────────
-  "AI-psychologist nearby 24/7": "Підтримка 24/7",
+  "AI companion nearby 24/7": "Підтримка 24/7",
   "Psychological support when it feels hard, powered by AI":
     "AI-співрозмовник, який завжди поруч.",
   "TurbotaAI listens without judgement, asks clarifying questions and gently guides you through breathing, grounding and simple exercises based on psychological books. In chat, voice or video — when you feel anxious, exhausted or alone.":
@@ -44,7 +44,8 @@ export const uk: Record<string, string> = {
   "Myitra Platform · AI + Psychology": "Платформа Myitra · ШІ + співрозмовникія",
   "Live Psychological Support,": "Жива емоційна підтримка,",
   "AI-Enhanced": "посилена ШІ",
-  "Licensed psychologists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
+  
+  "Professionals supported by AI assistants. We help gather history, maintain journals, and remind about sessions."::
     "Ліцензовані співрозмовники, яких підсилюють AI-асистенти. Ми допомагаємо збирати історію, вести щоденники та нагадувати про сесії.",
   "Talk Now": "Поговорити зараз",
   "View Services": "Переглянути послуги",
@@ -60,10 +61,11 @@ export const uk: Record<string, string> = {
   // ─────────────────────
   "Choose how you want to talk": "Обери як тобі зручніше бути на звʼязку.",
   "How would you like to contact us?": "Як тобі зараз зручніше почати розмову?",
-  "Start with a quick chat, a voice call or a video session with our AI-psychologist — choose the format that feels safest right now.":
+  
+  "Start with a quick chat, a voice call or a video session with our AI companion — choose the format that feels safest right now."::
     "Можна написати, поговорити чи побачити AI співрозмовника - обери те, що зараз для тебе найспокійніше.",
 
-  "Chat with AI-psychologist": "Чат з AI співрозмовником",
+  "Chat with AI companion": "Чат з AI співрозмовником",
   "Write what is happening in your own words and get structured support in a few minutes.":
     "Опиши своїми словами, що відбувається - і отримай мʼяку, зрозумілу підтримку вже за кілька хвилин.",
   "Best when you need privacy and want to stay silent around other people.":
@@ -72,7 +74,7 @@ export const uk: Record<string, string> = {
     "У будь-який момент можна повернутися до історії діалогу та вправ.",
   "Start chat": "Почати чат",
 
-  "Call AI-psychologist": "Голосова розмова з AI співрозмовником",
+  "Call AI companion": "Голосова розмова з AI співрозмовником",
   "Voice format for more lively support when you want to hear a calm voice.":
     "Коли хочеться почути спокійний голос і відчути, що хтось поруч.",
   "Helps reduce the feeling of loneliness in difficult moments.":
@@ -153,7 +155,8 @@ export const uk: Record<string, string> = {
 
   "Support, partnerships and press": "Підтримка, партнерства та преса",
   "Contact TurbotaAI team": "Звʼяжіться з командою TurbotaAI",
-  "Have questions about how the AI-psychologist works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible.":
+  
+  "Have questions about how TurbotaAI works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible."::
     "Є запитання про роботу AI співрозмовника, хочете обговорити партнерство чи потрібна допомога з акаунтом? Залиште заявку — ми відповімо якнайшвидше.",
 
   "For urgent situations, please contact local emergency services or a crisis line in your country. TurbotaAI is not a substitute for emergency medical help.":
@@ -295,7 +298,8 @@ export const uk: Record<string, string> = {
   // ─────────────────────
   "During the testing phase you can use the platform without creating an account.":
     "На етапі тестування ви можете користуватися платформою без створення акаунта.",
-  "Now you can start a chat, voice call or video session with the AI-psychologist directly from the main page.":
+  
+  "Now you can start a chat, voice call or video session with the AI companion directly from the main page."::
     "Зараз ви можете розпочати чат, голосовий дзвінок або відеосесію з AI співрозмовником прямо з головної сторінки.",
   "Later this page will be used for full registration, saving programs and personal settings.":
     "Пізніше ця сторінка буде використовуватися для повної реєстрації, збереження програм та особистих налаштувань.",
@@ -397,7 +401,8 @@ export const uk: Record<string, string> = {
   // About / Про продукт
   // ─────────────────────
   "About the product": "Про продукт",
-  "TurbotaAI — AI-psychologist that stays nearby when it feels hard":
+  
+  "TurbotaAI — an AI companion that stays nearby when it feels hard":
     "TurbotaAI — AI співрозмовник, який залишається поруч, коли важко",
   "TurbotaAI is a digital assistant built on psychological literature and modern AI. It does not replace a live therapist, but gives gentle, structured support when it is difficult to reach someone or when you need to talk right now — in chat, voice or video.":
     "TurbotaAI — це цифровий асистент, побудований на співрозмовникічній літературі та сучасному ШІ. Він не замінює живого фахівецьа, але дає мʼяку, структуровану підтримку, коли складно дотягнутися до когось або потрібно терміново виговоритися — у чаті, голосом чи по відео.",
@@ -490,7 +495,7 @@ export const uk: Record<string, string> = {
     "Напишіть тут, що з вами відбувається...",
 
   // Voice modal
-  "Voice session with AI-psychologist":
+  "Voice session with AI companion":
     "Голосова сесія з AI співрозмовником",
   "You can talk out loud, the assistant will listen, answer and voice the reply.":
     "Ви можете говорити вголос — асистент слухатиме, відповідатиме й озвучуватиме відповіді.",
@@ -947,6 +952,6 @@ export const uk: Record<string, string> = {
   "Work stress & perfectionism": "Стрес на роботі та перфекціонізм",
   "“The hardest part was starting. The assistant made it feel safe.”": "«Найважче було почати. З асистентом це відчувалося безпечно.»",
   "Marta, 25 — trainee": "Марта, 25 — стажер",
-  "First steps in therapy & anxiety": "Перші кроки в терапії та тривога",
+  "First steps & anxiety": "Перші кроки в терапії та тривога",
 }
 

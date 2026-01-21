@@ -20,7 +20,7 @@ export default function AboutPage() {
             </p>
             <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
               {t(
-                "TurbotaAI — AI-psychologist that stays nearby when it feels hard",
+                "TurbotaAI — AI companion that stays nearby when it feels hard",
               )}
             </h1>
             <p className="mt-4 max-w-2xl text-sm text-slate-600 md:text-base">

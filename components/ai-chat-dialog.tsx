@@ -229,7 +229,7 @@ if (res.status === 402) {
                   <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
                     <Sparkles className="h-4 w-4" />
                   </span>
-                  {t("Chat with AI-psychologist")}
+                  {t("Chat with AI companion")}
                 </DialogTitle>
                 <DialogDescription className="mt-1 text-xs text-indigo-100">
                   {t(

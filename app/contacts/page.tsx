@@ -52,7 +52,7 @@ export default function ContactsPage() {
               </h1>
               <p className="mx-auto max-w-3xl text-sm text-slate-600 sm:text-base">
                 {t(
-                  "Have questions about how the AI-psychologist works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible.",
+                  "Have questions about how the AI companion works, want to discuss partnership or need help with your account? Leave a request — we will answer as soon as possible.",
                 )}
               </p>
 

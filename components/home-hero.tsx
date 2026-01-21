@@ -42,7 +42,7 @@ export function HomeHero() {
           {/* бейджик статуса */}
           <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-white px-4 py-1 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
             <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(16,185,129,0.35)]" />
-            {t("AI-psychologist nearby 24/7")}
+            {t("AI companion nearby 24/7")}
           </div>
 
           <h1 className="mb-5 text-3xl font-bold leading-tight text-slate-900 sm:text-4xl md:text-5xl">
