@@ -5,20 +5,22 @@ import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { X, RotateCcw, ChevronLeft, MessageCircle, Phone, Video, Sparkles } from "lucide-react"
 
+type AiChatDialogProps = { open?: boolean; onOpenChange?: (v: boolean) => void }
+
 type Lang = "uk" | "ru" | "en"
 type Screen = "home" | "pick"
 
-const AiChatDialog = dynamic(
+const AiChatDialog = dynamic<AiChatDialogProps>(
   () => import("@/components/ai-chat-dialog").then((m: any) => m.AiChatDialog ?? m.default),
   { ssr: false }
 )
 
-const VoiceCallDialog = dynamic(
+const VoiceCallDialog = dynamic<AiChatDialogProps>(
   () => import("@/components/voice-call-dialog").then((m: any) => m.VoiceCallDialog ?? m.default),
   { ssr: false }
 )
 
-const VideoCallDialog = dynamic(
+const VideoCallDialog = dynamic<AiChatDialogProps>(
   () => import("@/components/video-call-dialog").then((m: any) => m.VideoCallDialog ?? m.default),
   { ssr: false }
 )

@@ -6,18 +6,24 @@ import { createRequire } from "module"
 const require = createRequire(import.meta.url)
 
 function loadTsDict(filePath, langGuess) {
-  const esbuild = require("esbuild")
-  const input = fs.readFileSync(filePath, "utf8")
+  let ts
+  try {
+    ts = require("typescript")
+  } catch (e) {
+    throw new Error("Missing dependency: typescript. Run: npm i -D typescript")
+  }
 
-  const out = esbuild.transformSync(input, {
-    loader: "ts",
-    format: "cjs",
-    target: "es2019",
-    sourcemap: false,
+  const input = fs.readFileSync(filePath, "utf8")
+  const out = ts.transpileModule(input, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2019,
+      esModuleInterop: true,
+    },
   })
 
   const mod = { exports: {} }
-  vm.runInNewContext(out.code, { module: mod, exports: mod.exports, require, process })
+  vm.runInNewContext(out.outputText, { module: mod, exports: mod.exports, require, process })
 
   const exp = mod.exports || {}
   const byLang =
@@ -75,35 +81,37 @@ const en = loadTsDict(files.en, "en")
 const ru = loadTsDict(files.ru, "ru")
 const uk = loadTsDict(files.uk, "uk")
 
-// 1) Патчи EN: закрываем missing из usage-check + унифицируем психолог -> companion (в UI)
-const patchEN = {
+// === CRITICAL: keys missing in EN (from usage-check) ===
+const mustExistInEN = {
   "AI Psychologist": "AI companion",
   "AI specialist Video Call": "AI companion Video Call",
   "Choose Your AI specialist": "Choose Your AI companion",
   "Choose an AI specialist and press “Start video call” to begin.": "Choose an AI companion and press “Start video call” to begin.",
-  "Support for everyday conversations, powered by AI": "Support for everyday conversations, powered by AI",
+  "Choose voice for this session": "Choose voice for this session",
 
-  "Home": "Home",
+  "AI assistant is temporarily unavailable. Please try again a bit later.": "AI assistant is temporarily unavailable. Please try again a bit later.",
+  "Assistant is speaking. Please wait a moment.": "Assistant is speaking. Please wait a moment.",
+  "Assistant is speaking...": "Assistant is speaking...",
+
   "About": "About",
   "Contacts": "Contacts",
+  "Home": "Home",
+  "Languages": "Languages",
   "Pricing": "Pricing",
   "Profile": "Profile",
-  "Languages": "Languages",
 
-  "Welcome Back": "Welcome Back",
-  "Enter your credentials": "Enter your credentials",
   "Already have an account?": "Already have an account?",
   "Create account": "Create account",
   "Creating account...": "Creating account...",
-  "Sign in to continue": "Sign in to continue",
-  "Signing in...": "Signing in...",
-  "Sign Out": "Sign Out",
+  "Enter your credentials": "Enter your credentials",
   "Register to save your sessions and preferences.": "Register to save your sessions and preferences.",
-
-  "Full name (optional)": "Full name (optional)",
   "Password": "Password",
   "Repeat password": "Repeat password",
   "Passwords do not match": "Passwords do not match",
+  "Full name (optional)": "Full name (optional)",
+  "Sign Out": "Sign Out",
+  "Sign in to continue": "Sign in to continue",
+  "Signing in...": "Signing in...",
 
   "Select": "Select",
   "Selected": "Selected",
@@ -120,214 +128,82 @@ const patchEN = {
   "Listening...": "Listening...",
   "Thinking...": "Thinking...",
   "Speaking...": "Speaking...",
-  "Assistant is speaking...": "Assistant is speaking...",
-  "Assistant is speaking. Please wait a moment.": "Assistant is speaking. Please wait a moment.",
-
-  "Microphone is not available.": "Microphone is not available.",
-  "Failed to start the call. Please check your microphone and camera permissions.": "Failed to start the call. Please check your microphone and camera permissions.",
-  "Your browser does not support voice recording. Please use Chrome or another modern browser.": "Your browser does not support voice recording. Please use Chrome or another modern browser.",
-  "AI assistant is temporarily unavailable. Please try again a bit later.": "AI assistant is temporarily unavailable. Please try again a bit later.",
 
   "Start with female voice": "Start with female voice",
   "Start with male voice": "Start with male voice",
-  "Choose voice for this session": "Choose voice for this session",
 
-  // чтобы не зависеть от того какие ключи использует hero
-  "Live Psychological Support,": "AI companion,",
-  "Live emotional support,": "AI companion,",
-  "AI-Enhanced": "always nearby",
-  "AI emotional support": "Emotional support",
+  "Failed to start the call. Please check your microphone and camera permissions.": "Failed to start the call. Please check your microphone and camera permissions.",
+  "Microphone is not available.": "Microphone is not available.",
+  "Your browser does not support voice recording. Please use Chrome or another modern browser.": "Your browser does not support voice recording. Please use Chrome or another modern browser.",
 
-  "Professionals supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
-    "A calm and private space to talk. Speak, breathe, and feel supported by an AI companion built for emotional care.",
-  "Licensed specialists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
-    "A calm and private space to talk. Speak, breathe, and feel supported by an AI companion built for emotional care.",
+  "Support for everyday conversations, powered by AI": "Support for everyday conversations, powered by AI",
+  "Welcome Back": "Welcome Back",
 }
 
-for (const [k, v] of Object.entries(patchEN)) en[k] = v
+for (const [k, v] of Object.entries(mustExistInEN)) en[k] = v
 
-// 2) Патчи RU
-const patchRU = {
-  "Home": "Главная",
-  "About": "О нас",
-  "Contacts": "Контакты",
-  "Pricing": "Цены",
-  "Profile": "Профиль",
-  "Languages": "Языки",
-
-  "AI Psychologist": "AI-собеседник",
-  "AI specialist Video Call": "Видеозвонок с AI-собеседником",
-  "Choose Your AI specialist": "Выберите AI-собеседника",
-  "Choose an AI specialist and press “Start video call” to begin.": "Выберите AI-собеседника и нажмите «Начать видеозвонок».",
-  "Support for everyday conversations, powered by AI": "Поддержка для повседневных разговоров, усиленная AI",
-
-  "Welcome Back": "С возвращением",
-  "Enter your credentials": "Введите данные для входа",
-  "Already have an account?": "Уже есть аккаунт?",
-  "Create account": "Создать аккаунт",
-  "Creating account...": "Создаём аккаунт...",
-  "Sign in to continue": "Войдите, чтобы продолжить",
-  "Signing in...": "Входим...",
-  "Sign Out": "Выйти",
-  "Register to save your sessions and preferences.": "Зарегистрируйтесь, чтобы сохранять диалоги и настройки.",
-
-  "Full name (optional)": "Имя (необязательно)",
-  "Password": "Пароль",
-  "Repeat password": "Повторите пароль",
-  "Passwords do not match": "Пароли не совпадают",
-
-  "Select": "Выбрать",
-  "Selected": "Выбрано",
-  "Select Language": "Выберите язык",
-
-  "Send": "Отправить",
-  "Sending": "Отправка",
-  "Loading...": "Загрузка...",
-
-  "Connecting": "Подключение",
-  "Connecting...": "Подключаемся...",
-  "Connection error. Please try again.": "Ошибка соединения. Попробуйте ещё раз.",
-
-  "Listening...": "Слушаю...",
-  "Thinking...": "Думаю...",
-  "Speaking...": "Говорю...",
-  "Assistant is speaking...": "Ассистент говорит...",
-  "Assistant is speaking. Please wait a moment.": "Ассистент говорит. Подождите немного.",
-
-  "Microphone is not available.": "Микрофон недоступен.",
-  "Failed to start the call. Please check your microphone and camera permissions.": "Не удалось начать звонок. Проверьте доступ к микрофону и камере.",
-  "Your browser does not support voice recording. Please use Chrome or another modern browser.": "Ваш браузер не поддерживает запись голоса. Используйте Chrome или другой современный браузер.",
-  "AI assistant is temporarily unavailable. Please try again a bit later.": "Ассистент временно недоступен. Попробуйте чуть позже.",
-
-  "Start with female voice": "Женский голос",
-  "Start with male voice": "Мужской голос",
-  "Choose voice for this session": "Выберите голос для сессии",
-
-  // hero
-  "Live Psychological Support,": "AI-собеседник,",
-  "Live emotional support,": "AI-собеседник,",
-  "AI-Enhanced": "который всегда рядом",
-
-  "Professionals supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
-    "Спокойное и приватное пространство для разговора. Поговорите, успокойтесь и почувствуйте поддержку от AI-собеседника для эмоциональной заботы.",
-  "Licensed specialists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
-    "Спокойное и приватное пространство для разговора. Поговорите, успокойтесь и почувствуйте поддержку от AI-собеседника для эмоциональной заботы.",
-
-  // ключи которых не хватало по audit RU vs EN
-  "AI Companion Video Call": "Видеозвонок с AI-собеседником",
-  "Choose Your AI Companion": "Выберите AI-собеседника",
-  "Select the AI companion you'd like to speak with during your video call.": "Выберите AI-собеседника для видеозвонка.",
-  "Press the button to start the call. Allow microphone access, then speak as if with a real specialist.": "Нажмите кнопку старта, разрешите микрофон и говорите спокойно в своём темпе.",
-  "Your Message": "Ваше сообщение",
+// === Remove doctor/psychology/therapy from VALUES (keys remain as-is) ===
+function sanitizeEN(s) {
+  return String(s)
+    .replaceAll("psychologist", "companion")
+    .replaceAll("psychiatrist", "professional")
+    .replaceAll("doctor", "professional")
+    .replaceAll("therapy", "support")
+    .replaceAll("psychological", "emotional")
 }
 
-for (const [k, v] of Object.entries(patchRU)) ru[k] = v
-
-// 3) Патчи UK
-const patchUK = {
-  "Home": "Головна",
-  "About": "Про нас",
-  "Contacts": "Контакти",
-  "Pricing": "Ціни",
-  "Profile": "Профіль",
-  "Languages": "Мови",
-
-  "AI Psychologist": "AI співрозмовник",
-  "AI specialist Video Call": "Відео розмова з AI співрозмовником",
-  "Choose Your AI specialist": "Оберіть AI співрозмовника",
-  "Choose an AI specialist and press “Start video call” to begin.": "Оберіть AI співрозмовника і натисніть «Почати відео розмову».",
-  "Support for everyday conversations, powered by AI": "Підтримка для щоденних розмов, підсилена AI",
-
-  "Welcome Back": "З поверненням",
-  "Enter your credentials": "Введіть дані для входу",
-  "Already have an account?": "Вже є акаунт?",
-  "Create account": "Створити акаунт",
-  "Creating account...": "Створюємо акаунт...",
-  "Sign in to continue": "Увійдіть щоб продовжити",
-  "Signing in...": "Входимо...",
-  "Sign Out": "Вийти",
-  "Register to save your sessions and preferences.": "Зареєструйтесь, щоб зберігати діалоги та налаштування.",
-
-  "Full name (optional)": "Імʼя (необовʼязково)",
-  "Password": "Пароль",
-  "Repeat password": "Повторіть пароль",
-  "Passwords do not match": "Паролі не збігаються",
-
-  "Select": "Обрати",
-  "Selected": "Обрано",
-  "Select Language": "Оберіть мову",
-
-  "Send": "Надіслати",
-  "Sending": "Надсилаємо",
-  "Loading...": "Завантаження...",
-
-  "Connecting": "Підключення",
-  "Connecting...": "Підключаємось...",
-  "Connection error. Please try again.": "Помилка зʼєднання. Спробуйте ще раз.",
-
-  "Listening...": "Слухаю...",
-  "Thinking...": "Думаю...",
-  "Speaking...": "Говорю...",
-  "Assistant is speaking...": "Асистент говорить...",
-  "Assistant is speaking. Please wait a moment.": "Асистент говорить. Зачекайте трохи.",
-
-  "Microphone is not available.": "Мікрофон недоступний.",
-  "Failed to start the call. Please check your microphone and camera permissions.": "Не вдалося почати дзвінок. Перевірте доступ до мікрофона та камери.",
-  "Your browser does not support voice recording. Please use Chrome or another modern browser.": "Ваш браузер не підтримує запис голосу. Використайте Chrome або інший сучасний браузер.",
-  "AI assistant is temporarily unavailable. Please try again a bit later.": "Асистент тимчасово недоступний. Спробуйте трохи пізніше.",
-
-  "Start with female voice": "Жіночий голос",
-  "Start with male voice": "Чоловічий голос",
-  "Choose voice for this session": "Оберіть голос для сесії",
-
-  // hero
-  "Live Psychological Support,": "AI співрозмовник,",
-  "Live emotional support,": "AI співрозмовник,",
-  "AI-Enhanced": "який завжди поруч",
-
-  "Professionals supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
-    "Спокійний і безпечний простір для розмови. Поговори, заспокойся і відчуй підтримку з AI співрозмовником для емоційної турботи.",
-  "Licensed specialists supported by AI assistants. We help gather history, maintain journals, and remind about sessions.":
-    "Спокійний і безпечний простір для розмови. Поговори, заспокойся і відчуй підтримку з AI співрозмовником для емоційної турботи.",
-
-  // audit missing
-  "AI Companion Video Call": "Відео розмова з AI співрозмовником",
-  "Choose Your AI Companion": "Оберіть AI співрозмовника",
-  "Select the AI companion you'd like to speak with during your video call.": "Оберіть AI співрозмовника для відео розмови.",
-  "Press the button to start the call. Allow microphone access, then speak as if with a real specialist.": "Натисніть старт, дозвольте мікрофон і говоріть у своєму темпі.",
+function sanitizeRU(s) {
+  return String(s)
+    .replaceAll("психолог", "співрозмовник")
+    .replaceAll("психиатр", "фахівець")
+    .replaceAll("доктор", "фахівець")
+    .replaceAll("терапи", "підтримк")
 }
 
-for (const [k, v] of Object.entries(patchUK)) uk[k] = v
+function sanitizeUK(s) {
+  return String(s)
+    .replaceAll("психолог", "співрозмовник")
+    .replaceAll("психіатр", "фахівець")
+    .replaceAll("доктор", "фахівець")
+    .replaceAll("терапі", "підтримц")
+}
 
-// 4) UNION KEYS: чтобы везде было одно и то же
+function applySanitize(dict, fn) {
+  for (const k of Object.keys(dict)) dict[k] = fn(dict[k])
+}
+
+applySanitize(en, sanitizeEN)
+applySanitize(ru, sanitizeRU)
+applySanitize(uk, sanitizeUK)
+
+// === Strong overrides for disclaimer keys (no doctors/psychology) ===
+const disclaimerEN = {
+  "TurbotaAI is not a replacement for a licensed psychologist or psychiatrist.": "TurbotaAI is not a replacement for professional help.",
+  "• TurbotaAI is not a doctor and not a psychiatrist.": "• TurbotaAI is a supportive service, not medical care.",
+  "• The assistant is a supportive tool that can live alongside individual or group therapy.": "• The assistant is a supportive tool that can complement your personal support.",
+  "• Answers are based on selected psychological books and materials that were tested with a psychologist.": "• Answers are based on carefully selected well-being materials reviewed by experts.",
+  "TurbotaAI is not an emergency service and does not replace consultations with a doctor, psychiatrist or other licensed healthcare professional. If you are in danger or may harm yourself or others, you must immediately contact emergency services or a human specialist.":
+    "TurbotaAI is not an emergency service and does not replace professional help. If you are in danger or may harm yourself or others, contact local emergency services immediately.",
+}
+
+for (const [k, v] of Object.entries(disclaimerEN)) {
+  en[k] = v
+  ru[k] = ru[k] ?? v
+  uk[k] = uk[k] ?? v
+}
+
+// === UNION keys across EN/RU/UK ===
 const union = new Set([...Object.keys(en), ...Object.keys(ru), ...Object.keys(uk)])
 
-function fillMissing(dict, fallbackDict) {
+function fillMissing(dict) {
   for (const k of union) {
-    if (!(k in dict)) {
-      dict[k] = fallbackDict?.[k] ?? en[k] ?? k
-    }
+    if (!(k in dict)) dict[k] = en[k] ?? k
   }
 }
 
-fillMissing(en, en)
-fillMissing(ru, en)
-fillMissing(uk, en)
-
-// 5) ПОДЧИСТКА: убираем явно плохие автозамены "specialist or specialist"
-function cleanupBadPhrases(dict) {
-  for (const k of Object.keys(dict)) {
-    const v = String(dict[k])
-    dict[k] = v
-      .replaceAll("licensed specialist or specialist", "professional support")
-      .replaceAll("a specialist, specialist", "a professional")
-      .replaceAll("специалист или специалист", "профессиональная помощь")
-      .replaceAll("фахівець або фахівець", "професійна допомога")
-  }
-}
-cleanupBadPhrases(en)
-cleanupBadPhrases(ru)
-cleanupBadPhrases(uk)
+fillMissing(en)
+fillMissing(ru)
+fillMissing(uk)
 
 // WRITE BACK
 const enName = detectExportName(files.en, "en")
@@ -338,4 +214,4 @@ writeTsDict(files.en, enName, en)
 writeTsDict(files.ru, ruName, ru)
 writeTsDict(files.uk, ukName, uk)
 
-console.log("OK: synced translations EN/RU/UK with union keys + patched critical UI copy")
+console.log("OK: i18n synced EN/RU/UK, missing keys added, values sanitized")
