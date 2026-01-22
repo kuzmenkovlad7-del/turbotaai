@@ -1,12 +1,12 @@
-'use client'
-
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useLanguage } from "@/lib/i18n/language-context";
+import { useLanguage } from "@/lib/i18n/language-context"
+
+type Lang = "uk" | "ru" | "en"
 
 type SubSummary = {
   ok: boolean
@@ -20,9 +20,9 @@ type SubSummary = {
 }
 
 function fmt(v: string | null) {
-  if (!v) return "Not active"
+  if (!v) return "—"
   const d = new Date(v)
-  if (Number.isNaN(d.getTime())) return "Not active"
+  if (Number.isNaN(d.getTime())) return "—"
   return d.toLocaleString()
 }
 
@@ -30,11 +30,91 @@ export default function SubscriptionClient() {
   const { t } = useLanguage()
   const router = useRouter()
 
+  const [lang, setLang] = useState<Lang>("uk")
+
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<SubSummary | null>(null)
   const [busy, setBusy] = useState<null | "pay" | "cancel" | "resume" | "promo">(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [promoCode, setPromoCode] = useState("")
+
+  useEffect(() => {
+    const raw = (document.documentElement.lang || "uk").toLowerCase()
+    const v: Lang = raw.startsWith("ru") ? "ru" : raw.startsWith("en") ? "en" : "uk"
+    setLang(v)
+  }, [])
+
+  const copy = useMemo(() => {
+    const c = {
+      uk: {
+        title: "Підписка",
+        manageTitle: "Керування",
+        manageDesc: "Щомісячна підписка",
+        howTitle: "Як це працює",
+        howDesc: "Автосписання в продакшені",
+        signIn: "Будь ласка, увійдіть, щоб керувати підпискою.",
+        signInBtn: "Увійти",
+        status: "Статус",
+        access: "Доступ",
+        accessActive: "Активний",
+        accessInactive: "Неактивний",
+        until: "До",
+        autoRenew: "Автосписання",
+        autoRenewOn: "Увімкнено",
+        autoRenewOff: "Вимкнено",
+        pay: "Оформити підписку",
+        cancel: "Скасувати автосписання",
+        resume: "Відновити автосписання",
+        promo: "Промокод",
+        apply: "Застосувати",
+      },
+      ru: {
+        title: "Подписка",
+        manageTitle: "Управление",
+        manageDesc: "Ежемесячная подписка",
+        howTitle: "Как это работает",
+        howDesc: "Автосписание в продакшене",
+        signIn: "Пожалуйста, войдите, чтобы управлять подпиской.",
+        signInBtn: "Войти",
+        status: "Статус",
+        access: "Доступ",
+        accessActive: "Активен",
+        accessInactive: "Неактивен",
+        until: "До",
+        autoRenew: "Автосписание",
+        autoRenewOn: "Включено",
+        autoRenewOff: "Выключено",
+        pay: "Оформить подписку",
+        cancel: "Отменить автосписание",
+        resume: "Возобновить автосписание",
+        promo: "Промокод",
+        apply: "Применить",
+      },
+      en: {
+        title: "Subscription",
+        manageTitle: "Manage",
+        manageDesc: "Monthly subscription",
+        howTitle: "How it works",
+        howDesc: "Auto-renew in production",
+        signIn: "Please sign in to manage your subscription.",
+        signInBtn: "Sign in",
+        status: "Status",
+        access: "Access",
+        accessActive: "Active",
+        accessInactive: "Inactive",
+        until: "Until",
+        autoRenew: "Auto-renew",
+        autoRenewOn: "Enabled",
+        autoRenewOff: "Disabled",
+        pay: "Start subscription",
+        cancel: "Cancel auto-renew",
+        resume: "Resume auto-renew",
+        promo: "Promo code",
+        apply: "Apply",
+      },
+    }
+    return c[lang]
+  }, [lang])
 
   async function load() {
     setLoading(true)
@@ -56,7 +136,6 @@ export default function SubscriptionClient() {
     setBusy("pay")
     setMsg(null)
     try {
-      // этот URL вернёт HTML form auto-submit на WayForPay
       window.location.href = "/api/billing/wayforpay/purchase?planId=monthly"
     } finally {
       setBusy(null)
@@ -76,7 +155,7 @@ export default function SubscriptionClient() {
         setMsg(d?.error || "Failed to cancel auto-renew")
         return
       }
-      setMsg("Auto-renew canceled")
+      setMsg(lang === "ru" ? "Автосписание отменено" : lang === "en" ? "Auto-renew canceled" : "Автосписання скасовано")
       await load()
     } finally {
       setBusy(null)
@@ -96,7 +175,7 @@ export default function SubscriptionClient() {
         setMsg(d?.error || "Failed to resume auto-renew")
         return
       }
-      setMsg("Auto-renew resumed")
+      setMsg(lang === "ru" ? "Автосписание возобновлено" : lang === "en" ? "Auto-renew resumed" : "Автосписання відновлено")
       await load()
     } finally {
       setBusy(null)
@@ -121,7 +200,7 @@ export default function SubscriptionClient() {
         return
       }
       setPromoCode("")
-      setMsg("Promo applied")
+      setMsg(lang === "ru" ? "Промокод применён" : lang === "en" ? "Promo applied" : "Промокод застосовано")
       await load()
     } finally {
       setBusy(null)
@@ -129,153 +208,116 @@ export default function SubscriptionClient() {
   }
 
   const ok = !!data?.ok
+  const hasAccess = !!data?.hasAccess
   const autoRenew = !!data?.autoRenew
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-12">
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-4xl font-semibold">{t("Subscription")}</h1>
+    <div className="mx-auto max-w-6xl px-4 py-12">
+      <h1 className="text-4xl font-semibold tracking-tight">{copy.title}</h1>
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            className="rounded-full border border-slate-200"
-            onClick={() => router.push("/profile")}
-          >
-            Profile
-          </Button>
-          <Button
-            variant="outline"
-            className="rounded-full border border-slate-200"
-            onClick={() => router.push("/pricing")}
-          >
-            Pricing
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="rounded-2xl border border-slate-200">
+      <div className="mt-10 grid gap-6 md:grid-cols-2">
+        <Card className="rounded-3xl">
           <CardHeader>
-            <CardTitle className="text-2xl">{t("Manage")}</CardTitle>
-            <CardDescription>{t("Monthly recurring subscription")}</CardDescription>
+            <CardTitle className="text-2xl">{copy.manageTitle}</CardTitle>
+            <CardDescription>{copy.manageDesc}</CardDescription>
           </CardHeader>
 
-          <CardContent className="text-sm text-slate-700">
-            {loading ? (
-              <div className="text-slate-500">Loading...</div>
-            ) : !ok ? (
-              <div className="text-slate-500">{t("Please sign in to manage subscription.")}</div>
-            ) : (
-              <>
-                <div className="grid gap-3">
-                  <div className="rounded-xl border border-slate-200 bg-white p-4">
-                    <div className="text-xs text-slate-500">{t("Access until")}</div>
-                    <div className="mt-1 text-base font-semibold">{fmt(data?.accessUntil ?? null)}</div>
-                    <div className="mt-3 text-xs text-slate-500">{t("Paid until / Promo until")}</div>
-                    <div className="mt-1 text-sm text-slate-700">
-                      Paid: {fmt(data?.paidUntil ?? null)}<br />
-                      Promo: {fmt(data?.promoUntil ?? null)}
-                    </div>
-                  </div>
+          <CardContent className="space-y-4">
+            {!ok && (
+              <div className="text-sm text-slate-600">
+                {copy.signIn}
+                <div className="mt-4">
+                  <Button onClick={() => router.push("/login")}>{copy.signInBtn}</Button>
+                </div>
+              </div>
+            )}
 
-                  <div className="rounded-xl border border-slate-200 bg-white p-4">
-                    <div className="text-xs text-slate-500">{t("Auto-renew")}</div>
-                    <div className="mt-1 text-sm">
-                      {autoRenew ? "Enabled" : "Disabled"}
+            {ok && (
+              <>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="grid gap-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">{copy.access}</span>
+                      <span className="font-medium">{hasAccess ? copy.accessActive : copy.accessInactive}</span>
                     </div>
-                    <div className="mt-2 text-xs text-slate-500">
-                      Order reference: {data?.wfpOrderReference || "Not set yet"}
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">{copy.until}</span>
+                      <span className="font-medium">{fmt(data?.accessUntil ?? null)}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">{copy.autoRenew}</span>
+                      <span className="font-medium">{autoRenew ? copy.autoRenewOn : copy.autoRenewOff}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-3">
-                  <Button
-                    className="w-full rounded-full"
-                    disabled={busy !== null}
-                    onClick={payMonthly}
-                  >
-                    {busy === "pay" ? "Redirecting..." : (data?.hasAccess ? "Extend subscription" : "Start subscription")}
-                  </Button>
+                {msg && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                    {msg}
+                  </div>
+                )}
 
-                  {autoRenew ? (
-                    <Button
-                      variant="outline"
-                      className="w-full rounded-full border border-slate-200"
-                      disabled={busy !== null}
-                      onClick={cancelAutoRenew}
-                    >
-                      {busy === "cancel" ? "Canceling..." : "Cancel auto-renew"}
+                <div className="flex flex-col gap-3">
+                  {!hasAccess && (
+                    <Button onClick={payMonthly} disabled={busy === "pay"}>
+                      {copy.pay}
                     </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      className="w-full rounded-full border border-slate-200"
-                      disabled={busy !== null}
-                      onClick={resumeAutoRenew}
-                    >
-                      {busy === "resume" ? "Resuming..." : "Resume auto-renew"}
+                  )}
+
+                  {hasAccess && autoRenew && (
+                    <Button variant="outline" onClick={cancelAutoRenew} disabled={busy === "cancel"}>
+                      {copy.cancel}
+                    </Button>
+                  )}
+
+                  {hasAccess && !autoRenew && (
+                    <Button variant="outline" onClick={resumeAutoRenew} disabled={busy === "resume"}>
+                      {copy.resume}
                     </Button>
                   )}
                 </div>
 
-                <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="text-xs text-slate-500">Promo code</div>
+                <div className="pt-2">
+                  <div className="text-sm text-slate-500">{copy.promo}</div>
                   <div className="mt-2 flex gap-2">
                     <input
                       value={promoCode}
                       onChange={(e) => setPromoCode(e.target.value)}
-                      placeholder={t("Enter promo code")}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none"
+                      className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                      placeholder={lang === "ru" ? "Введите промокод" : lang === "en" ? "Enter promo code" : "Введіть промокод"}
                     />
-                    <Button
-                      variant="outline"
-                      className="rounded-xl border border-slate-200"
-                      disabled={busy !== null}
-                      onClick={redeemPromo}
-                    >
-                      {busy === "promo" ? "Applying..." : "Apply"}
+                    <Button onClick={redeemPromo} disabled={busy === "promo"}>
+                      {copy.apply}
                     </Button>
                   </div>
                 </div>
-
-                {msg ? (
-                  <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                    {msg}
-                  </div>
-                ) : null}
-
-                <div className="pt-3 text-xs text-slate-500">
-                  Cancel auto-renew does not remove access immediately. It only stops future recurring charges.
-                </div>
               </>
+            )}
+
+            {loading && (
+              <div className="text-sm text-slate-500">
+                {lang === "ru" ? "Загрузка..." : lang === "en" ? "Loading..." : "Завантаження..."}
+              </div>
             )}
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border border-slate-200">
+        <Card className="rounded-3xl">
           <CardHeader>
-            <CardTitle className="text-2xl">{t("Getting started")}</CardTitle>
-            <CardDescription>{t("Production recurring flow")}</CardDescription>
+            <CardTitle className="text-2xl">{copy.howTitle}</CardTitle>
+            <CardDescription>{copy.howDesc}</CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-2 text-sm text-slate-700">
-            <div>
-              <span className="font-medium">Start:</span> first payment creates monthly auto-renew at WayForPay.
-            </div>
-            <div>
-              <span className="font-medium">Auto-renew:</span> WayForPay charges monthly automatically.
-            </div>
-            <div>
-              <span className="font-medium">Cancel:</span> sends SUSPEND to WayForPay and disables future charges.
-            </div>
-            <div>
-              <span className="font-medium">Resume:</span> sends RESUME to WayForPay and re-enables future charges.
-            </div>
-            <div className="pt-4 text-xs text-slate-500">
-              {t("Access in the app is controlled by subscription status in profiles.")}
-            </div>
+          <CardContent>
+            <ul className="mt-2 space-y-2 text-sm text-slate-600">
+              <li>{t("subscription.how.start")}</li>
+              <li>{t("subscription.how.renew")}</li>
+              <li>{t("subscription.how.cancel")}</li>
+              <li>{t("subscription.how.resume")}</li>
+              <li className="pt-2 text-xs text-slate-500">{t("subscription.how.note")}</li>
+            </ul>
           </CardContent>
         </Card>
       </div>

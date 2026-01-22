@@ -695,6 +695,19 @@ export const ru = {
   
   "nav.pricing": "Тарифы",
   "Logged in": "Вход выполнен",
-  "You used all free questions. Subscribe to continue.": "Вы использовали все бесплатные вопросы. Подпишитесь, чтобы продолжить."} as const
+  "You used all free questions. Subscribe to continue.": "Вы использовали все бесплатные вопросы. Подпишитесь, чтобы продолжить.",
+  "merchant.title": "Контактная информация компании",
+  "merchant.fullName": "Полное наименование",
+  "merchant.ipn": "ИНН",
+  "merchant.legalAddress": "Юридический адрес",
+  "merchant.actualAddress": "Фактический адрес",
+  "merchant.phone": "Телефон",
+  "merchant.email": "Email",
+  "subscription.how.start": "Подписка активируется после первой успешной оплаты.",
+  "subscription.how.renew": "Далее она автоматически продлевается каждый месяц, пока вы не отмените её.",
+  "subscription.how.cancel": "Отменить можно в любой момент. Доступ сохранится до конца оплаченного периода.",
+  "subscription.how.resume": "При необходимости подписку можно возобновить позже.",
+  "subscription.how.note": "Оплата обрабатывается через WayForPay."
+} as const
 
 export default ru

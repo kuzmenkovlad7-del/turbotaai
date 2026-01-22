@@ -695,6 +695,19 @@ export const uk = {
   
   "nav.pricing": "Тарифи",
   "Logged in": "Увійшли",
-  "You used all free questions. Subscribe to continue.": "Ви використали всі безкоштовні питання. Підпишіться, щоб продовжити."} as const
+  "You used all free questions. Subscribe to continue.": "Ви використали всі безкоштовні питання. Підпишіться, щоб продовжити.",
+  "merchant.title": "Контактна інформація компанії",
+  "merchant.fullName": "Повне найменування",
+  "merchant.ipn": "ІПН",
+  "merchant.legalAddress": "Юридична адреса",
+  "merchant.actualAddress": "Фактична адреса",
+  "merchant.phone": "Телефон",
+  "merchant.email": "Email",
+  "subscription.how.start": "Підписка активується після першої успішної оплати.",
+  "subscription.how.renew": "Далі вона автоматично продовжується щомісяця, поки ви її не скасуєте.",
+  "subscription.how.cancel": "Скасувати можна будь-коли. Доступ збережеться до кінця оплаченого періоду.",
+  "subscription.how.resume": "За потреби підписку можна відновити пізніше.",
+  "subscription.how.note": "Оплата обробляється через WayForPay."
+} as const
 
 export default uk

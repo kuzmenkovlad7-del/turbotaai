@@ -703,6 +703,19 @@ export const en = {
   "All payments are processed securely. If you have questions — contact support.": "All payments are processed securely. If you have questions — contact support.",
   "Calm AI companion for everyday conversations and support": "Calm AI companion for everyday conversations and support",
   "Warm AI companion for supportive conversations": "Warm AI companion for supportive conversations",
+
+  "merchant.title": "Company contact information",
+  "merchant.fullName": "Legal name",
+  "merchant.ipn": "Tax ID",
+  "merchant.legalAddress": "Legal address",
+  "merchant.actualAddress": "Actual address",
+  "merchant.phone": "Phone",
+  "merchant.email": "Email",
+  "subscription.how.start": "Your subscription starts after the first successful payment.",
+  "subscription.how.renew": "It automatically renews monthly until you cancel it.",
+  "subscription.how.cancel": "You can cancel anytime. Access stays active until the end of the paid period.",
+  "subscription.how.resume": "If needed, you can resume your subscription later.",
+  "subscription.how.note": "Payments are processed by WayForPay."
 } as const
 
 export default en
