@@ -91,7 +91,7 @@ export default function AssistantFab() {
     <>
       {/* Panel (почти весь экран, оставляем место снизу для кнопки-стрелки) */}
       {panelOpen && (
-        <div className="fixed inset-0 z-[60] pointer-events-none">
+        <div className="fixed inset-0 z-[1] pointer-events-none">
           <div className="absolute inset-0 bg-black/20 pointer-events-auto" onClick={() => setPanelOpen(false)} />
 
           <div className="absolute right-4 top-4 bottom-[76px] w-[380px] max-w-[calc(100vw-32px)] rounded-2xl bg-white shadow-2xl border border-black/5 pointer-events-auto overflow-hidden">
@@ -162,7 +162,7 @@ export default function AssistantFab() {
       )}
 
       {/* FAB / Collapse button */}
-      <div className="fixed bottom-4 right-4 z-[70]">
+      <div className="fixed bottom-4 right-4 z-[1]">
         {!panelOpen ? (
           <button
             onClick={() => setPanelOpen(true)}

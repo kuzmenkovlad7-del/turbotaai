@@ -2,6 +2,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLanguage } from "@/lib/i18n/language-context"
+import { MERCHANT_LEGAL_ADDRESS, MERCHANT_ACTUAL_ADDRESS } from "@/lib/merchant-address"
+
 
 function getPublicMerchantInfo() {
   return {
@@ -38,8 +40,8 @@ export function MerchantDetailsCard() {
         <div className="grid gap-1">
           <Row label={t("Legal name")} value={info.legalName} />
           <Row label={t("Tax ID")} value={info.ipn} />
-          <Row label={t("Legal address")} value={info.legalAddress} />
-          <Row label={t("Actual address")} value={info.actualAddress} />
+          <Row label={t("Legal address")} value={info.legalAddress || MERCHANT_LEGAL_ADDRESS} />
+          <Row label={t("Actual address")} value={info.actualAddress || MERCHANT_ACTUAL_ADDRESS} />
           <Row label={t("Phone")} value={info.phone} />
           <Row label={t("Email")} value={info.email} />
         </div>

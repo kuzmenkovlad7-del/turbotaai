@@ -450,3 +450,17 @@ body::after {
   background-image: none !important;
 }
 
+
+/* === TurbotaAI: unified assistant modal height (voice/chat/video) === */
+.turbota-assistant-dialog {
+  height: 78vh;
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+}
+@media (min-width: 768px) {
+  .turbota-assistant-dialog {
+    height: 680px;
+    max-height: 680px;
+  }
+}

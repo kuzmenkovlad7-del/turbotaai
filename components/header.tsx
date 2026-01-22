@@ -96,7 +96,9 @@ export default function Header() {
     ],
     [t]
   )
-const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
+
+  const loadSummary = () =>
+    fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
 
   useEffect(() => {
     let alive = true
@@ -123,7 +125,8 @@ const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", cre
 
           setTrialText(txt)
 
-          const accessActive = Boolean(d?.hasAccess) || d?.access === "Paid" || d?.access === "Promo"
+          const accessActive =
+            Boolean(d?.hasAccess) || d?.access === "Paid" || d?.access === "Promo"
           setHasAccess(accessActive)
         })
         .catch(() => {})
@@ -155,14 +158,13 @@ const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", cre
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
-  // badge text: правильный приоритет
   const badgeText =
     trialText
-      ? `Access: ${trialText}`
+      ? `${t("Access")}: ${t(trialText)}`
       : typeof trialLeft === "number"
-      ? `Trial left: ${trialLeft}`
+      ? `${t("Trial left")}: ${trialLeft}`
       : hasAccess
-      ? "Access: Active"
+      ? `${t("Access")}: ${t("Active")}`
       : null
 
   // turbota_global_fetch_interceptor
@@ -187,7 +189,6 @@ const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", cre
         const isClear = url.includes("/api/auth/clear")
         const isLogin = url.includes("/api/auth/login")
 
-        // paywall -> pricing + refresh
         if (isAgent && res.status === 402) {
           try {
             sessionStorage.setItem("turbota_paywall", "trial")
@@ -198,7 +199,6 @@ const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", cre
           return res
         }
 
-        // login -> обязательно начинаем новую историю
         if (isLogin && res.ok) {
           try {
             sessionStorage.removeItem("turbota_conv_id")
@@ -207,7 +207,6 @@ const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", cre
           return res
         }
 
-        // logout/clear -> чистим localStorage supabase session + сбрасываем текущую сессию истории
         if (isClear && res.ok) {
           try {
             for (const k of Object.keys(localStorage)) {
@@ -226,7 +225,6 @@ const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", cre
           return res
         }
 
-        // success -> refresh summary + save history
         if ((isAgent || isPromo) && res.ok) {
           window.dispatchEvent(new Event("turbota:refresh"))
 
@@ -251,17 +249,23 @@ const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", cre
                   parsed = raw ? JSON.parse(raw) : null
                 } catch {}
 
-                const assistantText = tryExtractAssistantText(parsed) || (raw ? clipText(raw) : null)
+                const assistantText =
+                  tryExtractAssistantText(parsed) || (raw ? clipText(raw) : null)
 
                 if (userText || assistantText) {
                   const rr = await fetch("/api/history/save", {
                     method: "POST",
                     headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ conversationId: convId, userText, assistantText }),
+                    body: JSON.stringify({
+                      conversationId: convId,
+                      userText,
+                      assistantText,
+                    }),
                   }).catch(() => null)
 
                   const dd = await rr?.json().catch(() => null)
-                  const newId = typeof dd?.conversationId === "string" ? dd.conversationId : null
+                  const newId =
+                    typeof dd?.conversationId === "string" ? dd.conversationId : null
 
                   if (newId) {
                     try {
@@ -293,22 +297,28 @@ const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", cre
             showShade={true}
             closable={true}
             onHide={() => setPaywallDismissed(true)}
-            title="Free trial is over"
-            description="Subscribe to continue using the assistant."
+            title={t("Free trial is over")}
+            description={t("Subscribe to continue using the assistant.")}
             action={
               <div className="flex items-center gap-2">
                 <RainbowButton
                   className="h-9 px-4 text-sm font-semibold"
                   onClick={() => {
-                    const btn = document.getElementById("turbota-subscribe") as HTMLButtonElement | null
+                    const btn = document.getElementById(
+                      "turbota-subscribe"
+                    ) as HTMLButtonElement | null
                     if (btn) btn.click()
                     else window.location.assign("/pricing")
                   }}
                 >
-                  Subscribe
+                  {t("Subscribe")}
                 </RainbowButton>
-                <Button variant="outline" className="h-9 px-4" onClick={() => setPaywallDismissed(true)}>
-                  Later
+                <Button
+                  variant="outline"
+                  className="h-9 px-4"
+                  onClick={() => setPaywallDismissed(true)}
+                >
+                  {t("Later")}
                 </Button>
               </div>
             }
@@ -317,7 +327,10 @@ const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", cre
       ) : null}
 
       <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6 lg:px-10 xl:px-16">
-        <Link href="/" className="flex items-center gap-2 rounded-full px-1 py-1 transition-colors hover:bg-slate-50">
+        <Link
+          href="/"
+          className="flex items-center gap-2 rounded-full px-1 py-1 transition-colors hover:bg-slate-50"
+        >
           <Logo />
           <span className="text-xl font-semibold text-slate-900">{APP_NAME}</span>
         </Link>
@@ -396,7 +409,10 @@ const loadSummary = () => fetch("/api/account/summary", { cache: "no-store", cre
               </div>
 
               <div className="flex flex-col gap-3">
-                <Link href={loggedIn ? "/profile" : "/login"} onClick={() => setMobileMenuOpen(false)}>
+                <Link
+                  href={loggedIn ? "/profile" : "/login"}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
                   <Button
                     variant="outline"
                     className="w-full border-slate-200 bg-white text-slate-800 hover:bg-slate-100 hover:text-slate-900"

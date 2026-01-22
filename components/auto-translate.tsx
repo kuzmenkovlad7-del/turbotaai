@@ -4,6 +4,7 @@
 import type React from "react"
 
 import { useEffect, useRef } from "react"
+import { usePathname } from "next/navigation"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { translateElement } from "@/lib/i18n/translation-utils"
 
@@ -14,33 +15,45 @@ interface AutoTranslateProps {
   excludeSelectors?: string[]
 }
 
-export function AutoTranslate({ children, className = "", enabled = true, excludeSelectors = [] }: AutoTranslateProps) {
+export function AutoTranslate({
+  children,
+  className = "",
+  enabled = true,
+  excludeSelectors = [],
+}: AutoTranslateProps) {
   const { currentLanguage } = useLanguage()
+  const pathname = usePathname()
+
   const containerRef = useRef<HTMLDivElement>(null)
   const lastLanguageRef = useRef<string>("")
+  const lastPathRef = useRef<string>("")
 
   useEffect(() => {
     if (!enabled || !containerRef.current) return
 
-    // Only translate if language actually changed
+    // ✅ ВАЖНО: если менялась страница, переводим заново даже при том же языке
+    if (lastPathRef.current !== pathname) {
+      lastPathRef.current = pathname
+      lastLanguageRef.current = ""
+    }
+
+    // Only translate if language actually changed (или страница новая -> мы сбросили)
     if (lastLanguageRef.current === currentLanguage.code) return
 
     const translateContent = async () => {
       if (!containerRef.current) return
 
       try {
-        // Skip if this is the first load and already in target language
-        if (!lastLanguageRef.current && currentLanguage.code === "en") {
-          lastLanguageRef.current = currentLanguage.code
-          return
-        }
-
-        console.log(`🌐 Auto-translating content to ${currentLanguage.name}`)
-
         // Get all elements that should be translated
         const elementsToTranslate = containerRef.current.querySelectorAll("*")
 
         for (const element of Array.from(elementsToTranslate)) {
+          // ✅ не переводим элементы внутри блоков, которые явно запрещены
+          const el = element as HTMLElement
+          if (el.closest('[data-no-translate="true"]') || el.closest(".no-translate")) {
+            continue
+          }
+
           // Skip excluded elements
           if (excludeSelectors.some((selector) => element.matches(selector))) {
             continue
@@ -59,17 +72,16 @@ export function AutoTranslate({ children, className = "", enabled = true, exclud
         }
 
         lastLanguageRef.current = currentLanguage.code
-        console.log(`✅ Auto-translation to ${currentLanguage.name} completed`)
       } catch (error) {
         console.error("Auto-translation error:", error)
       }
     }
 
-    // Debounce translation to avoid excessive API calls
-    const timeoutId = setTimeout(translateContent, 500)
+    // ✅ быстрее, чтобы не было ощущения “не сразу”
+    const timeoutId = setTimeout(translateContent, 80)
 
     return () => clearTimeout(timeoutId)
-  }, [currentLanguage.code, enabled, excludeSelectors])
+  }, [currentLanguage.code, currentLanguage.name, pathname, enabled, excludeSelectors])
 
   return (
     <div ref={containerRef} className={className}>

@@ -7,11 +7,14 @@ import TurbotaHoloCard from "@/components/turbota-holo-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useLanguage } from "@/lib/i18n/language-context"
 
 type AnyObj = Record<string, any>;
 
 export default function PricingPage() {
 
+
+  const { t } = useLanguage()
 const router = useRouter();
 
   const [summary, setSummary] = useState<AnyObj | null>(null);
@@ -108,7 +111,7 @@ const router = useRouter();
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10">
-      <h1 className="text-4xl font-semibold">Тарифы</h1>
+      <h1 className="text-4xl font-semibold">{t("Pricing")}</h1>
       <p className="mt-2 text-muted-foreground">
         Unlimited access to chat, voice and video sessions. Trial includes 5 questions.
       </p>
@@ -177,12 +180,12 @@ const router = useRouter();
                 <div className="flex items-center justify-between">
                   <span>Status</span>
                   <span className="text-slate-900">
-                    {loadingSummary ? "Loading..." : isLoggedIn ? "Logged in" : "Guest"}
+                    {loadingSummary ? t(t("Loading...")) : isLoggedIn ? t(t("Logged in")) : t(t("Guest"))}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span>{trialText ? "Access" : "Trial left"}</span>
+                  <span>{trialText ? t("Access") : t("Trial left")}</span>
                   <span className="text-slate-900">{loadingSummary ? "…" : (typeof trialText === "string" ? trialText : (Number.isFinite(Number(trialLeft)) ? Number(trialLeft) : 0))}</span>
                 </div>
 
@@ -235,7 +238,7 @@ const router = useRouter();
                 <Input
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value)}
-                  placeholder="Promo code"
+                  placeholder={t("Promo code")}
                   autoCapitalize="characters"
                 />
 

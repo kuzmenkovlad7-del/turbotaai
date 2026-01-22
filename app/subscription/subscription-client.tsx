@@ -1,3 +1,5 @@
+'use client'
+
 "use client"
 
 import { useEffect, useState } from "react"
@@ -163,9 +165,7 @@ export default function SubscriptionClient() {
             {loading ? (
               <div className="text-slate-500">Loading...</div>
             ) : !ok ? (
-              <div className="text-slate-500">
-                Please sign in to manage subscription.
-              </div>
+              <div className="text-slate-500">{t("Please sign in to manage subscription.")}</div>
             ) : (
               <>
                 <div className="grid gap-3">

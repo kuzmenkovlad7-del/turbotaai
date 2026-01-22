@@ -1,9 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useLanguage } from "@/lib/i18n/language-context"
 import { usePathname, useSearchParams } from "next/navigation"
 
 export function PaywallToast() {
+  const { t } = useLanguage()
+
   const pathname = usePathname()
   const sp = useSearchParams()
   const paywall = sp?.get("paywall")
@@ -34,9 +37,9 @@ export function PaywallToast() {
     <div className="fixed right-4 top-4 z-[9999] w-[360px] rounded-2xl border bg-white p-4 shadow-xl">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold">Free trial is over</div>
+          <div className="text-sm font-semibold">{t("Free trial is over")}</div>
           <div className="mt-1 text-sm text-slate-600">
-            You used all 5 free questions. Subscribe to continue using chat, voice and video sessions.
+            {t("You used all free questions. Subscribe to continue.")}
           </div>
         </div>
         <button
