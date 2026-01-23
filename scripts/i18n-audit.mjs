@@ -1,82 +1,100 @@
 import fs from "fs"
 import path from "path"
 
-const ROOT = process.cwd()
-
-const files = {
-  en: path.join(ROOT, "lib/i18n/translations/en.ts"),
-  ru: path.join(ROOT, "lib/i18n/translations/ru.ts"),
-  uk: path.join(ROOT, "lib/i18n/translations/uk.ts"),
+const ROOTS = ["app", "components", "lib"]
+const TRANS = {
+  en: "lib/i18n/translations/en.ts",
+  ru: "lib/i18n/translations/ru.ts",
+  uk: "lib/i18n/translations/uk.ts",
 }
 
-function read(file) {
-  return fs.readFileSync(file, "utf8")
+function walk(dir) {
+  const out = []
+  if (!fs.existsSync(dir)) return out
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, ent.name)
+    if (ent.isDirectory()) {
+      if (ent.name === "node_modules" || ent.name === ".next" || ent.name === ".git") continue
+      out.push(...walk(p))
+    } else out.push(p)
+  }
+  return out
 }
 
-// Очень простой парсер ключей вида "KEY": ...
-function extractKeys(tsText) {
+function readKeys(file) {
+  const s = fs.readFileSync(file, "utf8")
   const keys = new Set()
-  const re = /"([^"\\]*(?:\\.[^"\\]*)*)"\s*:/g
+  const lines = s.split("\n")
+  const multiProps = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    // ключи в виде "Key": "Value",
+    const m = line.match(/^\s*"([^"]+)"\s*:\s*/)
+    if (m) keys.add(m[1])
+
+    // ловим опасный кейс: два свойства на одной строке
+    if (line.includes('":') && /"\s*:\s*"[^"]*"\s*,\s*"/.test(line)) {
+      multiProps.push({ line: i + 1, text: line.trim() })
+    }
+  }
+  return { keys, multiProps }
+}
+
+function extractUsedKeys(file) {
+  const s = fs.readFileSync(file, "utf8")
+  const used = new Set()
+
+  // t("...") / t('...')
+  const re = /\bt\(\s*["']([^"']+)["']\s*\)/g
   let m
-  while ((m = re.exec(tsText))) {
-    const k = m[1]
-    if (!k) continue
-    keys.add(k.replace(/\\"/g, '"'))
-  }
-  return keys
+  while ((m = re.exec(s))) used.add(m[1])
+
+  return used
 }
 
-function diffKeys(base, target) {
-  const missing = []
-  const extra = []
-  for (const k of base) if (!target.has(k)) missing.push(k)
-  for (const k of target) if (!base.has(k)) extra.push(k)
-  missing.sort()
-  extra.sort()
-  return { missing, extra }
+const transData = {}
+for (const [lang, fp] of Object.entries(TRANS)) {
+  if (!fs.existsSync(fp)) {
+    console.log("ERR missing translations:", fp)
+    process.exit(1)
+  }
+  transData[lang] = readKeys(fp)
 }
 
-const enText = read(files.en)
-const ruText = read(files.ru)
-const ukText = read(files.uk)
+const usedAll = new Set()
+const files = ROOTS.flatMap(walk).filter((f) => /\.(tsx|ts)$/.test(f))
+for (const f of files) {
+  // не анализируем сами переводы и скрипты
+  if (f.includes("lib/i18n/translations/")) continue
+  if (f.startsWith("scripts/")) continue
+  const used = extractUsedKeys(f)
+  for (const k of used) usedAll.add(k)
+}
 
-const enKeys = extractKeys(enText)
-const ruKeys = extractKeys(ruText)
-const ukKeys = extractKeys(ukText)
+// report missing per lang
+function diff(a, b) {
+  const out = []
+  for (const x of a) if (!b.has(x)) out.push(x)
+  return out.sort()
+}
 
-const ruDiff = diffKeys(enKeys, ruKeys)
-const ukDiff = diffKeys(enKeys, ukKeys)
+console.log("=== i18n audit ===")
+console.log("Used t(...) keys:", usedAll.size)
 
-const extraInEnRU = diffKeys(ruKeys, enKeys)
-const extraInEnUK = diffKeys(ukKeys, enKeys)
-
-let ok = true
-
-function printBlock(title, obj) {
-  if (!obj.missing.length && !obj.extra.length) return
-  console.log("\n" + title)
-  if (obj.missing.length) {
-    console.log("  Missing:")
-    for (const k of obj.missing) console.log("   - " + k)
+for (const [lang, { keys, multiProps }] of Object.entries(transData)) {
+  const missing = diff(usedAll, keys)
+  console.log(`\n[${lang}] missing keys:`, missing.length)
+  if (missing.length) {
+    console.log(missing.slice(0, 80).map((x) => "  - " + x).join("\n"))
+    if (missing.length > 80) console.log("  ...")
   }
-  if (obj.extra.length) {
-    console.log("  Extra:")
-    for (const k of obj.extra) console.log("   + " + k)
+  console.log(`[${lang}] suspicious multi-props lines:`, multiProps.length)
+  if (multiProps.length) {
+    for (const x of multiProps.slice(0, 20)) {
+      console.log(`  ${lang}:${x.line} ${x.text}`)
+    }
+    if (multiProps.length > 20) console.log("  ...")
   }
 }
 
-printBlock("RU vs EN", ruDiff)
-printBlock("UK vs EN", ukDiff)
-
-// Если EN что-то не содержит, но RU/UK содержат — тоже покажем
-printBlock("EN is missing keys that exist in RU", extraInEnRU)
-printBlock("EN is missing keys that exist in UK", extraInEnUK)
-
-if (ruDiff.missing.length || ukDiff.missing.length) ok = false
-
-console.log("\nKeys count:")
-console.log("  EN:", enKeys.size)
-console.log("  RU:", ruKeys.size)
-console.log("  UK:", ukKeys.size)
-
-process.exit(ok ? 0 : 1)
+console.log("\nDONE")

@@ -30,7 +30,7 @@ async function syncServerToken(accessToken: string | null) {
         body: JSON.stringify({ access_token: accessToken }),
       })
     } else {
-      await fetch("/api/auth/clear", { method: "POST" })
+      await fetch("/api/auth/clear?scope=hard", { method: "POST" })
     }
   } catch {
     // ignore

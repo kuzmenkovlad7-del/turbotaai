@@ -60,17 +60,15 @@ const VOICE_MAP: Record<string, { MALE: string; FEMALE: string }> = {
  * Выбор голоса OpenAI по языку и полу.
  */
 export function selectOpenAIVoice(language: string, gender: TTSGender): string {
-  const lang = normalizeLanguage(language)
   const g = normalizeGender(gender)
 
-  const forLang = VOICE_MAP[lang]
-  if (forLang) {
-    return g === "MALE" ? forLang.MALE : forLang.FEMALE
-  }
+  // Один мужской/женский голос для en/ru/uk, можно быстро менять через env без правок кода
+  const male = (process.env.OPENAI_TTS_MALE_VOICE || "marin") as string
+  const female = (process.env.OPENAI_TTS_FEMALE_VOICE || "shimmer") as string
 
-  // запасной вариант — базовая пара
-  return g === "MALE" ? "cedar" : "shimmer"
+  return g === "MALE" ? male : female
 }
+
 
 /**
  * Алиас, если где-то вызывается pickVoice.

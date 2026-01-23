@@ -101,7 +101,7 @@ export default function AssistantFab() {
         <>
           {/* Panel */}
           {panelOpen && (
-            <div className="fixed inset-0 z-40 pointer-events-none">
+            <div className="fixed inset-0 z-[60] pointer-events-none z-40">
               <div
                 className="absolute inset-0 bg-black/20 pointer-events-auto"
                 onClick={() => setPanelOpen(false)}
@@ -174,7 +174,7 @@ export default function AssistantFab() {
           )}
 
           {/* FAB button (уменьшили примерно в 2 раза визуально) */}
-          <div className="fixed bottom-4 right-4 z-40">
+          <div className="fixed bottom-4 right-4 z-[60]">
             <button
               onClick={() => setPanelOpen((v) => !v)}
               className="h-10 px-3 rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 text-white shadow-xl flex items-center gap-2 text-sm focus:outline-none focus:ring-0"

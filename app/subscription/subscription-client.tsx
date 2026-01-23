@@ -1,326 +1,367 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useLanguage } from "@/lib/i18n/language-context"
+import { useAuth } from "@/lib/auth/auth-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useLanguage } from "@/lib/i18n/language-context"
 
-type Lang = "uk" | "ru" | "en"
-
-type SubSummary = {
-  ok: boolean
-  hasAccess: boolean
-  accessUntil: string | null
-  paidUntil: string | null
-  promoUntil: string | null
-  autoRenew: boolean
-  subscriptionStatus: string | null
-  wfpOrderReference: string | null
+type Summary = {
+  ok?: boolean
+  errorCode?: string
+  isLoggedIn?: boolean
+  userId?: string | null
+  deviceHash?: string | null
+  access?: "Paid" | "Promo" | "Limited" | string
+  hasAccess?: boolean
+  trial_questions_left?: number
+  paid_until?: string | null
+  promo_until?: string | null
 }
 
-function fmt(v: string | null) {
+function isActive(v: any) {
+  if (!v) return false
+  const d = new Date(String(v))
+  if (Number.isNaN(d.getTime())) return false
+  return d.getTime() > Date.now()
+}
+
+function formatDate(v: any) {
   if (!v) return "—"
-  const d = new Date(v)
+  const d = new Date(String(v))
   if (Number.isNaN(d.getTime())) return "—"
-  return d.toLocaleString()
+  const dd = String(d.getDate()).padStart(2, "0")
+  const mm = String(d.getMonth() + 1).padStart(2, "0")
+  const yyyy = d.getFullYear()
+  return `${dd}.${mm}.${yyyy}`
 }
 
 export default function SubscriptionClient() {
-  const { t } = useLanguage()
-  const router = useRouter()
+  const { currentLanguage } = useLanguage()
+  const { user } = useAuth()
 
-  const [lang, setLang] = useState<Lang>("uk")
-
-  const [loading, setLoading] = useState(true)
-  const [data, setData] = useState<SubSummary | null>(null)
-  const [busy, setBusy] = useState<null | "pay" | "cancel" | "resume" | "promo">(null)
-  const [msg, setMsg] = useState<string | null>(null)
-  const [promoCode, setPromoCode] = useState("")
-
-  useEffect(() => {
-    const raw = (document.documentElement.lang || "uk").toLowerCase()
-    const v: Lang = raw.startsWith("ru") ? "ru" : raw.startsWith("en") ? "en" : "uk"
-    setLang(v)
-  }, [])
+  const lang = useMemo(() => {
+    const code = String(currentLanguage?.code || "uk").toLowerCase()
+    return code.startsWith("ru") ? "ru" : code.startsWith("en") ? "en" : "uk"
+  }, [currentLanguage?.code])
 
   const copy = useMemo(() => {
     const c = {
       uk: {
         title: "Підписка",
-        manageTitle: "Керування",
-        manageDesc: "Щомісячна підписка",
-        howTitle: "Як це працює",
-        howDesc: "Автосписання в продакшені",
-        signIn: "Будь ласка, увійдіть, щоб керувати підпискою.",
-        signInBtn: "Увійти",
-        status: "Статус",
+        manage: "Управління",
+        monthly: "Щомісячна підписка",
+        how: "Як це працює",
+        auto: "Автоматичне продовження",
         access: "Доступ",
-        accessActive: "Активний",
-        accessInactive: "Неактивний",
+        active: "Активний",
+        inactive: "Неактивний",
         until: "До",
-        autoRenew: "Автосписання",
-        autoRenewOn: "Увімкнено",
-        autoRenewOff: "Вимкнено",
-        pay: "Оформити підписку",
-        cancel: "Скасувати автосписання",
-        resume: "Відновити автосписання",
-        promo: "Промокод",
+        autosub: "Автосписання",
+        notApply: "Не застосовується",
+        payBtn: "Оформити підписку",
+        promoTitle: "Промокод",
+        promoActive: "Промокод активний",
+        promoPlaceholder: "Введіть промокод",
         apply: "Застосувати",
+        cancelPromo: "Скасувати промокод",
+        msgOkCancel: "Промокод скасовано",
+        msgOkApply: "Промокод активовано",
+        err_INVALID_PROMO: "Невірний промокод",
+        err_EMPTY_CODE: "Введіть промокод",
+        err_PAY_FAILED: "Не вдалося створити оплату. Спробуйте ще раз",
+        err_AUTH_REQUIRED: "Увійдіть, щоб оформити підписку",
+        err_GENERIC: "Сталася помилка. Спробуйте ще раз",
+        howText:
+          "Підписка активується після першої успішної оплати.\nДалі вона автоматично продовжується щомісяця, поки ви не скасуєте її.\nСкасувати можна у будь-який момент. Доступ збережеться до кінця оплаченого періоду.\nЗа потреби підписку можна відновити пізніше.\nОплата обробляється через WayForPay.",
       },
       ru: {
         title: "Подписка",
-        manageTitle: "Управление",
-        manageDesc: "Ежемесячная подписка",
-        howTitle: "Как это работает",
-        howDesc: "Автосписание в продакшене",
-        signIn: "Пожалуйста, войдите, чтобы управлять подпиской.",
-        signInBtn: "Войти",
-        status: "Статус",
+        manage: "Управление",
+        monthly: "Ежемесячная подписка",
+        how: "Как это работает",
+        auto: "Автоматическое продление",
         access: "Доступ",
-        accessActive: "Активен",
-        accessInactive: "Неактивен",
+        active: "Активен",
+        inactive: "Неактивен",
         until: "До",
-        autoRenew: "Автосписание",
-        autoRenewOn: "Включено",
-        autoRenewOff: "Выключено",
-        pay: "Оформить подписку",
-        cancel: "Отменить автосписание",
-        resume: "Возобновить автосписание",
-        promo: "Промокод",
+        autosub: "Автосписание",
+        notApply: "Не применяется",
+        payBtn: "Оформить подписку",
+        promoTitle: "Промокод",
+        promoActive: "Промокод активен",
+        promoPlaceholder: "Введите промокод",
         apply: "Применить",
+        cancelPromo: "Отменить промокод",
+        msgOkCancel: "Промокод отменён",
+        msgOkApply: "Промокод активирован",
+        err_INVALID_PROMO: "Неверный промокод",
+        err_EMPTY_CODE: "Введите промокод",
+        err_PAY_FAILED: "Не удалось создать оплату. Попробуйте ещё раз",
+        err_AUTH_REQUIRED: "Войдите, чтобы оформить подписку",
+        err_GENERIC: "Произошла ошибка. Попробуйте ещё раз",
+        howText:
+          "Подписка активируется после первой успешной оплаты.\nДалее она автоматически продлевается каждый месяц, пока вы не отмените её.\nОтменить можно в любой момент. Доступ сохранится до конца оплаченного периода.\nПри необходимости подписку можно возобновить позже.\nОплата обрабатывается через WayForPay.",
       },
       en: {
         title: "Subscription",
-        manageTitle: "Manage",
-        manageDesc: "Monthly subscription",
-        howTitle: "How it works",
-        howDesc: "Auto-renew in production",
-        signIn: "Please sign in to manage your subscription.",
-        signInBtn: "Sign in",
-        status: "Status",
+        manage: "Manage",
+        monthly: "Monthly subscription",
+        how: "How it works",
+        auto: "Auto-renewal",
         access: "Access",
-        accessActive: "Active",
-        accessInactive: "Inactive",
+        active: "Active",
+        inactive: "Inactive",
         until: "Until",
-        autoRenew: "Auto-renew",
-        autoRenewOn: "Enabled",
-        autoRenewOff: "Disabled",
-        pay: "Start subscription",
-        cancel: "Cancel auto-renew",
-        resume: "Resume auto-renew",
-        promo: "Promo code",
+        autosub: "Auto charge",
+        notApply: "Not applicable",
+        payBtn: "Get subscription",
+        promoTitle: "Promo code",
+        promoActive: "Promo active",
+        promoPlaceholder: "Enter promo code",
         apply: "Apply",
+        cancelPromo: "Cancel promo",
+        msgOkCancel: "Promo canceled",
+        msgOkApply: "Promo activated",
+        err_INVALID_PROMO: "Invalid promo code",
+        err_EMPTY_CODE: "Enter a promo code",
+        err_PAY_FAILED: "Failed to create payment. Try again",
+        err_AUTH_REQUIRED: "Sign in to subscribe",
+        err_GENERIC: "Something went wrong. Try again",
+        howText:
+          "Subscription becomes active after the first successful payment.\nThen it renews monthly until you cancel it.\nYou can cancel anytime. Access stays until the end of the paid period.\nYou can resume later.\nPayments are processed via WayForPay.",
       },
     }
-    return c[lang]
+    return c[lang as "uk" | "ru" | "en"]
   }, [lang])
 
-  async function load() {
+  const [summary, setSummary] = useState<Summary | null>(null)
+  const [promoCode, setPromoCode] = useState("")
+  const [msg, setMsg] = useState<string>("")
+  const [loading, setLoading] = useState(false)
+
+  async function loadSummary() {
+    const r = await fetch("/api/subscription/summary", {
+      method: "GET",
+      cache: "no-store",
+      credentials: "include",
+    })
+    const data = await r.json().catch(() => ({} as any))
+    setSummary(data || {})
+  }
+
+  useEffect(() => {
+    loadSummary().catch(() => setSummary({ ok: false, errorCode: "SUMMARY_FAILED" }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
+
+  const paidActive = isActive(summary?.paid_until)
+  const promoActive = isActive(summary?.promo_until)
+
+  const statusLabel = paidActive || promoActive ? copy.active : copy.inactive
+  const untilLabel = paidActive
+    ? formatDate(summary?.paid_until)
+    : promoActive
+    ? formatDate(summary?.promo_until)
+    : "—"
+
+  function errorText(code?: string) {
+    if (!code) return ""
+    const map: Record<string, string> = {
+      INVALID_PROMO: copy.err_INVALID_PROMO,
+      EMPTY_CODE: copy.err_EMPTY_CODE,
+      AUTH_REQUIRED: copy.err_AUTH_REQUIRED,
+    }
+    return map[code] || copy.err_GENERIC
+  }
+
+  async function createInvoice() {
+    setMsg("")
     setLoading(true)
-    setMsg(null)
     try {
-      const r = await fetch("/api/subscription/summary", { cache: "no-store", credentials: "include" })
-      const d = await r.json().catch(() => ({} as any))
-      setData(d)
+      const r = await fetch("/api/billing/wayforpay/create-invoice", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: "monthly" }),
+      })
+
+      if (r.status === 401) {
+        setMsg(copy.err_AUTH_REQUIRED)
+        window.location.assign("/login")
+        return
+      }
+
+      const data = await r.json().catch(() => ({} as any))
+
+      const url =
+        data?.invoiceUrl ||
+        data?.url ||
+        data?.invoice_url ||
+        data?.payment_url ||
+        data?.paymentUrl ||
+        data?.redirectUrl ||
+        data?.redirect_url ||
+        data?.data?.url
+
+      if (url) {
+        window.location.href = String(url)
+        return
+      }
+
+      setMsg(copy.err_PAY_FAILED)
+    } catch {
+      setMsg(copy.err_PAY_FAILED)
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    load()
-  }, [])
-
-  async function payMonthly() {
-    setBusy("pay")
-    setMsg(null)
-    try {
-      window.location.href = "/api/billing/wayforpay/purchase?planId=monthly"
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  async function cancelAutoRenew() {
-    setBusy("cancel")
-    setMsg(null)
-    try {
-      const r = await fetch("/api/billing/wayforpay/regular/suspend", {
-        method: "POST",
-        credentials: "include",
-      })
-      const d = await r.json().catch(() => ({} as any))
-      if (!r.ok || d?.ok === false) {
-        setMsg(d?.error || "Failed to cancel auto-renew")
-        return
-      }
-      setMsg(lang === "ru" ? "Автосписание отменено" : lang === "en" ? "Auto-renew canceled" : "Автосписання скасовано")
-      await load()
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  async function resumeAutoRenew() {
-    setBusy("resume")
-    setMsg(null)
-    try {
-      const r = await fetch("/api/billing/wayforpay/regular/resume", {
-        method: "POST",
-        credentials: "include",
-      })
-      const d = await r.json().catch(() => ({} as any))
-      if (!r.ok || d?.ok === false) {
-        setMsg(d?.error || "Failed to resume auto-renew")
-        return
-      }
-      setMsg(lang === "ru" ? "Автосписание возобновлено" : lang === "en" ? "Auto-renew resumed" : "Автосписання відновлено")
-      await load()
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  async function redeemPromo() {
-    const code = promoCode.trim()
-    if (!code) return
-    setBusy("promo")
-    setMsg(null)
+  async function applyPromo() {
+    setMsg("")
+    setLoading(true)
     try {
       const r = await fetch("/api/billing/promo/redeem", {
         method: "POST",
         credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: promoCode }),
       })
-      const d = await r.json().catch(() => ({} as any))
-      if (!r.ok || d?.ok === false) {
-        setMsg(d?.error || "Promo failed")
-        return
+
+      const data = await r.json().catch(() => ({} as any))
+
+      if (data?.ok) {
+        setMsg(copy.msgOkApply)
+        setPromoCode("")
+        await loadSummary()
+      } else {
+        setMsg(errorText(data?.errorCode))
       }
-      setPromoCode("")
-      setMsg(lang === "ru" ? "Промокод применён" : lang === "en" ? "Promo applied" : "Промокод застосовано")
-      await load()
+    } catch {
+      setMsg(copy.err_GENERIC)
     } finally {
-      setBusy(null)
+      setLoading(false)
     }
   }
 
-  const ok = !!data?.ok
-  const hasAccess = !!data?.hasAccess
-  const autoRenew = !!data?.autoRenew
+  async function cancelPromo() {
+    setMsg("")
+    setLoading(true)
+    try {
+      const r = await fetch("/api/billing/promo/cancel", {
+        method: "POST",
+        credentials: "include",
+      })
+
+      const data = await r.json().catch(() => ({} as any))
+
+      if (data?.ok) {
+        setMsg(copy.msgOkCancel)
+        await loadSummary()
+      } else {
+        setMsg(errorText(data?.errorCode))
+      }
+    } catch {
+      setMsg(copy.err_GENERIC)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-12">
-      <h1 className="text-4xl font-semibold tracking-tight">{copy.title}</h1>
+    <main className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 lg:px-10 xl:px-16">
+      <h1 className="mb-8 text-4xl font-semibold text-slate-900">{copy.title}</h1>
 
-      <div className="mt-10 grid gap-6 md:grid-cols-2">
-        <Card className="rounded-3xl">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="rounded-2xl">
           <CardHeader>
-            <CardTitle className="text-2xl">{copy.manageTitle}</CardTitle>
-            <CardDescription>{copy.manageDesc}</CardDescription>
+            <CardTitle>{copy.manage}</CardTitle>
+            <CardDescription>{copy.monthly}</CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-4">
-            {!ok && (
-              <div className="text-sm text-slate-600">
-                {copy.signIn}
-                <div className="mt-4">
-                  <Button onClick={() => router.push("/login")}>{copy.signInBtn}</Button>
-                </div>
+          <CardContent className="space-y-4 text-sm text-slate-700">
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">{copy.access}</span>
+                <span className="font-medium">{statusLabel}</span>
               </div>
-            )}
 
-            {ok && (
-              <>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="grid gap-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">{copy.access}</span>
-                      <span className="font-medium">{hasAccess ? copy.accessActive : copy.accessInactive}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">{copy.until}</span>
-                      <span className="font-medium">{fmt(data?.accessUntil ?? null)}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">{copy.autoRenew}</span>
-                      <span className="font-medium">{autoRenew ? copy.autoRenewOn : copy.autoRenewOff}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {msg && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                    {msg}
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-3">
-                  {!hasAccess && (
-                    <Button onClick={payMonthly} disabled={busy === "pay"}>
-                      {copy.pay}
-                    </Button>
-                  )}
-
-                  {hasAccess && autoRenew && (
-                    <Button variant="outline" onClick={cancelAutoRenew} disabled={busy === "cancel"}>
-                      {copy.cancel}
-                    </Button>
-                  )}
-
-                  {hasAccess && !autoRenew && (
-                    <Button variant="outline" onClick={resumeAutoRenew} disabled={busy === "resume"}>
-                      {copy.resume}
-                    </Button>
-                  )}
-                </div>
-
-                <div className="pt-2">
-                  <div className="text-sm text-slate-500">{copy.promo}</div>
-                  <div className="mt-2 flex gap-2">
-                    <input
-                      value={promoCode}
-                      onChange={(e) => setPromoCode(e.target.value)}
-                      className="h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-                      placeholder={lang === "ru" ? "Введите промокод" : lang === "en" ? "Enter promo code" : "Введіть промокод"}
-                    />
-                    <Button onClick={redeemPromo} disabled={busy === "promo"}>
-                      {copy.apply}
-                    </Button>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {loading && (
-              <div className="text-sm text-slate-500">
-                {lang === "ru" ? "Загрузка..." : lang === "en" ? "Loading..." : "Завантаження..."}
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-slate-500">{copy.until}</span>
+                <span className="font-medium">{untilLabel}</span>
               </div>
-            )}
+
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-slate-500">{copy.autosub}</span>
+                <span className="font-medium">{copy.notApply}</span>
+              </div>
+            </div>
+
+            {msg ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                {msg}
+              </div>
+            ) : null}
+
+            <Button
+              variant="outline"
+              className="w-full rounded-full border border-slate-200"
+              onClick={createInvoice}
+              disabled={loading}
+            >
+              {copy.payBtn}
+            </Button>
+
+            <div className="pt-2">
+              <div className="mb-2 text-slate-500">{copy.promoTitle}</div>
+
+              {promoActive ? (
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                    {copy.promoActive}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    className="w-full rounded-full border border-slate-200"
+                    onClick={cancelPromo}
+                    disabled={loading}
+                  >
+                    {copy.cancelPromo}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <input
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value)}
+                    placeholder={copy.promoPlaceholder}
+                    className="h-11 w-full rounded-full border border-slate-200 bg-white px-4 text-sm outline-none"
+                  />
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-full border border-slate-200 px-6"
+                    onClick={applyPromo}
+                    disabled={loading}
+                  >
+                    {copy.apply}
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-3xl">
+        <Card className="rounded-2xl">
           <CardHeader>
-            <CardTitle className="text-2xl">{copy.howTitle}</CardTitle>
-            <CardDescription>{copy.howDesc}</CardDescription>
+            <CardTitle>{copy.how}</CardTitle>
+            <CardDescription>{copy.auto}</CardDescription>
           </CardHeader>
-
-          <CardContent>
-            <ul className="mt-2 space-y-2 text-sm text-slate-600">
-              <li>{t("subscription.how.start")}</li>
-              <li>{t("subscription.how.renew")}</li>
-              <li>{t("subscription.how.cancel")}</li>
-              <li>{t("subscription.how.resume")}</li>
-              <li className="pt-2 text-xs text-slate-500">{t("subscription.how.note")}</li>
-            </ul>
+          <CardContent className="whitespace-pre-line text-sm text-slate-700">
+            {copy.howText}
           </CardContent>
         </Card>
       </div>
-    </div>
+    </main>
   )
 }

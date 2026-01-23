@@ -1239,7 +1239,7 @@ if (res.status === 402) {
       open={controlledOpen ?? isOpen}
       onOpenChange={(v) => { extOnOpenChange?.(v); if (!v) { if (typeof onClose === "function") onClose(); } }}
     >
-      <DialogContent className="max-w-xl border-none bg-transparent p-0 turbota-assistant-dialog">
+      <DialogContent className="border-none bg-transparent p-0 w-[calc(100vw-1.5rem)] max-w-[520px] sm:w-full sm:max-w-xl">
         <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/10">
           <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
             <DialogTitle className="flex items-center gap-2 text-lg font-semibold">

@@ -225,9 +225,9 @@ if (res.status === 402) {
     <Dialog open={controlledOpen ?? isOpen} onOpenChange={(v) => { extOnOpenChange?.(v); if (!v) { if (typeof onClose === "function") onClose(); } }}>
       <DialogContent
         style={keyboardOffset > 0 ? ({ bottom: keyboardOffset } as any) : undefined}
-        className="turbota-assistant-dialog left-0 right-0 top-auto bottom-0 translate-x-0 translate-y-0 max-w-xl border-none bg-transparent p-0 sm:left-[50%] sm:top-[50%] sm:right-auto sm:bottom-auto sm:-translate-x-1/2 sm:-translate-y-1/2"
+        className="border-none bg-transparent p-0 w-[calc(100vw-1.5rem)] max-w-[520px] sm:w-full sm:max-w-xl"
       >
-        <div className="mx-auto w-full max-w-xl overflow-hidden rounded-t-3xl bg-white shadow-xl shadow-slate-900/10 sm:rounded-3xl">
+        <div className="mx-auto w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/10 ">
           <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -246,7 +246,7 @@ if (res.status === 402) {
             </div>
           </DialogHeader>
 
-          <div className="flex h-[82dvh] flex-col sm:h-[500px] md:h-[540px]">
+          <div className="flex h-[500px] flex-col md:h-[540px]">
             <ScrollArea className="flex-1 px-5 pt-4 pb-2">
               <div ref={scrollRef} className="max-h-full space-y-3 pr-1">
                 {messages.length === 0 && (

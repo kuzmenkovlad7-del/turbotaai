@@ -450,45 +450,18 @@ body::after {
   background-image: none !important;
 }
 @media (min-width: 768px) {
-  .turbota-assistant-dialog {
-    height: 680px;
-    max-height: 680px;
   }
-}
 
 
 /* TURBOTAAI_ASSISTANT_DIALOG_SIZING */@media (max-width: 640px){
-  .turbota-assistant-dialog{
-    width: calc(100vw - 16px);
-    height: calc(100vh - 16px);
-    max-height: calc(100vh - 16px);
-    max-width: calc(100vw - 16px);
   }
-}
 
-/* floating CTA should always be above page content */.turbota-fab { z-index: 80 !important; }@media (min-width: 640px) {
-  .turbota-assistant-dialog {
-    width: 480px !important;
-    max-height: calc(100vh - 160px) !important;
-  }
-}.turbota-assistant-dialog { z-index: 9999 !important; }
-
-/* =========================
+/* floating CTA should always be above page content */@media (min-width: 640px) {
+  }/* =========================
    Turbota UI FINAL OVERRIDE
    Desktop: dialogs like Video
    Mobile:  dialogs like Voice
    ========================= */
 /* dialogs ALWAYS above FAB */@media (min-width: 640px) {
-  .turbota-assistant-dialog {
-    /* desktop centered like video */
-    left: 50% !important;
-    top: 50% !important;
-    right: auto !important;
-    bottom: auto !important;
-    transform: translate(-50%, -50%) !important;
-
-    width: 520px !important;
-    max-height: calc(100vh - 160px) !important;
   }
-}
 

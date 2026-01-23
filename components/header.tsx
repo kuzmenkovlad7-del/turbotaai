@@ -288,7 +288,7 @@ export default function Header() {
   }, [])
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-sm">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-sm">
       {showPaywall ? (
         <div className="fixed right-4 top-4 z-[9999] w-[380px]">
           <Banner

@@ -667,8 +667,8 @@ export function getNativeSpeechParameters(languageCode: string, gender: "male" |
         volume: 0.98,
       },
       male: {
-        rate: 0.85, // Ukrainian male speech pattern
-        pitch: 0.92, // Ukrainian male intonation
+        rate: 0.82, // Ukrainian male speech pattern (slower, calmer)
+        pitch: 0.88, // Deeper warm Ukrainian male tone
         volume: 0.98,
       },
     },

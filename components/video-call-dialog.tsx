@@ -1858,7 +1858,7 @@ if (res.status === 402) {
                   {t("Choose Your AI specialist")}
                 </h3>
                 <p className="text-sm sm:text-base text-gray-600 max-w-md mx-auto">
-                  {t("Select the AI specialist you'd like to speak with during your video call.")}
+                  {t("Select the AI companion you'd like to speak with during your video call.")}
                 </p>
               </div>
 
@@ -1916,7 +1916,7 @@ if (res.status === 402) {
                           {character.name}
                         </h4>
                         <p className="text-xs sm:text-sm text-gray-600 text-center mb-3 sm:mb-4">
-                          {character.description}
+                          {t(character.description)}
                         </p>
                         <div className="mt-auto text-center">
                           <span

@@ -1,30 +1,56 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
-
-const DEVICE_COOKIE = "turbotaai_device"
-const LAST_USER_COOKIE = "turbotaai_last_user"
 
 /**
  * POST /api/auth/clear
- * - default: clear auth cookies, KEEP device + last_user
+ * - soft (default): does NOT clear cookies (prevents auto logout on 401)
+ * - hard: clears auth cookies (real logout)
  *
- * Full wipe for testing (also removes device + last_user):
- * - POST /api/auth/clear?scope=hard
+ * Example:
+ *  - POST /api/auth/clear?scope=hard  -> logout
+ *  - POST /api/auth/clear            -> no-op (safe)
  */
-export async function POST(req: NextRequest) {
-  const cookieStore = cookies()
-  const scope = (req.nextUrl.searchParams.get("scope") || "auth").toLowerCase()
+export async function POST(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const scope = (searchParams.get("scope") || "soft").toLowerCase()
 
-  // IMPORTANT: hard only on scope=hard
-  const hard = scope === "hard"
+    if (scope !== "hard") {
+      return NextResponse.json({ ok: true, scope: "soft" })
+    }
 
-  const res = NextResponse.json({ ok: true, scope, hard }, { status: 200 })
+    const store = cookies()
+    const all = store.getAll()
 
-  for (const c of cookieStore.getAll()) {
-    if (!hard && (c.name === DEVICE_COOKIE || c.name === LAST_USER_COOKIE)) continue
-    res.cookies.set(c.name, "", { path: "/", maxAge: 0 })
+    // чистим ВСЕ supabase/auth cookies + наши возможные cookies
+    for (const c of all) {
+      const name = c.name
+
+      const shouldClear =
+        name === "sb-access-token" ||
+        name === "sb-refresh-token" ||
+        name.startsWith("sb-") ||
+        name.includes("supabase") ||
+        name.includes("auth-token") ||
+        name.includes("access-token") ||
+        name.includes("refresh-token") ||
+        name.includes("turbotaai") ||
+        name.includes("session")
+
+      if (!shouldClear) continue
+
+      try {
+        store.set({
+          name,
+          value: "",
+          path: "/",
+          expires: new Date(0),
+        })
+      } catch {}
+    }
+
+    return NextResponse.json({ ok: true, scope: "hard" })
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: e?.message || "clear failed" }, { status: 500 })
   }
-
-  res.headers.set("cache-control", "no-store, max-age=0")
-  return res
 }
