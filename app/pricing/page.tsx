@@ -401,7 +401,7 @@ export default function PricingPage() {
                     variant="outline"
                     className="border border-slate-200"
                     onClick={async () => {
-                      await fetch("/api/auth/clear?scope=hard", { method: "POST" }).catch(() => {})
+                      await fetch("/api/auth/clear", { method: "POST" }).catch(() => {})
                       router.refresh()
                       router.push("/")
                     }}
