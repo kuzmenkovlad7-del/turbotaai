@@ -122,7 +122,7 @@ export async function GET(req: NextRequest) {
 
   const baseUrl = getBaseUrl(req)
   const serviceUrl = `${baseUrl}/api/billing/wayforpay/webhook`
-  const returnUrl = `${baseUrl}/payment/result?orderReference=${encodeURIComponent(orderReference)}`
+  const returnUrl = `${baseUrl}/payment/return?orderReference=${encodeURIComponent(orderReference)}`
 
   const dateNext = fmtDateYYYYMMDD(addDays(new Date(), 30))
 
