@@ -52,7 +52,6 @@ function hmacMd5(secretKey: string, s: string) {
 }
 
 function esc(v: any) {
-  // replaceAll ломает билд при старом target/lib, поэтому только replace(/.../g)
   return String(v ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -81,7 +80,6 @@ export async function GET(req: NextRequest) {
   const merchantAccount = String(process.env.WAYFORPAY_MERCHANT_ACCOUNT ?? "").trim()
   const secretKey = String(process.env.WAYFORPAY_SECRET_KEY ?? "").trim()
 
-  // поддерживаем обе переменные, чтобы не зависеть от названия на Vercel
   const merchantDomainName = String(
     process.env.WAYFORPAY_MERCHANT_DOMAIN_NAME ??
       process.env.WAYFORPAY_MERCHANT_DOMAIN ??
@@ -113,18 +111,19 @@ export async function GET(req: NextRequest) {
   const currency = "UAH"
   const orderDate = Math.floor(Date.now() / 1000)
 
-  // orderReference важен: он используется для SUSPEND/RESUME
-  const orderReference = `SUB${Date.now()}${Math.floor(Math.random() * 1000)}`
+  // формат как у тебя на скрине: ta_monthly_1769252878_3cfaed14
+  const ts = Math.floor(Date.now() / 1000)
+  const rnd = crypto.randomBytes(4).toString("hex")
+  const orderReference = `ta_${planId}_${ts}_${rnd}`
 
-  const productName = `Subscription ${planId}`
+  const productName = `TurbotaAI ${planId}`
   const productCount = "1"
   const productPrice = String(amount)
 
   const baseUrl = getBaseUrl(req)
   const serviceUrl = `${baseUrl}/api/billing/wayforpay/webhook`
-  const returnUrl = `${baseUrl}/payment/return?orderReference=${encodeURIComponent(orderReference)}`
+  const returnUrl = `${baseUrl}/payment/result?orderReference=${encodeURIComponent(orderReference)}`
 
-  // регулярные платежи: WayForPay списывает сам ежемесячно
   const dateNext = fmtDateYYYYMMDD(addDays(new Date(), 30))
 
   const signStr = [
@@ -156,6 +155,8 @@ export async function GET(req: NextRequest) {
     clientEmail: user.email || undefined,
     returnUrl,
     serviceUrl,
+
+    // регулярные платежи
     regularOn: "1",
     regularMode: "monthly",
     regularBehavior: "preset",
@@ -163,7 +164,7 @@ export async function GET(req: NextRequest) {
     dateNext,
   }
 
-  // пишем заказ в БД ДО редиректа, чтобы webhook всегда знал user_id
+  // пишем заказ в БД ДО редиректа
   try {
     const admin = getSupabaseAdmin()
     await admin.from("billing_orders").insert({
@@ -172,7 +173,7 @@ export async function GET(req: NextRequest) {
       plan_id: planId,
       amount,
       currency,
-      status: "created",
+      status: "invoice_created",
       raw: { purchase: payload },
     })
   } catch (e) {
