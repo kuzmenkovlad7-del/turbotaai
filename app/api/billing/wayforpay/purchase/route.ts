@@ -36,20 +36,20 @@ function ensureDeviceHash() {
   return v
 }
 
+// ✅ FIX: без replaceAll, чтобы TS build не падал
 function esc(s: any) {
   return String(s ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
 }
 
 function amountForPlan(planId: string) {
   const test = Number(pickEnv("WAYFORPAY_TEST_AMOUNT_UAH") || 0)
   if (Number.isFinite(test) && test > 0) return test
 
-  // если потом добавишь тарифы — вот тут логика
   const monthly = Number(pickEnv("WAYFORPAY_MONTHLY_AMOUNT") || 0)
   if (planId === "monthly" && Number.isFinite(monthly) && monthly > 0) return monthly
 
@@ -73,10 +73,7 @@ export async function GET(req: NextRequest) {
     pickEnv("WAYFORPAY_MERCHANT_DOMAIN_NAME", "WAYFORPAY_MERCHANT_DOMAIN") || req.nextUrl.hostname
 
   if (!merchantAccount || !secretKey) {
-    return NextResponse.json(
-      { ok: false, error: "WayForPay env missing" },
-      { status: 200 }
-    )
+    return NextResponse.json({ ok: false, error: "WayForPay env missing" }, { status: 200 })
   }
 
   const amount = amountForPlan(planId)
