@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
   const orderDate = Math.floor(Date.now() / 1000)
 
   // ✅ Всегда возвращаем на /payment/return → /payment/result
-  const returnUrlBase = pickEnv("WAYFORPAY_RETURN_URL") || `${origin}/payment/return`
+  const returnUrlBase = pickEnv("WAYFORPAY_RETURN_URL") || `/payment/result`
   const ret = new URL(returnUrlBase)
   ret.searchParams.set("orderReference", orderReference)
   const returnUrl = ret.toString()
