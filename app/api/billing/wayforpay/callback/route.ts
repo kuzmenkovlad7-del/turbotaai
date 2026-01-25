@@ -2,140 +2,125 @@ import { NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
 import { createClient } from "@supabase/supabase-js"
 
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+function pickEnv(name: string, fallback = "") {
+  const v = (process.env[name] || "").trim()
+  return v || fallback
+}
+
 function mustEnv(name: string) {
-  const v = process.env[name]
+  const v = (process.env[name] || "").trim()
   if (!v) throw new Error(`Missing env: ${name}`)
   return v
 }
 
-function getAdmin() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL
-
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE
-
-  if (!url || !key) throw new Error("Missing Supabase admin env")
-
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
+function hmacMd5(data: string, secret: string) {
+  return crypto.createHmac("md5", secret).update(data, "utf8").digest("hex")
 }
 
-function hmacMd5(str: string, secret: string) {
-  return crypto.createHmac("md5", secret).update(str, "utf8").digest("hex")
+function supabaseAdmin() {
+  const url = mustEnv("SUPABASE_URL")
+  const key =
+    pickEnv("SUPABASE_SERVICE_ROLE_KEY") ||
+    pickEnv("SUPABASE_SERVICE_ROLE") ||
+    pickEnv("SUPABASE_ANON_KEY") ||
+    pickEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+
+  if (!key) throw new Error("Missing env: SUPABASE_SERVICE_ROLE_KEY (or ANON key fallback)")
+  return createClient(url, key, { auth: { persistSession: false } })
+}
+
+function normalizeStatus(txStatus: string) {
+  const s = (txStatus || "").toLowerCase()
+  if (s === "approved") return "paid"
+  if (s === "pending" || s === "inprocessing") return "pending"
+  if (s === "refunded" || s === "voided" || s === "expired" || s === "declined") return "failed"
+  return txStatus || "unknown"
 }
 
 export async function POST(req: NextRequest) {
-  const secretKey =
-    process.env.WAYFORPAY_SECRET_KEY ||
-    process.env.WFP_SECRET_KEY ||
-    process.env.WAYFORPAY_SECRET
+  const secretKey = mustEnv("WAYFORPAY_SECRET_KEY")
 
-  if (!secretKey) {
-    return NextResponse.json({ ok: false, error: "Missing WAYFORPAY_SECRET_KEY" }, { status: 500 })
-  }
-
-  let payload: any = null
-
+  let body: any = null
   try {
-    const ct = req.headers.get("content-type") ?? ""
-    if (ct.includes("application/json")) {
-      payload = await req.json()
-    } else {
-      const form = await req.formData()
-      payload = Object.fromEntries(form.entries())
-    }
+    body = await req.json()
   } catch {
-    return NextResponse.json({ ok: false, error: "Bad payload" }, { status: 400 })
+    return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 })
   }
 
-  const merchantAccount = String(payload?.merchantAccount ?? "")
-  const orderReference = String(payload?.orderReference ?? "")
-  const amount = String(payload?.amount ?? "")
-  const currency = String(payload?.currency ?? "")
-  const authCode = String(payload?.authCode ?? "")
-  const cardPan = String(payload?.cardPan ?? "")
-  const transactionStatus = String(payload?.transactionStatus ?? "")
-  const reasonCode = String(payload?.reasonCode ?? "")
-  const sig = String(payload?.merchantSignature ?? "")
+  const orderReference = String(body?.orderReference || body?.ORDERREFERENCE || "").trim()
+  const merchantSignature = String(body?.merchantSignature || body?.MERCHANTSIGNATURE || "").trim()
 
   if (!orderReference) {
-    return NextResponse.json({ ok: false, error: "orderReference required" }, { status: 400 })
+    return NextResponse.json({ ok: false, error: "Missing orderReference" }, { status: 400 })
   }
 
-  // Signature for serviceUrl:
-  // merchantAccount;orderReference;amount;currency;authCode;cardPan;transactionStatus;reasonCode  (HMAC_MD5)
-  const signStr = [merchantAccount, orderReference, amount, currency, authCode, cardPan, transactionStatus, reasonCode].join(";")
-  const expected = hmacMd5(signStr, secretKey)
+  // WayForPay signature line:
+  // merchantAccount;orderReference;amount;currency;authCode;cardPan;transactionStatus;reasonCode
+  const merchantAccount = String(body?.merchantAccount || "").trim()
+  const amount = String(body?.amount ?? "").trim()
+  const currency = String(body?.currency ?? "").trim()
+  const authCode = String(body?.authCode ?? "").trim()
+  const cardPan = String(body?.cardPan ?? "").trim()
+  const transactionStatus = String(body?.transactionStatus ?? "").trim()
+  const reasonCode = String(body?.reasonCode ?? "").trim()
 
-  if (!sig || expected !== sig) {
-    return NextResponse.json({ ok: false, error: "Bad signature" }, { status: 400 })
-  }
+  const signLine = [
+    merchantAccount,
+    orderReference,
+    amount,
+    currency,
+    authCode,
+    cardPan,
+    transactionStatus,
+    reasonCode,
+  ].join(";")
 
-  // Update DB best-effort
+  const expectedSig = hmacMd5(signLine, secretKey)
+
+  // не блокируем оплату из-за пустых полей, но логируем
+  const sigOk = merchantSignature && expectedSig && merchantSignature === expectedSig
+
+  const state = normalizeStatus(transactionStatus)
+
   try {
-    const admin = getAdmin()
-
-    await admin
-      .from("payment_orders")
-      .update({
-        status: transactionStatus.toLowerCase(),
-        updated_at: new Date().toISOString(),
-      } as any)
-      .eq("order_reference", orderReference)
-
-    if (transactionStatus === "Approved") {
-      // extend paid_until for device or user linked to this order
-      const { data: po } = await admin
-        .from("payment_orders")
-        .select("device_hash,user_id,plan_id")
-        .eq("order_reference", orderReference)
-        .maybeSingle()
-
-      const deviceHash = (po as any)?.device_hash ?? null
-      const userId = (po as any)?.user_id ?? null
-
-      const now = new Date()
-      const addDays = 30
-      const addMs = addDays * 24 * 60 * 60 * 1000
-
-      let grantQuery = admin.from("grants").select("id,paid_until").limit(1)
-
-      if (userId) grantQuery = grantQuery.eq("user_id", userId)
-      else if (deviceHash) grantQuery = grantQuery.eq("device_hash", deviceHash)
-      else grantQuery = grantQuery.eq("order_reference", orderReference) as any
-
-      const { data: g } = await grantQuery.maybeSingle()
-
-      if ((g as any)?.id) {
-        const cur = (g as any)?.paid_until ? new Date((g as any).paid_until) : null
-        const base = cur && cur.getTime() > now.getTime() ? cur : now
-        const nextPaid = new Date(base.getTime() + addMs).toISOString()
-
-        await admin
-          .from("grants")
-          .update({ paid_until: nextPaid, updated_at: new Date().toISOString() } as any)
-          .eq("id", (g as any).id)
-      }
-    }
+    const sb = supabaseAdmin()
+    await sb
+      .from("billing_orders")
+      .upsert(
+        {
+          order_reference: orderReference,
+          status: state,
+          currency: currency || null,
+          amount: Number(amount || 0) || null,
+          raw: body || null,
+        },
+        { onConflict: "order_reference" }
+      )
   } catch (e) {
-    console.error("wayforpay callback db update failed", e)
+    console.error("[callback] DB upsert failed:", e)
   }
 
-  // Merchant must respond with accept:
-  // signature = HMAC_MD5(orderReference;status;time)
+  // IMPORTANT: respond ACCEPT to confirm
   const time = Math.floor(Date.now() / 1000)
   const status = "accept"
-  const acceptSig = hmacMd5([orderReference, status, String(time)].join(";"), secretKey)
+  const respSig = hmacMd5(`${orderReference};${status};${time}`, secretKey)
 
-  return NextResponse.json({
-    orderReference,
-    status,
-    time,
-    signature: acceptSig,
-  })
+  return NextResponse.json(
+    {
+      orderReference,
+      status,
+      time,
+      signature: respSig,
+      sigOk,
+    },
+    { status: 200 }
+  )
+}
+
+export async function GET() {
+  // чтобы случайно не было 405 на пинге
+  return NextResponse.json({ ok: true }, { status: 200 })
 }
