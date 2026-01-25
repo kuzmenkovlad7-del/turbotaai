@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { createClient } from "@supabase/supabase-js"
+import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,6 +19,12 @@ type GrantRow = {
   promo_until: any
   created_at?: string | null
   updated_at?: string | null
+}
+
+function clampInt(v: any, fallback: number, min = 0, max = 9999) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(min, Math.min(max, Math.trunc(n)))
 }
 
 function routeSessionSupabase() {
@@ -52,11 +59,17 @@ function routeAdminSupabase() {
   const service = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!url || !(service || anon)) {
-    throw new Error("Missing Supabase env: NEXT_PUBLIC_SUPABASE_URL and (SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY)")
+    throw new Error(
+      "Missing Supabase env: NEXT_PUBLIC_SUPABASE_URL and (SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY)"
+    )
   }
 
   const sb = createClient(url, service || anon!, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
   })
 
   return sb
@@ -74,7 +87,11 @@ async function findGrantByDevice(sb: any, deviceHash: string): Promise<GrantRow 
   return (data ?? null) as GrantRow | null
 }
 
-async function updateGrant(sb: any, id: string, patch: Partial<GrantRow> & { updated_at?: string }) {
+async function updateGrant(
+  sb: any,
+  id: string,
+  patch: Partial<GrantRow> & { updated_at?: string }
+) {
   const { data } = await sb.from("access_grants").update(patch).eq("id", id).select("*").maybeSingle()
   return (data ?? null) as GrantRow | null
 }
@@ -82,6 +99,7 @@ async function updateGrant(sb: any, id: string, patch: Partial<GrantRow> & { upd
 export async function POST(_req: NextRequest) {
   try {
     const nowIso = new Date().toISOString()
+    const trialDefault = clampInt(process.env.NEXT_PUBLIC_TRIAL_QUESTIONS, 5, 0, 999)
 
     const cookieStore = cookies()
     let deviceUuid = cookieStore.get(DEVICE_COOKIE)?.value ?? null
@@ -106,10 +124,36 @@ export async function POST(_req: NextRequest) {
 
     for (const deviceHash of targets) {
       const g = await findGrantByDevice(adminSb, deviceHash)
+
       if (g?.id) {
-        await updateGrant(adminSb, g.id, { promo_until: null, updated_at: nowIso }).catch(() => null)
+        const current = typeof g.trial_questions_left === "number" ? g.trial_questions_left : null
+
+        // если после промо осталось 0, возвращаем дефолтный trial (обычно 5)
+        // если было >0, оставляем как есть
+        const restoredTrial =
+          current && current > 0
+            ? current
+            : trialDefault
+
+        await updateGrant(adminSb, g.id, {
+          promo_until: null,
+          trial_questions_left: restoredTrial,
+          updated_at: nowIso,
+        }).catch(() => null)
+
         okAny = true
       }
+    }
+
+    // на всякий случай снимаем promo_until и в profiles (если промо писалось туда)
+    if (isLoggedIn && userId) {
+      try {
+        const admin = getSupabaseAdmin()
+        await admin
+          .from("profiles")
+          .update({ promo_until: null, updated_at: nowIso } as any)
+          .eq("id", userId)
+      } catch {}
     }
 
     const res = NextResponse.json(okAny ? { ok: true } : { ok: false, errorCode: "GRANT_NOT_FOUND" }, { status: 200 })

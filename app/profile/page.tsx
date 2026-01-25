@@ -13,23 +13,15 @@ type Summary = {
   trialLeft?: any
   trial_left?: any
   trial_questions_left?: any
-  access?: "Paid" | "Promo" | "Limited" | string | null
+  access?: "Paid" | "Promo" | "Trial" | "Limited" | string | null
   paidUntil?: string | null
   paid_until?: string | null
   promoUntil?: string | null
   promo_until?: string | null
   isLoggedIn?: boolean
-  hasAccess?: boolean
-}
-
-function safeDate(v: any): string | null {
-  if (!v) return null
-  const d = new Date(String(v))
-  if (Number.isNaN(d.getTime())) return null
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, "0")
-  const dd = String(d.getDate()).padStart(2, "0")
-  return `${yyyy}-${mm}-${dd}`
+  autoRenew?: boolean
+  auto_renew?: boolean
+  subscriptionStatus?: string | null
 }
 
 function isActiveDate(v: any) {
@@ -37,6 +29,20 @@ function isActiveDate(v: any) {
   const d = new Date(String(v))
   if (Number.isNaN(d.getTime())) return false
   return d.getTime() > Date.now()
+}
+
+function formatDateTime(v: any, locale: string) {
+  if (!v) return null
+  const d = new Date(String(v))
+  if (Number.isNaN(d.getTime())) return null
+  const fmt = new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+  return fmt.format(d)
 }
 
 export default function ProfilePage() {
@@ -49,6 +55,10 @@ export default function ProfilePage() {
     return code.startsWith("ru") ? "ru" : code.startsWith("en") ? "en" : "uk"
   }, [currentLanguage?.code])
 
+  const locale = useMemo(() => {
+    return lang === "ru" ? "ru-RU" : lang === "uk" ? "uk-UA" : "en-US"
+  }, [lang])
+
   const copy = useMemo(() => {
     const c = {
       uk: {
@@ -56,6 +66,7 @@ export default function ProfilePage() {
         pricing: "Тарифи",
         signIn: "Увійти",
         logout: "Вийти",
+
         account: "Акаунт",
         accountDesc: "Статус входу та доступ",
         email: "Email",
@@ -65,11 +76,29 @@ export default function ProfilePage() {
         accessUnlimited: "Безліміт",
         questionsLeft: "Залишилось запитань",
         unlimited: "Безлімітно",
+
         paidUntil: "Оплачено до",
         promoUntil: "Промо до",
         notActive: "Не активно",
-        manageSub: "Керувати підпискою",
-        hint: "Увійдіть, щоб зберігати історію та керувати доступом.",
+
+        manage: "Керування доступом",
+        manageDesc: "Підписка та промокод",
+        subStatus: "Статус підписки",
+        autoRenew: "Автопродовження",
+        enabled: "Увімкнено",
+        disabled: "Вимкнено",
+        active: "Активна",
+        inactive: "Не активна",
+
+        cancelSub: "Скасувати автопродовження",
+        cancelPromo: "Скасувати промокод",
+        cancelling: "Виконуємо...",
+        refresh: "Оновити",
+
+        needLogin: "Увійдіть, щоб керувати підпискою та промо.",
+        okSubCanceled: "Автопродовження вимкнено",
+        okPromoCanceled: "Промокод скасовано",
+
         history: "Історія",
         historyDesc: "Збережені сесії",
         historyNeedLogin: "Увійдіть, щоб бачити історію.",
@@ -81,6 +110,7 @@ export default function ProfilePage() {
         pricing: "Тарифы",
         signIn: "Войти",
         logout: "Выйти",
+
         account: "Аккаунт",
         accountDesc: "Статус входа и доступ",
         email: "Email",
@@ -90,11 +120,29 @@ export default function ProfilePage() {
         accessUnlimited: "Безлимит",
         questionsLeft: "Осталось вопросов",
         unlimited: "Безлимитно",
+
         paidUntil: "Оплачено до",
         promoUntil: "Промо до",
         notActive: "Не активно",
-        manageSub: "Управлять подпиской",
-        hint: "Войдите, чтобы сохранять историю и управлять доступом.",
+
+        manage: "Управление доступом",
+        manageDesc: "Подписка и промокод",
+        subStatus: "Статус подписки",
+        autoRenew: "Автопродление",
+        enabled: "Включено",
+        disabled: "Выключено",
+        active: "Активна",
+        inactive: "Не активна",
+
+        cancelSub: "Отменить автопродление",
+        cancelPromo: "Отменить промокод",
+        cancelling: "Выполняем...",
+        refresh: "Обновить",
+
+        needLogin: "Войдите, чтобы управлять подпиской и промо.",
+        okSubCanceled: "Автопродление выключено",
+        okPromoCanceled: "Промокод отменён",
+
         history: "История",
         historyDesc: "Сохранённые сессии",
         historyNeedLogin: "Войдите, чтобы видеть историю.",
@@ -106,6 +154,7 @@ export default function ProfilePage() {
         pricing: "Pricing",
         signIn: "Sign In",
         logout: "Log out",
+
         account: "Account",
         accountDesc: "Login status and access",
         email: "Email",
@@ -115,11 +164,29 @@ export default function ProfilePage() {
         accessUnlimited: "Unlimited",
         questionsLeft: "Questions left",
         unlimited: "Unlimited",
+
         paidUntil: "Paid until",
         promoUntil: "Promo until",
         notActive: "Not active",
-        manageSub: "Manage subscription",
-        hint: "Sign in to unlock saved sessions and access controls.",
+
+        manage: "Access management",
+        manageDesc: "Subscription and promo",
+        subStatus: "Subscription status",
+        autoRenew: "Auto renew",
+        enabled: "Enabled",
+        disabled: "Disabled",
+        active: "Active",
+        inactive: "Inactive",
+
+        cancelSub: "Cancel auto-renew",
+        cancelPromo: "Cancel promo",
+        cancelling: "Working...",
+        refresh: "Refresh",
+
+        needLogin: "Sign in to manage subscription and promo.",
+        okSubCanceled: "Auto-renew disabled",
+        okPromoCanceled: "Promo cancelled",
+
         history: "History",
         historyDesc: "Saved sessions",
         historyNeedLogin: "Login to see history.",
@@ -131,19 +198,25 @@ export default function ProfilePage() {
   }, [lang])
 
   const [summary, setSummary] = useState<Summary | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState<null | "refresh" | "cancelSub" | "cancelPromo">(null)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const loadSummary = async () => {
+    setLoading(true)
+    try {
+      const r = await fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
+      const d = await r.json().catch(() => ({}))
+      setSummary(d || {})
+    } catch {
+      setSummary({})
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    let alive = true
-    fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (!alive) return
-        setSummary(d || {})
-      })
-      .catch(() => setSummary({}))
-    return () => {
-      alive = false
-    }
+    loadSummary()
   }, [])
 
   const isLoggedIn = Boolean(user) || Boolean(summary?.isLoggedIn)
@@ -171,8 +244,78 @@ export default function ProfilePage() {
 
   const questionsLabel = paidActive || promoActive ? copy.unlimited : String(trialLeft)
 
-  const paidUntil = safeDate(paidUntilRaw)
-  const promoUntil = safeDate(promoUntilRaw)
+  const paidUntil = formatDateTime(paidUntilRaw, locale)
+  const promoUntil = formatDateTime(promoUntilRaw, locale)
+
+  const autoRenew = Boolean((summary as any)?.autoRenew ?? (summary as any)?.auto_renew ?? false)
+  const subscriptionStatus = String((summary as any)?.subscriptionStatus ?? "").trim()
+  const subActive = paidActive || promoActive || subscriptionStatus.toLowerCase() === "active"
+
+  async function doLogout() {
+    await fetch("/api/auth/clear", { method: "POST", credentials: "include" }).catch(() => {})
+    router.refresh()
+    router.push("/pricing")
+  }
+
+  async function doCancelSub() {
+    setMsg(null)
+    if (!isLoggedIn) {
+      setMsg(copy.needLogin)
+      router.push("/login?next=/profile")
+      return
+    }
+
+    setBusy("cancelSub")
+    try {
+      const r = await fetch("/api/billing/subscription/cancel", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d?.error || "Cancel failed")
+
+      setMsg(copy.okSubCanceled)
+      await loadSummary()
+      try {
+        window.dispatchEvent(new Event("turbota:refresh"))
+      } catch {}
+    } catch (e: any) {
+      setMsg(e?.message || "Cancel failed")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function doCancelPromo() {
+    setMsg(null)
+    if (!isLoggedIn) {
+      setMsg(copy.needLogin)
+      router.push("/login?next=/profile")
+      return
+    }
+
+    setBusy("cancelPromo")
+    try {
+      const r = await fetch("/api/billing/promo/cancel", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d?.error || "Cancel failed")
+
+      setMsg(copy.okPromoCanceled)
+      await loadSummary()
+      try {
+        window.dispatchEvent(new Event("turbota:refresh"))
+      } catch {}
+    } catch (e: any) {
+      setMsg(e?.message || "Cancel failed")
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 lg:px-10 xl:px-16">
@@ -192,16 +335,12 @@ export default function ProfilePage() {
             <Button
               variant="outline"
               className="rounded-full border border-slate-200"
-              onClick={async () => {
-                await fetch("/api/auth/clear", { method: "POST" }).catch(() => {})
-                router.refresh()
-                router.push("/")
-              }}
+              onClick={doLogout}
             >
               {copy.logout}
             </Button>
           ) : (
-            <Link href="/login">
+            <Link href="/login?next=/profile">
               <Button variant="outline" className="rounded-full border border-slate-200">
                 {copy.signIn}
               </Button>
@@ -220,41 +359,107 @@ export default function ProfilePage() {
           <CardContent className="space-y-2 text-sm text-slate-700">
             <div className="flex items-center justify-between">
               <span className="text-slate-500">{copy.email}:</span>
-              <span className="font-medium">{email}</span>
+              <span className="font-medium">{loading ? "…" : email}</span>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="text-slate-500">{copy.access}:</span>
-              <span className="font-medium">{accessLabel}</span>
+              <span className="font-medium">{loading ? "…" : accessLabel}</span>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="text-slate-500">{copy.questionsLeft}:</span>
-              <span className="font-medium">{questionsLabel}</span>
+              <span className="font-medium">{loading ? "…" : questionsLabel}</span>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="text-slate-500">{copy.paidUntil}:</span>
-              <span className="font-medium">{paidUntil || copy.notActive}</span>
+              <span className="font-medium">{loading ? "…" : paidUntil || copy.notActive}</span>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="text-slate-500">{copy.promoUntil}:</span>
-              <span className="font-medium">{promoUntil || copy.notActive}</span>
+              <span className="font-medium">{loading ? "…" : promoUntil || copy.notActive}</span>
             </div>
 
-            <div className="pt-4">
-              <Link href="/subscription">
+            <div className="pt-3 space-y-2">
+              <Button
+                variant="outline"
+                className="w-full rounded-full border border-slate-200"
+                disabled={busy === "refresh"}
+                onClick={async () => {
+                  setBusy("refresh")
+                  setMsg(null)
+                  await loadSummary()
+                  setBusy(null)
+                }}
+              >
+                {busy === "refresh" ? copy.cancelling : copy.refresh}
+              </Button>
+
+              <Link href="/pricing">
                 <Button variant="outline" className="w-full rounded-full border border-slate-200">
-                  {copy.manageSub}
+                  {copy.pricing}
                 </Button>
               </Link>
-              <p className="mt-2 text-xs text-slate-500">{copy.hint}</p>
+
+              {msg ? <p className="mt-2 text-xs text-slate-600">{msg}</p> : null}
             </div>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle>{copy.manage}</CardTitle>
+            <CardDescription>{copy.manageDesc}</CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-3 text-sm text-slate-700">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">{copy.subStatus}:</span>
+              <span className="font-medium">
+                {loading ? "…" : subActive ? copy.active : copy.inactive}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">{copy.autoRenew}:</span>
+              <span className="font-medium">
+                {loading ? "…" : autoRenew ? copy.enabled : copy.disabled}
+              </span>
+            </div>
+
+            {!isLoggedIn ? (
+              <p className="text-xs text-slate-500">{copy.needLogin}</p>
+            ) : null}
+
+            <div className="grid gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="w-full rounded-full border border-slate-200"
+                disabled={!isLoggedIn || busy === "cancelSub" || !autoRenew}
+                onClick={doCancelSub}
+              >
+                {busy === "cancelSub" ? copy.cancelling : copy.cancelSub}
+              </Button>
+
+              <Button
+                variant="outline"
+                className="w-full rounded-full border border-slate-200"
+                disabled={!isLoggedIn || busy === "cancelPromo" || !promoActive}
+                onClick={doCancelPromo}
+              >
+                {busy === "cancelPromo" ? copy.cancelling : copy.cancelPromo}
+              </Button>
+            </div>
+
+            {subscriptionStatus ? (
+              <p className="pt-1 text-xs text-slate-500">status: {subscriptionStatus}</p>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl lg:col-span-2">
           <CardHeader>
             <CardTitle>{copy.history}</CardTitle>
             <CardDescription>{copy.historyDesc}</CardDescription>

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
-import { cookies } from "next/headers"
-import { createServerClient } from "@supabase/ssr"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
 export const runtime = "nodejs"
@@ -142,29 +140,6 @@ async function extendPaidUntil(admin: any, userId: string, days: number) {
   return nextPaidUntil
 }
 
-async function getUserIdFromSession() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anon) return null
-
-  const cookieStore = cookies()
-  const pendingCookies: any[] = []
-
-  const sb = createServerClient(url, anon, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll()
-      },
-      setAll(cookiesToSet) {
-        pendingCookies.push(...cookiesToSet)
-      },
-    },
-  })
-
-  const { data } = await sb.auth.getUser()
-  return data?.user?.id ?? null
-}
-
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
 
@@ -184,7 +159,7 @@ export async function GET(req: NextRequest) {
   // читаем из БД
   const read = await admin
     .from("billing_orders")
-    .select("status, updated_at, raw, user_id, amount, currency")
+    .select("status, updated_at, raw, user_id")
     .eq("order_reference", orderReference)
     .order("updated_at", { ascending: false })
     .limit(20)
@@ -206,14 +181,7 @@ export async function GET(req: NextRequest) {
     raw?.transactionStatus ||
     null
 
-  // userId: из заказа или (если нет) из сессии (чтобы можно было восстановиться)
-  let userId = last?.user_id ? String(last.user_id) : null
-  if (!userId) {
-    const sessionUserId = await getUserIdFromSession().catch(() => null)
-    if (sessionUserId) userId = String(sessionUserId)
-  }
-
-  // если не paid — делаем CHECK_STATUS и сохраняем
+  // если не paid, делаем CHECK_STATUS, обновляем запись и перечитываем
   if (best !== "paid") {
     const chk = await wayforpayCheck(orderReference)
     if (chk.ok) {
@@ -227,34 +195,18 @@ export async function GET(req: NextRequest) {
         last_event: "check",
       }
 
-      if (rows.length > 0) {
-        await admin
-          .from("billing_orders")
-          .update({
-            status: next,
-            raw: mergedRaw,
-            // если user_id пустой в заказе — фиксируем
-            ...(userId ? { user_id: userId } : {}),
-            updated_at: nowIso,
-          } as any)
-          .eq("order_reference", orderReference)
-      } else {
-        // если записи не было — создаём
-        await admin
-          .from("billing_orders")
-          .insert({
-            order_reference: orderReference,
-            user_id: userId,
-            status: next,
-            raw: mergedRaw,
-          } as any)
-      }
+      await admin
+        .from("billing_orders")
+        .update({ status: next, raw: mergedRaw, updated_at: nowIso })
+        .eq("order_reference", orderReference)
 
+      // обновляем локальные переменные
       best = next
       raw = mergedRaw
       lastTx = chk.txStatus as any
 
-      // если стало paid и user_id известен — продлеваем доступ
+      // если стало paid и есть user_id, продлеваем доступ
+      const userId = last?.user_id ? String(last.user_id) : null
       if (best === "paid" && userId) {
         await extendPaidUntil(admin, userId, 30)
       }
@@ -274,7 +226,6 @@ export async function GET(req: NextRequest) {
       statuses,
       lastUpdatedAt: last?.updated_at || null,
       lastEvent: raw?.last_event || null,
-      userId: userId || null,
     }
   }
 

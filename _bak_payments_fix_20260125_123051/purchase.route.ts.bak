@@ -9,19 +9,19 @@ export const dynamic = "force-dynamic"
 
 const DEVICE_COOKIE = "turbotaai_device"
 
-function getOrigin(req: NextRequest) {
-  const proto = req.headers.get("x-forwarded-proto") || "https"
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host")
-  if (host) return `${proto}://${host}`
-  return new URL(req.url).origin
-}
-
 function pickEnv(...keys: string[]) {
   for (const k of keys) {
     const v = process.env[k]
     if (v && String(v).trim()) return String(v).trim()
   }
   return ""
+}
+
+function getOrigin(req: NextRequest) {
+  const proto = req.headers.get("x-forwarded-proto") || "https"
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host")
+  if (host) return `${proto}://${host}`
+  return new URL(req.url).origin
 }
 
 function hmacMd5Hex(secret: string, data: string) {
@@ -31,9 +31,30 @@ function hmacMd5Hex(secret: string, data: string) {
 function planConfig(plan: string | null) {
   const p = (plan || "monthly").toLowerCase()
   if (p === "monthly") {
-    return { plan: "monthly", amount: 1, currency: "UAH", days: 30, productName: "TurbotaAI Monthly" }
+    return {
+      plan: "monthly",
+      amount: 499,
+      currency: "UAH",
+      days: 30,
+      productName: "TurbotaAI Monthly",
+    }
   }
-  return { plan: "monthly", amount: 1, currency: "UAH", days: 30, productName: "TurbotaAI Monthly" }
+  return {
+    plan: "monthly",
+    amount: 499,
+    currency: "UAH",
+    days: 30,
+    productName: "TurbotaAI Monthly",
+  }
+}
+
+function getTestAmount(defaultAmount: number) {
+  const raw = String(process.env.WAYFORPAY_TEST_AMOUNT || "").trim()
+  const n = Number(raw)
+  if (!raw) return defaultAmount
+  if (!Number.isFinite(n)) return defaultAmount
+  if (n <= 0) return defaultAmount
+  return Math.floor(n)
 }
 
 async function getUserIdFromSession() {
@@ -42,28 +63,34 @@ async function getUserIdFromSession() {
   if (!url || !anon) return null
 
   const cookieStore = cookies()
-  const pendingCookies: any[] = []
-
   const sb = createServerClient(url, anon, {
     cookies: {
       getAll() {
         return cookieStore.getAll()
       },
-      setAll(cookiesToSet) {
-        pendingCookies.push(...cookiesToSet)
-      },
+      setAll() {},
     },
   })
 
   const { data } = await sb.auth.getUser()
-  return data?.user?.id ?? null
+  return data?.user?.id || null
 }
 
 async function handle(req: NextRequest) {
   const origin = getOrigin(req)
 
-  const merchantAccount = pickEnv("WAYFORPAY_MERCHANT_ACCOUNT", "WAYFORPAY_ACCOUNT", "WFP_MERCHANT_ACCOUNT")
-  const secretKey = pickEnv("WAYFORPAY_MERCHANT_SECRET_KEY", "WAYFORPAY_SECRET_KEY", "WAYFORPAY_SECRET", "WFP_SECRET_KEY")
+  const merchantAccount = pickEnv(
+    "WAYFORPAY_MERCHANT_ACCOUNT",
+    "WAYFORPAY_ACCOUNT",
+    "WFP_MERCHANT_ACCOUNT"
+  )
+
+  const secretKey = pickEnv(
+    "WAYFORPAY_MERCHANT_SECRET_KEY",
+    "WAYFORPAY_SECRET_KEY",
+    "WAYFORPAY_SECRET",
+    "WFP_SECRET_KEY"
+  )
 
   if (!merchantAccount || !secretKey) {
     return NextResponse.json(
@@ -72,14 +99,8 @@ async function handle(req: NextRequest) {
     )
   }
 
-  // !!! ВАЖНО: подписка должна быть привязана к аккаунту
-  const userId = await getUserIdFromSession()
-  if (!userId) {
-    return NextResponse.redirect(`${origin}/login?next=/pricing`, 302)
-  }
-
-  // device cookie (для логики grants, не для оплаты)
   const cookieStore = cookies()
+
   let deviceHash = cookieStore.get(DEVICE_COOKIE)?.value ?? null
   let needSetDeviceCookie = false
   if (!deviceHash) {
@@ -87,29 +108,23 @@ async function handle(req: NextRequest) {
     needSetDeviceCookie = true
   }
 
-  let body: any = {}
-  if (req.method === "POST") {
-    try {
-      body = await req.json()
-    } catch {
-      body = {}
-    }
+  const userId = await getUserIdFromSession().catch(() => null)
+
+  const planId = String(req.nextUrl.searchParams.get("planId") || "monthly").trim()
+  const cfgRaw = planConfig(planId)
+
+  // тестовая сумма через env, чтобы гонять оплату за 1 грн
+  const cfg = {
+    ...cfgRaw,
+    amount: getTestAmount(cfgRaw.amount),
   }
 
-  const planParam =
-    req.nextUrl.searchParams.get("planId") ||
-    req.nextUrl.searchParams.get("plan") ||
-    body?.planId ||
-    body?.plan ||
-    body?.tier ||
-    "monthly"
-
-  const cfg = planConfig(String(planParam))
   const orderReference = `ta_${cfg.plan}_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`
   const orderDate = Math.floor(Date.now() / 1000)
 
   const merchantDomainName =
-    pickEnv("WAYFORPAY_MERCHANT_DOMAIN_NAME", "WAYFORPAY_DOMAIN") || new URL(origin).host
+    pickEnv("WAYFORPAY_MERCHANT_DOMAIN_NAME", "WAYFORPAY_DOMAIN") ||
+    new URL(origin).host
 
   const productName = [cfg.productName]
   const productCount = [1]
@@ -129,7 +144,7 @@ async function handle(req: NextRequest) {
 
   const merchantSignature = hmacMd5Hex(secretKey, signString)
 
-  // !!! ВАЖНО: returnUrl должен вести на существующую страницу
+  // ВАЖНО: return page у нас /payment/result
   const returnUrl = `${origin}/payment/result?orderReference=${encodeURIComponent(orderReference)}`
   const serviceUrl = `${origin}/api/billing/wayforpay/webhook`
 
@@ -172,29 +187,31 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "WayForPay invoiceUrl missing", wfp }, { status: 500 })
   }
 
-  // сохраняем order, чтобы webhook/status могли корректно продлить доступ
+  // сохраняем order в billing_orders, чтобы webhook/status могли корректно выдать доступ
   try {
     const admin = getSupabaseAdmin()
+    const nowIso = new Date().toISOString()
+
     await admin.from("billing_orders").insert({
       order_reference: orderReference,
       user_id: userId,
-      status: "invoice_created",
+      device_hash: deviceHash,
+      plan_id: cfg.plan,
       amount: cfg.amount,
       currency: cfg.currency,
-      raw: {
-        request: payload,
-        response: wfp,
-        planId: cfg.plan,
-        deviceHash,
-      },
+      status: "invoice_created",
+      raw: { request: payload, response: wfp },
+      created_at: nowIso,
+      updated_at: nowIso,
     } as any)
   } catch (e) {
     console.error("[billing][purchase] insert billing_orders failed", e)
   }
 
-  // РЕДИРЕКТ В ОПЛАТУ
+  // ДЕЛАЕМ РЕДИРЕКТ В ОПЛАТУ
   const res = NextResponse.redirect(invoiceUrl, 302)
 
+  // фиксируем device cookie в едином ключе turbotaai_device
   if (needSetDeviceCookie) {
     res.cookies.set(DEVICE_COOKIE, deviceHash!, {
       path: "/",
@@ -206,6 +223,7 @@ async function handle(req: NextRequest) {
 
   res.cookies.set("ta_last_order_reference", orderReference, { path: "/", maxAge: 60 * 30 })
   res.headers.set("cache-control", "no-store, max-age=0")
+
   return res
 }
 

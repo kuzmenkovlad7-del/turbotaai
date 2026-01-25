@@ -17,11 +17,24 @@ import { useLanguage } from "@/lib/i18n/language-context"
 
 type AnyObj = Record<string, any>
 
+const PRICE_UAH = 1
+const CURRENCY = "UAH"
+
 function isActiveDate(v: any) {
   if (!v) return false
   const d = new Date(String(v))
   if (Number.isNaN(d.getTime())) return false
   return d.getTime() > Date.now()
+}
+
+function fmtDateDMY(v: any) {
+  if (!v) return null
+  const d = new Date(String(v))
+  if (Number.isNaN(d.getTime())) return null
+  const dd = String(d.getDate()).padStart(2, "0")
+  const mm = String(d.getMonth() + 1).padStart(2, "0")
+  const yyyy = d.getFullYear()
+  return `${dd}.${mm}.${yyyy}`
 }
 
 export default function PricingPage() {
@@ -73,10 +86,10 @@ export default function PricingPage() {
         promoActivating: "Активуємо...",
         promoNeedLogin: "Активація промокоду потребує входу.",
         promoOk: "Промокод активовано",
-        manageTitle: "Керувати підпискою",
-        manageDesc: "Статус підписки та промо",
-        openSub: "Відкрити підписку",
-        manageNeedLogin: "Щоб керувати підпискою, потрібно увійти.",
+        manageTitle: "Керувати доступом",
+        manageDesc: "Підписка та промо в профілі",
+        openManage: "Відкрити керування",
+        manageNeedLogin: "Щоб керувати доступом, потрібно увійти.",
       },
       ru: {
         title: "Тарифы",
@@ -116,10 +129,10 @@ export default function PricingPage() {
         promoActivating: "Активируем...",
         promoNeedLogin: "Активация промокода требует входа.",
         promoOk: "Промокод активирован",
-        manageTitle: "Управлять подпиской",
-        manageDesc: "Статус подписки и промо",
-        openSub: "Открыть подписку",
-        manageNeedLogin: "Чтобы управлять подпиской, нужно войти.",
+        manageTitle: "Управлять доступом",
+        manageDesc: "Подписка и промо в профиле",
+        openManage: "Открыть управление",
+        manageNeedLogin: "Чтобы управлять доступом, нужно войти.",
       },
       en: {
         title: "Pricing",
@@ -159,10 +172,10 @@ export default function PricingPage() {
         promoActivating: "Activating...",
         promoNeedLogin: "Promo activation requires login.",
         promoOk: "Promo activated",
-        manageTitle: "Manage subscription",
-        manageDesc: "View subscription and promo",
-        openSub: "Open subscription",
-        manageNeedLogin: "Please sign in to manage subscription.",
+        manageTitle: "Manage access",
+        manageDesc: "Subscription & promo in profile",
+        openManage: "Open management",
+        manageNeedLogin: "Please sign in to manage access.",
       },
     }
     return c[lang as "uk" | "ru" | "en"]
@@ -190,10 +203,13 @@ export default function PricingPage() {
   const trialLeft = Number.isFinite(trialLeftNum) ? trialLeftNum : 0
 
   const accessRaw = String(summary?.access ?? "")
+  const paidUntilRaw = summary?.paidUntil ?? summary?.paid_until ?? null
+  const promoUntilRaw = summary?.promoUntil ?? summary?.promo_until ?? null
+
   const paidActive =
-    accessRaw === "Paid" || (Boolean(summary?.hasAccess) && isActiveDate(summary?.paidUntil ?? summary?.paid_until))
+    accessRaw === "Paid" || (Boolean(summary?.hasAccess) && isActiveDate(paidUntilRaw))
   const promoActive =
-    accessRaw === "Promo" || isActiveDate(summary?.promoUntil ?? summary?.promo_until)
+    accessRaw === "Promo" || isActiveDate(promoUntilRaw)
 
   const accessLabel = paidActive
     ? copy.accessUnlimited
@@ -201,7 +217,7 @@ export default function PricingPage() {
     ? copy.accessPromo
     : copy.accessFree
 
-  const accessUntil = String(summary?.accessUntil ?? summary?.access_until ?? "")
+  const accessUntilPretty = fmtDateDMY(summary?.accessUntil ?? summary?.access_until) || null
   const questionsLabel = paidActive || promoActive ? copy.unlimited : String(trialLeft)
 
   useEffect(() => {
@@ -242,7 +258,7 @@ export default function PricingPage() {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ planId: "monthly", amount: 499, currency: "UAH" }),
+        body: JSON.stringify({ planId: "monthly", amount: PRICE_UAH, currency: CURRENCY }),
       })
 
       const d = await r.json().catch(() => ({}))
@@ -307,7 +323,7 @@ export default function PricingPage() {
 
           <CardContent className="pb-8">
             <div className="flex items-end gap-3">
-              <div className="text-6xl font-bold leading-none">499</div>
+              <div className="text-6xl font-bold leading-none">{PRICE_UAH}</div>
               <div className="pb-1 text-muted-foreground">{copy.uah}</div>
             </div>
 
@@ -382,7 +398,7 @@ export default function PricingPage() {
                 {(summary?.accessUntil || summary?.access_until) && (
                   <div className="flex items-center justify-between">
                     <span>{copy.accessUntil}</span>
-                    <span className="text-slate-900">{accessUntil || "—"}</span>
+                    <span className="text-slate-900">{loadingSummary ? "…" : accessUntilPretty || "—"}</span>
                   </div>
                 )}
               </div>
@@ -468,13 +484,13 @@ export default function PricingPage() {
                 className="w-full border border-slate-200"
                 onClick={() => {
                   if (!isLoggedIn) {
-                    router.push("/login?next=/subscription")
+                    router.push("/login?next=/profile")
                     return
                   }
-                  router.push("/subscription")
+                  router.push("/profile")
                 }}
               >
-                {copy.openSub}
+                {copy.openManage}
               </Button>
               {!isLoggedIn ? (
                 <p className="mt-2 text-xs text-muted-foreground">{copy.manageNeedLogin}</p>

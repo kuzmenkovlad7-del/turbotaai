@@ -1,7 +1,5 @@
-import SubscriptionClient from "./subscription-client"
-
-export const dynamic = "force-dynamic"
+import { redirect } from "next/navigation"
 
 export default function SubscriptionPage() {
-  return <SubscriptionClient />
+  redirect("/pricing")
 }

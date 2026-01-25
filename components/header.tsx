@@ -1,7 +1,7 @@
 "use client"
 
 import { usePathname, useSearchParams } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { Menu } from "lucide-react"
 
@@ -100,40 +100,63 @@ export default function Header() {
   const loadSummary = () =>
     fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
 
+  const inFlightRef = useRef<Promise<void> | null>(null)
+  const lastRunRef = useRef<number>(0)
+
+  const runSummary = (force = false) => {
+    const now = Date.now()
+
+    // троттлинг, чтобы не долбить summary пачками
+    if (!force && now - lastRunRef.current < 900) return
+    if (inFlightRef.current) return
+
+    lastRunRef.current = now
+
+    inFlightRef.current = (async () => {
+      try {
+        const r = await loadSummary()
+        const d = await r.json().catch(() => ({}))
+
+        setIsLoggedIn(Boolean(d?.isLoggedIn))
+
+        const left =
+          typeof d?.trialLeft === "number"
+            ? d.trialLeft
+            : typeof d?.trial_questions_left === "number"
+            ? d.trial_questions_left
+            : null
+        setTrialLeft(left)
+
+        const txt =
+          typeof d?.trialText === "string"
+            ? d.trialText
+            : d?.access === "Paid"
+            ? "Unlimited"
+            : d?.access === "Promo"
+            ? "Promo"
+            : null
+        setTrialText(txt)
+
+        const accessActive =
+          Boolean(d?.hasAccess) || d?.access === "Paid" || d?.access === "Promo"
+        setHasAccess(accessActive)
+      } catch {}
+      finally {
+        inFlightRef.current = null
+      }
+    })()
+  }
+
   useEffect(() => {
     let alive = true
 
-    const run = () => {
-      loadSummary()
-        .then((r) => r.json())
-        .then((d) => {
-          if (!alive) return
+    if (alive) runSummary(true)
 
-          setIsLoggedIn(Boolean(d?.isLoggedIn))
-
-          const left = typeof d?.trialLeft === "number" ? d.trialLeft : null
-          setTrialLeft(left)
-
-          const txt =
-            typeof d?.trialText === "string"
-              ? d.trialText
-              : d?.access === "Paid"
-              ? "Unlimited"
-              : d?.access === "Promo"
-              ? "Promo code"
-              : null
-
-          setTrialText(txt)
-
-          const accessActive =
-            Boolean(d?.hasAccess) || d?.access === "Paid" || d?.access === "Promo"
-          setHasAccess(accessActive)
-        })
-        .catch(() => {})
+    const onRefresh = () => {
+      if (!alive) return
+      runSummary(false)
     }
 
-    run()
-    const onRefresh = () => run()
     window.addEventListener("turbota:refresh", onRefresh)
 
     return () => {

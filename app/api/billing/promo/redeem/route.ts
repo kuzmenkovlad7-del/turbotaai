@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
-import { createClient } from "@supabase/supabase-js"
+import { randomUUID } from "crypto"
+import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -20,21 +21,36 @@ type GrantRow = {
   updated_at?: string | null
 }
 
-function addDays(days: number) {
+function num(v: any, fallback = 0) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function getTrialLimit() {
+  const limit = num(process.env.TRIAL_QUESTIONS_LIMIT, 5)
+  return limit > 0 ? Math.floor(limit) : 5
+}
+
+function addDaysIso(days: number) {
   const d = new Date()
   d.setUTCDate(d.getUTCDate() + days)
   return d.toISOString()
 }
 
-function laterDate(a: any, b: any) {
-  if (!a && !b) return null
-  if (!a) return b
-  if (!b) return a
-  const ta = new Date(a).getTime()
-  const tb = new Date(b).getTime()
-  if (!Number.isFinite(ta)) return b
-  if (!Number.isFinite(tb)) return a
-  return ta >= tb ? a : b
+function toDateOrNull(v: any): Date | null {
+  if (!v) return null
+  const d = new Date(String(v))
+  if (Number.isNaN(d.getTime())) return null
+  return d
+}
+
+function laterDateIso(a: any, b: any): string | null {
+  const da = toDateOrNull(a)
+  const db = toDateOrNull(b)
+  if (!da && !db) return null
+  if (da && !db) return da.toISOString()
+  if (!da && db) return db.toISOString()
+  return (da!.getTime() >= db!.getTime() ? da! : db!).toISOString()
 }
 
 /**
@@ -89,67 +105,70 @@ function routeSessionSupabase() {
     for (const c of pendingCookies) res.cookies.set(c.name, c.value, c.options)
   }
 
-  return { sb, applyPendingCookies }
+  return { sb, cookieStore, applyPendingCookies }
 }
 
-function routeAdminSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  const service = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!url || !(service || anon)) {
-    throw new Error("Missing Supabase env: NEXT_PUBLIC_SUPABASE_URL and (SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY)")
-  }
-
-  const sb = createClient(url, service || anon!, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  })
-
-  return sb
-}
-
-async function findGrantByDevice(sb: any, deviceHash: string): Promise<GrantRow | null> {
-  const { data } = await sb
+async function findGrantByDevice(admin: any, deviceHash: string): Promise<GrantRow | null> {
+  const { data } = await admin
     .from("access_grants")
     .select("*")
     .eq("device_hash", deviceHash)
-    .order("created_at", { ascending: false })
+    .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle()
 
   return (data ?? null) as GrantRow | null
 }
 
-async function createGrant(sb: any, userId: string | null, deviceHash: string, trialLeft: number, nowIso: string) {
-  const { data } = await sb
-    .from("access_grants")
-    .insert({
-      id: crypto.randomUUID(),
-      user_id: userId,
-      device_hash: deviceHash,
-      trial_questions_left: trialLeft,
-      paid_until: null,
-      promo_until: null,
-      created_at: nowIso,
-      updated_at: nowIso,
-    })
-    .select("*")
-    .single()
+async function ensureGrant(
+  admin: any,
+  deviceHash: string,
+  userId: string | null,
+  trialDefault: number,
+  nowIso: string
+): Promise<GrantRow> {
+  let g = await findGrantByDevice(admin, deviceHash)
 
-  return (data ?? null) as GrantRow | null
-}
+  if (!g) {
+    const { data } = await admin
+      .from("access_grants")
+      .insert({
+        id: randomUUID(),
+        user_id: userId,
+        device_hash: deviceHash,
+        trial_questions_left: trialDefault,
+        paid_until: null,
+        promo_until: null,
+        created_at: nowIso,
+        updated_at: nowIso,
+      })
+      .select("*")
+      .single()
 
-async function updateGrant(sb: any, id: string, patch: Partial<GrantRow> & { updated_at?: string }) {
-  const { data } = await sb.from("access_grants").update(patch).eq("id", id).select("*").maybeSingle()
-  return (data ?? null) as GrantRow | null
-}
-
-async function ensureGrant(sb: any, userId: string | null, deviceHash: string, nowIso: string, trialDefault: number) {
-  let g = await findGrantByDevice(sb, deviceHash)
-  if (!g) g = (await createGrant(sb, userId, deviceHash, trialDefault, nowIso)) ?? null
-  if (g?.id && userId && !g.user_id) {
-    g = (await updateGrant(sb, g.id, { user_id: userId, updated_at: nowIso })) ?? g
+    g = (data ?? null) as GrantRow | null
   }
+
+  if (!g) {
+    // последний шанс перечитать
+    g = await findGrantByDevice(admin, deviceHash)
+  }
+
+  if (!g) {
+    throw new Error("GRANT_CREATE_FAILED")
+  }
+
+  // если юзер залогинен, а grant без user_id — привязываем
+  if (userId && !g.user_id) {
+    const { data } = await admin
+      .from("access_grants")
+      .update({ user_id: userId, updated_at: nowIso })
+      .eq("id", g.id)
+      .select("*")
+      .maybeSingle()
+
+    g = ((data ?? g) as any) as GrantRow
+  }
+
   return g
 }
 
@@ -169,63 +188,81 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, errorCode: "INVALID_PROMO" }, { status: 200 })
     }
 
+    const trialDefault = getTrialLimit()
     const nowIso = new Date().toISOString()
-    const trialDefault = Number(process.env.TRIAL_QUESTIONS_LIMIT ?? "5") || 5
+    const promoUntil = addDaysIso(days)
 
-    const cookieStore = cookies()
+    const { sb: sessionSb, cookieStore, applyPendingCookies } = routeSessionSupabase()
+
+    // device cookie
     let deviceUuid = cookieStore.get(DEVICE_COOKIE)?.value ?? null
     let needSetDeviceCookie = false
     if (!deviceUuid) {
-      deviceUuid = crypto.randomUUID()
+      deviceUuid = randomUUID()
       needSetDeviceCookie = true
     }
 
-    const { sb: sessionSb, applyPendingCookies } = routeSessionSupabase()
-    const adminSb = routeAdminSupabase()
-
+    // session user
     const { data: userData } = await sessionSb.auth.getUser()
-    const user = userData?.user ?? null
-    const userId = user?.id ?? null
-    const isLoggedIn = Boolean(userId)
+    const userId = userData?.user?.id ?? null
+    if (!userId) {
+      return NextResponse.json({ ok: false, errorCode: "LOGIN_REQUIRED" }, { status: 401 })
+    }
+
+    const admin = getSupabaseAdmin()
 
     const guestHash = deviceUuid
-    const accountHash = userId ? `${ACCOUNT_PREFIX}${userId}` : null
+    const accountHash = `${ACCOUNT_PREFIX}${userId}`
 
-    // всегда обновляем гостевую строку
-    const guestGrant = await ensureGrant(adminSb, null, guestHash, nowIso, trialDefault)
-    if (!guestGrant) {
-      return NextResponse.json({ ok: false, errorCode: "GRANT_NOT_FOUND" }, { status: 200 })
+    // ensure grants
+    const guestGrant = await ensureGrant(admin, guestHash, null, trialDefault, nowIso)
+    const accGrant = await ensureGrant(admin, accountHash, userId, trialDefault, nowIso)
+
+    // grants: обновляем promo_until (trial НЕ трогаем)
+    const mergedPromoGuest = laterDateIso(guestGrant.promo_until ?? null, promoUntil)
+    if (mergedPromoGuest && mergedPromoGuest !== String(guestGrant.promo_until ?? "")) {
+      await admin
+        .from("access_grants")
+        .update({ promo_until: mergedPromoGuest, updated_at: nowIso })
+        .eq("id", guestGrant.id)
     }
 
-    const promoUntil = addDays(days)
-    const mergedPromoGuest = laterDate(guestGrant.promo_until ?? null, promoUntil)
-
-    await updateGrant(adminSb, guestGrant.id, {
-      promo_until: mergedPromoGuest,
-      trial_questions_left: 0,
-      updated_at: nowIso,
-    }).catch(() => null)
-
-    // если залогинен — обновляем account строку тоже
-    if (isLoggedIn && accountHash) {
-      const accGrant = await ensureGrant(adminSb, userId!, accountHash, nowIso, trialDefault)
-      if (accGrant?.id) {
-        const mergedPromoAcc = laterDate(accGrant.promo_until ?? null, promoUntil)
-        await updateGrant(adminSb, accGrant.id, {
-          promo_until: mergedPromoAcc,
-          trial_questions_left: 0,
-          updated_at: nowIso,
-        }).catch(() => null)
-      }
+    const mergedPromoAcc = laterDateIso(accGrant.promo_until ?? null, promoUntil)
+    if (mergedPromoAcc && mergedPromoAcc !== String(accGrant.promo_until ?? "")) {
+      await admin
+        .from("access_grants")
+        .update({ promo_until: mergedPromoAcc, updated_at: nowIso })
+        .eq("id", accGrant.id)
     }
 
-    const res = NextResponse.json({ ok: true, promo_until: promoUntil }, { status: 200 })
+    // profiles: это источник правды для account/summary
+    const { data: prof } = await admin
+      .from("profiles")
+      .select("promo_until")
+      .eq("id", userId)
+      .maybeSingle()
+
+    const mergedProfilePromo = laterDateIso(prof?.promo_until ?? null, promoUntil)
+
+    await admin
+      .from("profiles")
+      .update({
+        promo_until: mergedProfilePromo ?? promoUntil,
+        subscription_status: "active",
+        updated_at: nowIso,
+      })
+      .eq("id", userId)
+
+    const res = NextResponse.json(
+      { ok: true, promo_until: mergedProfilePromo ?? promoUntil },
+      { status: 200 }
+    )
 
     if (needSetDeviceCookie) {
       res.cookies.set(DEVICE_COOKIE, deviceUuid, {
         path: "/",
-        httpOnly: true,
         sameSite: "lax",
+        httpOnly: false,
         maxAge: 60 * 60 * 24 * 365,
       })
     }
@@ -233,7 +270,7 @@ export async function POST(req: NextRequest) {
     applyPendingCookies(res)
     res.headers.set("cache-control", "no-store, max-age=0")
     return res
-  } catch (_e: any) {
+  } catch {
     return NextResponse.json({ ok: false, errorCode: "REDEEM_FAILED" }, { status: 200 })
   }
 }
