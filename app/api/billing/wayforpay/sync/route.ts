@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ✅ Только Approved активирует доступ
-  if (status === "Approved") {
+  if (String(status || "").toLowerCase() === "approved") {
     const admin = getSupabaseAdmin()
     const nowIso = new Date().toISOString()
 
