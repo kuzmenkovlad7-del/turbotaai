@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
 import { cookies } from "next/headers"
+import { createServerClient } from "@supabase/ssr"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
 export const runtime = "nodejs"
@@ -8,8 +9,8 @@ export const dynamic = "force-dynamic"
 
 const DEVICE_COOKIE = "turbotaai_device"
 
-function hmacMd5(str: string, key: string) {
-  return crypto.createHmac("md5", key).update(str).digest("hex")
+function hmacMd5(message: string, secret: string) {
+  return crypto.createHmac("md5", secret).update(message, "utf8").digest("hex")
 }
 
 function pickEnv(...keys: string[]) {
@@ -18,6 +19,21 @@ function pickEnv(...keys: string[]) {
     if (v) return v
   }
   return ""
+}
+
+function normalizeDomain(input: string) {
+  let s = String(input || "").trim()
+  if (!s) return ""
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      return new URL(s).hostname.toLowerCase()
+    } catch {
+      return ""
+    }
+  }
+  s = s.split("/")[0]
+  s = s.split(":")[0]
+  return s.toLowerCase()
 }
 
 function esc(s: any) {
@@ -38,7 +54,7 @@ function ensureDeviceHash() {
   jar.set(DEVICE_COOKIE, v, {
     path: "/",
     sameSite: "lax",
-    httpOnly: true,
+    httpOnly: false,
     secure: process.env.NODE_ENV === "production",
     maxAge: 60 * 60 * 24 * 365,
   })
@@ -46,35 +62,36 @@ function ensureDeviceHash() {
 }
 
 function amountForPlan(planId: string) {
-  return Number(process.env.NEXT_PUBLIC_PRICE_UAH || "1")
+  const raw = pickEnv("NEXT_PUBLIC_PRICE_UAH", "PRICE_UAH", "PLAN_MONTHLY_PRICE_UAH")
+  const n = Number(raw || "499")
+  return Number.isFinite(n) && n > 0 ? n : 499
 }
 
-
-function getAccessTokenFromCookies(): string | null {
-  const jar = cookies()
-  const all = jar.getAll()
-
-  for (const c of all) {
-    if (!c.name.includes("auth-token")) continue
-    try {
-      const j: any = JSON.parse(c.value)
-      if (j?.access_token) return String(j.access_token)
-      if (Array.isArray(j) && j[0]?.access_token) return String(j[0].access_token)
-    } catch {}
-  }
-
-  for (const c of all) {
-    if (c.name === "sb-access-token" || c.name.endsWith("access-token")) return String(c.value)
-  }
-
-  return null
+function formatAmount(n: number) {
+  // WayForPay нормально принимает amount как 2 знака
+  return (Math.round(n * 100) / 100).toFixed(2)
 }
 
-async function resolveUserId(admin: any) {
+async function resolveUserIdViaSSR() {
   try {
-    const token = getAccessTokenFromCookies()
-    if (!token) return null
-    const { data } = await admin.auth.getUser(token)
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!url || !anon) return null
+
+    const store = cookies()
+
+    const sb = createServerClient(url, anon, {
+      cookies: {
+        getAll() {
+          return store.getAll()
+        },
+        setAll() {
+          // нам здесь не нужно обновлять cookies
+        },
+      },
+    })
+
+    const { data } = await sb.auth.getUser()
     return data?.user?.id || null
   } catch {
     return null
@@ -92,23 +109,34 @@ export async function GET(req: NextRequest) {
 
   const deviceHash = ensureDeviceHash()
 
+  // ВАЖНО: merchantAccount = MERCHANT LOGIN (например turbotaai_com), НЕ домен и НЕ ID
   const merchantAccount = pickEnv("WAYFORPAY_MERCHANT_ACCOUNT", "WFP_MERCHANT_ACCOUNT")
   const secretKey = pickEnv("WAYFORPAY_SECRET_KEY", "WFP_SECRET_KEY")
-  const merchantDomainName =
-    pickEnv("WAYFORPAY_MERCHANT_DOMAIN_NAME", "WAYFORPAY_MERCHANT_DOMAIN") || req.nextUrl.hostname
 
-  if (!merchantAccount || !secretKey) {
-    return NextResponse.json({ ok: false, error: "WayForPay env missing" }, { status: 200 })
+  const merchantDomainName =
+    normalizeDomain(pickEnv("WAYFORPAY_MERCHANT_DOMAIN_NAME", "WAYFORPAY_MERCHANT_DOMAIN")) ||
+    normalizeDomain(req.nextUrl.hostname)
+
+  if (!merchantAccount || !secretKey || !merchantDomainName) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "WayForPay env missing",
+        need: ["WAYFORPAY_MERCHANT_ACCOUNT", "WAYFORPAY_MERCHANT_DOMAIN_NAME", "WAYFORPAY_SECRET_KEY"],
+      },
+      { status: 500 }
+    )
   }
 
-  const userId = await resolveUserId(getSupabaseAdmin())
+  const userId = await resolveUserIdViaSSR()
 
   const amount = amountForPlan(planId)
+  const amountStr = formatAmount(amount)
   const currency = "UAH"
 
-  const productName = ["TurbotaAI Monthly"]
-  const productCount = [1]
-  const productPrice = [amount]
+  const productName = [planId === "monthly" ? "TurbotaAI Monthly" : "TurbotaAI Plan"]
+  const productCount = ["1"]
+  const productPrice = [amountStr]
 
   const orderDate = Math.floor(Date.now() / 1000)
 
@@ -119,21 +147,22 @@ export async function GET(req: NextRequest) {
 
   const serviceUrl = pickEnv("WAYFORPAY_WEBHOOK_URL") || `${origin}/api/billing/wayforpay/webhook`
 
+  // signature строка: merchantAccount;merchantDomainName;orderReference;orderDate;amount;currency;productName...;productCount...;productPrice...
   const signStr = [
     merchantAccount,
     merchantDomainName,
     orderReference,
     String(orderDate),
-    String(amount),
+    amountStr,
     currency,
     ...productName,
-    ...productCount.map(String),
-    ...productPrice.map(String),
+    ...productCount,
+    ...productPrice,
   ].join(";")
 
   const merchantSignature = hmacMd5(signStr, secretKey)
 
-  // сохраняем заказ в БД сразу с user_id если он есть
+  // сохраняем заказ в БД
   try {
     const admin = getSupabaseAdmin()
     const nowIso = new Date().toISOString()
@@ -146,7 +175,7 @@ export async function GET(req: NextRequest) {
           user_id: userId,
           device_hash: deviceHash,
           plan_id: planId,
-          amount: Number(amount),
+          amount: Number(amountStr),
           currency,
           status: "invoice_created",
           raw: {
@@ -168,7 +197,7 @@ export async function GET(req: NextRequest) {
     merchantDomainName,
     orderReference,
     orderDate,
-    amount,
+    amount: amountStr,
     currency,
     merchantSignature,
     returnUrl,

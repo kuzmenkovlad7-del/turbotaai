@@ -11,7 +11,7 @@ import { useLanguage } from "@/lib/i18n/language-context"
 
 type AnyObj = Record<string, any>
 
-const PRICE_UAH = Number(process.env.NEXT_PUBLIC_PRICE_UAH || "1")
+const PRICE_UAH = Number(process.env.NEXT_PUBLIC_PRICE_UAH || "499")
 const CURRENCY = String(process.env.NEXT_PUBLIC_CURRENCY || "UAH")
 
 function isActiveDate(v: any) {
@@ -29,6 +29,18 @@ function fmtDateDMY(v: any) {
   const mm = String(d.getMonth() + 1).padStart(2, "0")
   const yyyy = d.getFullYear()
   return `${dd}.${mm}.${yyyy}`
+}
+
+function clearClientAuthStorage() {
+  try {
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith("sb-") && k.endsWith("-auth-token")) localStorage.removeItem(k)
+    }
+  } catch {}
+  try {
+    sessionStorage.removeItem("turbota_paywall")
+    sessionStorage.removeItem("turbota_conv_id")
+  } catch {}
 }
 
 export default function PricingPage() {
@@ -53,8 +65,7 @@ export default function PricingPage() {
         p3: "Історія зберігається у профілі",
         subscribe: "Підписатися",
         opening: "Відкриваємо оплату...",
-        needLoginToPay: "Оплата доступна без входу. Після оплати доступ активується автоматично.",
-        invoiceOpened: "Переадресація на оплату...",
+        invoiceOpened: "Оплата відкрита. Завершіть оплату у WayForPay.",
         payFailed: "Не вдалося створити оплату",
         profileTitle: "Ваш профіль",
         profileDesc: "Перевірити доступ і історію",
@@ -69,7 +80,6 @@ export default function PricingPage() {
         unlimited: "Безлімітно",
         accessUntil: "Доступ до",
         openProfile: "Відкрити профіль",
-        signIn: "Увійти",
         logout: "Вийти",
         promoTitle: "Промокод",
         promoDesc: "12 місяців безкоштовного доступу за промокодом",
@@ -94,8 +104,7 @@ export default function PricingPage() {
         p3: "История сохраняется в профиле",
         subscribe: "Подписаться",
         opening: "Открываем оплату...",
-        needLoginToPay: "Оплата доступна без входа. После оплаты доступ активируется автоматически.",
-        invoiceOpened: "Переадресация на оплату...",
+        invoiceOpened: "Оплата открыта. Завершите оплату в WayForPay.",
         payFailed: "Не удалось создать оплату",
         profileTitle: "Ваш профиль",
         profileDesc: "Проверить доступ и историю",
@@ -110,7 +119,6 @@ export default function PricingPage() {
         unlimited: "Безлимитно",
         accessUntil: "Доступ до",
         openProfile: "Открыть профиль",
-        signIn: "Войти",
         logout: "Выйти",
         promoTitle: "Промокод",
         promoDesc: "12 месяцев бесплатного доступа по промокоду",
@@ -135,8 +143,7 @@ export default function PricingPage() {
         p3: "History saved in your profile",
         subscribe: "Subscribe",
         opening: "Opening...",
-        needLoginToPay: "You can pay without signing in. Access activates automatically after payment.",
-        invoiceOpened: "Redirecting to payment...",
+        invoiceOpened: "Payment opened. Complete it in WayForPay.",
         payFailed: "Payment init failed",
         profileTitle: "Your profile",
         profileDesc: "Check access and history",
@@ -151,7 +158,6 @@ export default function PricingPage() {
         unlimited: "Unlimited",
         accessUntil: "Access until",
         openProfile: "Open profile",
-        signIn: "Sign In",
         logout: "Log out",
         promoTitle: "Promo code",
         promoDesc: "12 months free access by promo code",
@@ -201,7 +207,7 @@ export default function PricingPage() {
   useEffect(() => {
     let alive = true
 
-    ;(async () => {
+    async function load() {
       setLoadingSummary(true)
       try {
         const r = await fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
@@ -212,12 +218,21 @@ export default function PricingPage() {
       } finally {
         if (alive) setLoadingSummary(false)
       }
-    })()
+    }
 
+    load()
     return () => {
       alive = false
     }
   }, [])
+
+  async function doLogout() {
+    try {
+      await fetch(`/api/auth/clear?next=${encodeURIComponent("/pricing")}`, { method: "POST" })
+    } catch {}
+    clearClientAuthStorage()
+    window.location.assign("/pricing")
+  }
 
   async function handleSubscribe() {
     setPayMsg(null)
@@ -234,8 +249,8 @@ export default function PricingPage() {
       const d = await r.json().catch(() => ({}))
       if (!r.ok || !d?.invoiceUrl) throw new Error(d?.error || copy.payFailed)
 
+      window.location.assign(String(d.invoiceUrl))
       setPayMsg(copy.invoiceOpened)
-      window.location.assign(String(d?.invoiceUrl ?? d?.url ?? ""))
     } catch (e: any) {
       setPayMsg(e?.message || copy.payFailed)
     } finally {
@@ -291,7 +306,7 @@ export default function PricingPage() {
 
           <CardContent className="pb-8">
             <div className="flex items-end gap-3">
-              <div className="text-6xl font-bold leading-none">{PRICE_UAH}</div>
+              <div className="text-6xl font-bold leading-none">{Number.isFinite(PRICE_UAH) ? PRICE_UAH : 499}</div>
               <div className="pb-1 text-muted-foreground">{copy.uah}</div>
             </div>
 
@@ -302,16 +317,7 @@ export default function PricingPage() {
             </ul>
 
             <div className="mt-6 py-4">
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={handleSubscribe}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSubscribe()
-                }}
-                className="cursor-pointer"
-                title={copy.subscribe}
-              >
+              <div role="button" tabIndex={0} onClick={handleSubscribe} className="cursor-pointer" title={copy.subscribe}>
                 <TurbotaHoloCard title="TurbotaAI" subtitle="TurbotaAI Monthly" height={260} />
               </div>
             </div>
@@ -326,11 +332,7 @@ export default function PricingPage() {
                 {payLoading ? copy.opening : copy.subscribe}
               </RainbowButton>
 
-              {payMsg ? (
-                <p className="text-sm text-muted-foreground">{payMsg}</p>
-              ) : (
-                <p className="text-xs text-muted-foreground">{copy.needLoginToPay}</p>
-              )}
+              {payMsg ? <p className="text-sm text-muted-foreground">{payMsg}</p> : null}
             </div>
           </CardContent>
         </Card>
@@ -346,9 +348,7 @@ export default function PricingPage() {
               <div className="grid gap-3 text-sm text-muted-foreground">
                 <div className="flex items-center justify-between">
                   <span>{copy.status}</span>
-                  <span className="text-slate-900">
-                    {loadingSummary ? "…" : isLoggedIn ? copy.loggedIn : copy.guest}
-                  </span>
+                  <span className="text-slate-900">{loadingSummary ? "…" : isLoggedIn ? copy.loggedIn : copy.guest}</span>
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -375,15 +375,7 @@ export default function PricingPage() {
                 </Button>
 
                 {isLoggedIn ? (
-                  <Button
-                    variant="outline"
-                    className="border border-slate-200"
-                    onClick={async () => {
-                      await fetch("/api/auth/clear", { method: "POST" }).catch(() => {})
-                      router.refresh()
-                      router.push("/")
-                    }}
-                  >
+                  <Button variant="outline" className="border border-slate-200" onClick={doLogout}>
                     {copy.logout}
                   </Button>
                 ) : (
@@ -392,7 +384,7 @@ export default function PricingPage() {
                     className="border border-slate-200"
                     onClick={() => router.push("/login?next=/pricing")}
                   >
-                    {copy.signIn}
+                    Login
                   </Button>
                 )}
               </div>
@@ -425,7 +417,6 @@ export default function PricingPage() {
               </div>
 
               {!isLoggedIn ? <div className="mt-2 text-xs text-muted-foreground">{copy.promoNeedLogin}</div> : null}
-
               {promoMsg ? <p className="mt-2 text-sm text-muted-foreground">{promoMsg}</p> : null}
             </CardContent>
           </Card>
@@ -440,7 +431,7 @@ export default function PricingPage() {
               <Button
                 variant="outline"
                 className="w-full border border-slate-200"
-                onClick={() => router.push(isLoggedIn ? "/profile" : "/login?next=/profile")}
+                onClick={() => (isLoggedIn ? router.push("/profile") : router.push("/login?next=/profile"))}
               >
                 {copy.openManage}
               </Button>

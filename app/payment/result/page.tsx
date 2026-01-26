@@ -32,40 +32,34 @@ export default function PaymentResultPage() {
     async function run() {
       if (!orderReference) {
         setState("fail")
-        setMsg("Не вдалося прочитати чек-код оплати. Поверніться в тарифи та спробуйте ще раз.")
+        setMsg("Не вдалося прочитати чек-код оплати. Спробуйте ще раз або поверніться в профіль.")
         return
       }
 
-      for (let i = 1; i <= 12; i++) {
+      for (let i = 1; i <= 10; i++) {
         if (!alive) return
         setAttempt(i)
         setState("checking")
-        setMsg(i <= 2 ? "Підтверджуємо оплату…" : `Очікуємо підтвердження… (спроба ${i}/12)`)
+        setMsg(i <= 2 ? "Підтверджуємо оплату…" : `Очікуємо підтвердження… (спроба ${i}/10)`)
 
         try {
           const r = await fetch(
-            `/api/billing/wayforpay/check?orderReference=${encodeURIComponent(orderReference)}`,
+            `/api/billing/wayforpay/sync?orderReference=${encodeURIComponent(orderReference)}`,
             { method: "GET", cache: "no-store" }
           )
           const json: any = await r.json().catch(() => null)
 
-          if (json?.ok && json?.status === "paid") {
+          const st = String(json?.state || json?.status || "").toLowerCase()
+          if (st === "paid") {
             setState("ok")
             setMsg("Оплату підтверджено. Доступ активовано ✅")
-
-            try {
-              window.dispatchEvent(new Event("turbota:refresh"))
-            } catch {}
-
-            setTimeout(() => {
-              router.replace("/profile?paid=1")
-            }, 600)
+            setTimeout(() => router.replace("/profile?paid=1"), 600)
             return
           }
 
-          if (json?.status === "failed") {
+          if (st === "failed" || st === "declined" || st === "refunded") {
             setState("fail")
-            setMsg("Оплата не підтвердилась або була відхилена. Спробуйте ще раз.")
+            setMsg("Оплату не підтверджено. Якщо Ви оплатили, спробуйте ще раз або зверніться в підтримку.")
             return
           }
         } catch {}
@@ -95,7 +89,7 @@ export default function PaymentResultPage() {
         <div className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-800">
           {msg}
           {state === "checking" ? (
-            <div className="mt-2 text-xs text-gray-500">Спроба: {attempt}/12</div>
+            <div className="mt-2 text-xs text-gray-500">Спроба: {attempt}/10</div>
           ) : null}
         </div>
 

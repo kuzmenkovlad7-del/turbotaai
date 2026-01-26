@@ -19,6 +19,18 @@ function isActive(iso?: string | null) {
   return Number.isFinite(t) && t > Date.now()
 }
 
+function clearClientAuthStorage() {
+  try {
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith("sb-") && k.endsWith("-auth-token")) localStorage.removeItem(k)
+    }
+  } catch {}
+  try {
+    sessionStorage.removeItem("turbota_paywall")
+    sessionStorage.removeItem("turbota_conv_id")
+  } catch {}
+}
+
 export default function ProfilePage() {
   const router = useRouter()
 
@@ -45,11 +57,11 @@ export default function ProfilePage() {
       const j: any = await r.json().catch(() => null)
 
       const s: SummaryLike = {
-        logged_in: !!(j?.logged_in ?? j?.user?.id ?? j?.isLoggedIn),
-        email: j?.email ?? j?.user?.email ?? null,
-        trial_questions_left: j?.trial_questions_left ?? j?.trialLeft ?? 5,
-        paid_until: j?.paid_until ?? j?.paidUntil ?? null,
-        promo_until: j?.promo_until ?? j?.promoUntil ?? null,
+        logged_in: !!(j?.isLoggedIn ?? j?.logged_in ?? j?.user?.id),
+        email: j?.user?.email ?? j?.email ?? null,
+        trial_questions_left: j?.trial_questions_left ?? 5,
+        paid_until: j?.paidUntil ?? j?.paid_until ?? null,
+        promo_until: j?.promoUntil ?? j?.promo_until ?? null,
         access: j?.access ?? null,
       }
       setSummary(s)
@@ -66,6 +78,14 @@ export default function ProfilePage() {
 
   const isLoggedIn = !!summary?.logged_in
 
+  async function doLogout() {
+    try {
+      await fetch(`/api/auth/clear?next=${encodeURIComponent("/profile")}`, { method: "POST" })
+    } catch {}
+    clearClientAuthStorage()
+    window.location.assign("/profile")
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <div className="flex items-start justify-between gap-4">
@@ -80,18 +100,11 @@ export default function ProfilePage() {
           </Link>
 
           {isLoggedIn ? (
-            <button
-              onClick={async () => {
-                await fetch("/api/auth/clear", { method: "POST" }).catch(() => {})
-                router.refresh()
-                router.push("/")
-              }}
-              className="rounded-full border px-5 py-2 text-sm"
-            >
+            <button onClick={doLogout} className="rounded-full border px-5 py-2 text-sm">
               Выйти
             </button>
           ) : (
-            <Link href="/login" className="rounded-full border px-5 py-2 text-sm">
+            <Link href="/login?next=/profile" className="rounded-full border px-5 py-2 text-sm">
               Войти
             </Link>
           )}
@@ -143,11 +156,7 @@ export default function ProfilePage() {
             <div className="text-right">{loading ? "…" : access === "Paid" ? "Активна" : "Не активна"}</div>
 
             <div className="text-gray-500">Автопродление:</div>
-            <div className="text-right">Скоро</div>
-          </div>
-
-          <div className="mt-4 text-sm text-gray-600">
-            {isLoggedIn ? "Здесь появятся кнопки отмены автопродления и промо." : "Войдите, чтобы управлять подпиской и промо."}
+            <div className="text-right">{access === "Paid" ? "Скоро" : "—"}</div>
           </div>
 
           <div className="mt-4 space-y-3">
