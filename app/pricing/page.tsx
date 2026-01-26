@@ -17,8 +17,8 @@ import { useLanguage } from "@/lib/i18n/language-context"
 
 type AnyObj = Record<string, any>
 
-const PRICE_UAH = 499
-const CURRENCY = "UAH"
+const PRICE_UAH = Number(process.env.NEXT_PUBLIC_PRICE_UAH || "1")
+const CURRENCY = String(process.env.NEXT_PUBLIC_CURRENCY || "UAH")
 
 function isActiveDate(v: any) {
   if (!v) return false

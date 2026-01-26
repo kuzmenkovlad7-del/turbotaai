@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
         user_id: userId,
         device_hash: deviceHash || null,
         plan_id: planId,
-        amount: Number(amountRaw || 0) || Number(existing?.amount || 0) || 499,
+        amount: Number(amountRaw || 0) || Number(existing?.amount || 0) || Number(process.env.PRICE_UAH || process.env.NEXT_PUBLIC_PRICE_UAH || 1),
         currency: String(currencyRaw || "UAH"),
         status: nextStatus,
         raw: mergedRaw,
