@@ -13,11 +13,11 @@ function hmacMd5HexUpper(str: string, key: string) {
 
 function esc(v: any) {
   return String(v ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
 }
 
 export async function POST(req: Request) {
@@ -41,17 +41,16 @@ export async function POST(req: Request) {
   }
 
   const plan = String(body?.plan || "monthly")
-  const amount = String(body?.amount || "499") // можно 1 для теста
+  const amount = String(body?.amount || "499") // можно "1" для теста
   const currency = String(body?.currency || "UAH")
 
   const orderReference = `ta_${plan}_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`
-  const orderDate = Math.floor(Date.now() / 1000).toString() // ВАЖНО: секунды
+  const orderDate = Math.floor(Date.now() / 1000).toString() // СЕКУНДЫ
 
   const productName = [plan === "monthly" ? "TurbotaAI Monthly" : "TurbotaAI"]
   const productCount = ["1"]
   const productPrice = [amount]
 
-  // ВАЖНО: порядок как в доке WayForPay
   const signString = [
     merchantAccount,
     merchantDomainName,
