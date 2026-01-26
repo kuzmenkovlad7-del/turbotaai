@@ -46,14 +46,9 @@ function ensureDeviceHash() {
 }
 
 function amountForPlan(planId: string) {
-  const test = Number(pickEnv("WAYFORPAY_TEST_AMOUNT_UAH") || 0)
-  if (Number.isFinite(test) && test > 0) return test
-
-  const monthly = Number(pickEnv("WAYFORPAY_MONTHLY_AMOUNT") || 0)
-  if (planId === "monthly" && Number.isFinite(monthly) && monthly > 0) return monthly
-
-  return 499
+  return Number(process.env.NEXT_PUBLIC_PRICE_UAH || "1")
 }
+
 
 function getAccessTokenFromCookies(): string | null {
   const jar = cookies()
