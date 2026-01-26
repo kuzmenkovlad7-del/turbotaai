@@ -79,8 +79,8 @@ function routeSupabase() {
   return { sb, cookieStore, json }
 }
 
-async function findGrantByDevice(sb: any, deviceHash: string) {
-  const { data } = await sb
+async function findGrantByDevice(admin: any, deviceHash: string) {
+  const { data } = await admin
     .from("access_grants")
     .select("*")
     .eq("device_hash", deviceHash)
@@ -91,8 +91,8 @@ async function findGrantByDevice(sb: any, deviceHash: string) {
   return data ?? null
 }
 
-async function createGrant(sb: any, opts: { userId: string | null; deviceHash: string; trialLeft: number; nowIso: string }) {
-  const { data } = await sb
+async function createGrant(admin: any, opts: { userId: string | null; deviceHash: string; trialLeft: number; nowIso: string }) {
+  const { data } = await admin
     .from("access_grants")
     .insert({
       id: randomUUID(),
@@ -110,13 +110,14 @@ async function createGrant(sb: any, opts: { userId: string | null; deviceHash: s
   return data ?? null
 }
 
-async function updateGrant(sb: any, id: string, patch: any) {
-  const { data } = await sb.from("access_grants").update(patch).eq("id", id).select("*").maybeSingle()
+async function updateGrant(admin: any, id: string, patch: any) {
+  const { data } = await admin.from("access_grants").update(patch).eq("id", id).select("*").maybeSingle()
   return data ?? null
 }
 
 export async function GET() {
   const { sb, cookieStore, json } = routeSupabase()
+  const admin = getSupabaseAdmin()
 
   const trialDefault = getTrialLimit()
   const nowIso = new Date().toISOString()
@@ -134,20 +135,20 @@ export async function GET() {
   const isLoggedIn = Boolean(user?.id)
 
   // guest grant
-  let guestGrant = await findGrantByDevice(sb, deviceHash!)
+  let guestGrant = await findGrantByDevice(admin, deviceHash!)
   if (!guestGrant) {
-    guestGrant = await createGrant(sb, { userId: null, deviceHash: deviceHash!, trialLeft: trialDefault, nowIso })
+    guestGrant = await createGrant(admin, { userId: null, deviceHash: deviceHash!, trialLeft: trialDefault, nowIso })
   }
 
   // account grant
   let accountGrant: any = null
   if (isLoggedIn) {
     const accountKey = ACCOUNT_PREFIX + user!.id
-    accountGrant = await findGrantByDevice(sb, accountKey)
+    accountGrant = await findGrantByDevice(admin, accountKey)
 
     // legacy migration: есть запись по user_id → переносим на accountKey
     if (!accountGrant) {
-      const { data: legacy } = await sb
+      const { data: legacy } = await admin
         .from("access_grants")
         .select("*")
         .eq("user_id", user!.id)
@@ -156,12 +157,12 @@ export async function GET() {
         .maybeSingle()
 
       if (legacy?.id) {
-        accountGrant = await updateGrant(sb, legacy.id, { device_hash: accountKey, updated_at: nowIso })
+        accountGrant = await updateGrant(admin, legacy.id, { device_hash: accountKey, updated_at: nowIso })
       }
     }
 
     if (!accountGrant) {
-      accountGrant = await createGrant(sb, { userId: user!.id, deviceHash: accountKey, trialLeft: trialDefault, nowIso })
+      accountGrant = await createGrant(admin, { userId: user!.id, deviceHash: accountKey, trialLeft: trialDefault, nowIso })
     }
 
     // sync trial: min(guest, account)
@@ -170,10 +171,10 @@ export async function GET() {
     const eff = Math.min(gLeft, aLeft)
 
     if (guestGrant && gLeft !== eff) {
-      guestGrant = (await updateGrant(sb, guestGrant.id, { trial_questions_left: eff, updated_at: nowIso })) ?? guestGrant
+      guestGrant = (await updateGrant(admin, guestGrant.id, { trial_questions_left: eff, updated_at: nowIso })) ?? guestGrant
     }
     if (accountGrant && aLeft !== eff) {
-      accountGrant = (await updateGrant(sb, accountGrant.id, { trial_questions_left: eff, updated_at: nowIso })) ?? accountGrant
+      accountGrant = (await updateGrant(admin, accountGrant.id, { trial_questions_left: eff, updated_at: nowIso })) ?? accountGrant
     }
   }
 
@@ -184,7 +185,6 @@ export async function GET() {
   let subscriptionStatus = ""
 
   if (isLoggedIn) {
-    const admin = getSupabaseAdmin()
     const { data: p } = await admin
       .from("profiles")
       .select("paid_until,promo_until,auto_renew,autorenew,subscription_status")
@@ -200,6 +200,44 @@ export async function GET() {
   // fallback: если профиля нет, берем из grants
   if (!paidUntil && accountGrant?.paid_until) paidUntil = String(accountGrant.paid_until)
   if (!promoUntil && accountGrant?.promo_until) promoUntil = String(accountGrant.promo_until)
+
+  // ✅ ВАЖНО: если оплатил как гость, а потом вошёл — закрепляем доступ за аккаунтом
+  if (isLoggedIn) {
+    const gPaid = guestGrant?.paid_until ? String(guestGrant.paid_until) : null
+    const gPromo = guestGrant?.promo_until ? String(guestGrant.promo_until) : null
+
+    const mergedPaid = laterDateIso(paidUntil, gPaid)
+    const mergedPromo = laterDateIso(promoUntil, gPromo)
+
+    const needMerge = mergedPaid !== paidUntil || mergedPromo !== promoUntil
+
+    if (needMerge) {
+      paidUntil = mergedPaid
+      promoUntil = mergedPromo
+
+      try {
+        await admin
+          .from("profiles")
+          .update({
+            paid_until: paidUntil,
+            promo_until: promoUntil,
+            subscription_status: isFuture(paidUntil) || isFuture(promoUntil) ? "active" : "inactive",
+            updated_at: nowIso,
+          } as any)
+          .eq("id", user!.id)
+      } catch {}
+
+      try {
+        if (accountGrant?.id) {
+          await updateGrant(admin, accountGrant.id, {
+            paid_until: paidUntil,
+            promo_until: promoUntil,
+            updated_at: nowIso,
+          })
+        }
+      } catch {}
+    }
+  }
 
   const accessUntil = laterDateIso(paidUntil, promoUntil)
   const paidActive = isFuture(paidUntil)
@@ -219,6 +257,7 @@ export async function GET() {
     user: isLoggedIn ? { id: user!.id, email: user!.email } : null,
     access,
     unlimited,
+    hasAccess: unlimited,
     trial_questions_left: trialLeft,
     trial_left: trialLeft,
     trialLeft,
@@ -230,13 +269,16 @@ export async function GET() {
   }
 
   const res = json(payload)
+
   if (needSetDeviceCookie) {
     res.cookies.set(DEVICE_COOKIE, deviceHash!, {
       path: "/",
       sameSite: "lax",
-      httpOnly: false,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
       maxAge: 60 * 60 * 24 * 365,
     })
   }
+
   return res
 }

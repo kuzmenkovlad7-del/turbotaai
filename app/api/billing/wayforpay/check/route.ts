@@ -13,16 +13,12 @@ function hmacMd5(str: string, key: string) {
 
 function mapWayforpayStatus(txStatus?: string | null): BillingStatus {
   const s = (txStatus || "").toLowerCase()
-
   if (s === "approved" || s === "paid" || s === "successful" || s === "success") return "paid"
   if (s === "inprocessing" || s === "processing" || s === "pending") return "processing"
-
-  // declined / expired / refunded / unknown -> failed
   return "failed"
 }
 
 function pickBestStatus(statuses: string[]): BillingStatus {
-  // paid always wins, never downgrade
   if (statuses.includes("paid")) return "paid"
   if (statuses.includes("processing")) return "processing"
   return "failed"
@@ -35,7 +31,7 @@ function toDateOrNull(v: any) {
   return d
 }
 
-function isFuture(v: any) {
+function isFutureIso(v: any) {
   const d = toDateOrNull(v)
   if (!d) return false
   return d.getTime() > Date.now()
@@ -47,45 +43,95 @@ function addDaysFrom(base: Date, days: number) {
   return x
 }
 
-async function extendPaidUntil(admin: any, userId: string, days = 30) {
+async function calcNextPaidUntil(admin: any, opts: { userId?: string | null; deviceHash?: string | null; days: number }) {
   const now = new Date()
   const nowIso = now.toISOString()
 
-  const { data: current } = await admin
-    .from("access_grants")
-    .select("paid_until, updated_at")
-    .eq("user_id", userId)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
+  // base: берём максимальный paid_until из профиля или grant
   let base = now
-  if (current?.paid_until && isFuture(current.paid_until)) {
-    const d = toDateOrNull(current.paid_until)
-    if (d) base = d
+
+  if (opts.userId) {
+    const { data: p } = await admin
+      .from("profiles")
+      .select("paid_until")
+      .eq("id", opts.userId)
+      .maybeSingle()
+
+    if (p?.paid_until && isFutureIso(p.paid_until)) {
+      const d = toDateOrNull(p.paid_until)
+      if (d) base = d
+    }
   }
 
-  const nextIso = addDaysFrom(base, days).toISOString()
+  if (opts.deviceHash) {
+    const { data: g } = await admin
+      .from("access_grants")
+      .select("paid_until")
+      .eq("device_hash", opts.deviceHash)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-  await admin
-    .from("access_grants")
-    .update({ paid_until: nextIso, updated_at: nowIso })
-    .eq("user_id", userId)
-
-  await admin
-    .from("access_grants")
-    .update({ paid_until: nextIso, updated_at: nowIso })
-    .eq("device_hash", `account:${userId}`)
-
-  const profilePayload = {
-    paid_until: nextIso,
-    auto_renew: true,
-    subscription_status: "active",
-    updated_at: nowIso,
+    if (g?.paid_until && isFutureIso(g.paid_until)) {
+      const d = toDateOrNull(g.paid_until)
+      if (d && d.getTime() > base.getTime()) base = d
+    }
   }
 
-  await admin.from("profiles").update(profilePayload).eq("id", userId)
-  await admin.from("profiles").update(profilePayload).eq("user_id", userId)
+  const nextIso = addDaysFrom(base, opts.days).toISOString()
+  return { nextIso, nowIso }
+}
+
+async function activatePaid(admin: any, opts: { userId?: string | null; deviceHash?: string | null; days: number }) {
+  const { nextIso, nowIso } = await calcNextPaidUntil(admin, opts)
+
+  // user (аккаунт)
+  if (opts.userId) {
+    const accountKey = `account:${opts.userId}`
+
+    await admin
+      .from("access_grants")
+      .upsert(
+        {
+          user_id: opts.userId,
+          device_hash: accountKey,
+          trial_questions_left: 0,
+          paid_until: nextIso,
+          promo_until: null,
+          updated_at: nowIso,
+          created_at: nowIso,
+        } as any,
+        { onConflict: "device_hash" }
+      )
+
+    await admin
+      .from("profiles")
+      .update({
+        paid_until: nextIso,
+        subscription_status: "active",
+        auto_renew: true,
+        updated_at: nowIso,
+      } as any)
+      .eq("id", opts.userId)
+  }
+
+  // guest device
+  if (opts.deviceHash) {
+    await admin
+      .from("access_grants")
+      .upsert(
+        {
+          user_id: null,
+          device_hash: opts.deviceHash,
+          trial_questions_left: 0,
+          paid_until: nextIso,
+          promo_until: null,
+          updated_at: nowIso,
+          created_at: nowIso,
+        } as any,
+        { onConflict: "device_hash" }
+      )
+  }
 
   return nextIso
 }
@@ -109,14 +155,10 @@ export async function GET(req: NextRequest) {
     ""
 
   if (!merchantAccount || !secretKey) {
-    console.error("[billing][check] missing env", {
-      hasMerchantAccount: Boolean(merchantAccount),
-      hasSecretKey: Boolean(secretKey),
-    })
     return NextResponse.json({ ok: false, error: "missing_wayforpay_env" }, { status: 500 })
   }
 
-  // WayForPay CHECK_STATUS signature: HMAC_MD5("merchantAccount;orderReference", secretKey)
+  // CHECK_STATUS signature: HMAC_MD5("merchantAccount;orderReference", secretKey)
   const signStr = `${merchantAccount};${orderReference}`
   const merchantSignature = hmacMd5(signStr, secretKey)
 
@@ -140,18 +182,14 @@ export async function GET(req: NextRequest) {
     wfpJson = await r.json().catch(() => null)
 
     if (!r.ok || !wfpJson) {
-      console.error("[billing][check] bad response", { orderReference, httpStatus: r.status, body: wfpJson })
       return NextResponse.json({ ok: false, error: "wayforpay_check_failed", httpStatus: r.status }, { status: 502 })
     }
   } catch (e: any) {
-    console.error("[billing][check] fetch error", { orderReference, error: String(e?.message || e) })
-    return NextResponse.json({ ok: false, error: "wayforpay_fetch_error" }, { status: 502 })
+    return NextResponse.json({ ok: false, error: "wayforpay_fetch_error", details: String(e?.message || e) }, { status: 502 })
   }
 
   const txStatus: string | null = wfpJson.transactionStatus || wfpJson.status || null
-
   if (!txStatus) {
-    console.error("[billing][check] missing transactionStatus", { orderReference, wfpJson })
     return NextResponse.json({ ok: false, error: "missing_transactionStatus" }, { status: 502 })
   }
 
@@ -161,13 +199,12 @@ export async function GET(req: NextRequest) {
   // читаем текущие статусы в БД
   const existing = await admin
     .from("billing_orders")
-    .select("status, raw, updated_at, user_id")
+    .select("status, raw, updated_at, user_id, device_hash, plan_id")
     .eq("order_reference", orderReference)
     .order("updated_at", { ascending: false })
     .limit(10)
 
   if (existing.error) {
-    console.error("[billing][check] db read error", { orderReference, error: existing.error })
     return NextResponse.json({ ok: false, error: "db_read_failed" }, { status: 500 })
   }
 
@@ -185,15 +222,16 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const latestRaw = (existing.data?.[0] as any)?.raw || {}
+  const latest = (existing.data?.[0] as any) || null
+  const latestRaw = latest?.raw || {}
   const mergedRaw = {
-    ...(latestRaw || {}),
+    ...(latestRaw && typeof latestRaw === "object" ? latestRaw : {}),
     check: wfpJson,
     check_received_at: new Date().toISOString(),
   }
 
   // обновляем статус заказа
-  const upd = await admin
+  await admin
     .from("billing_orders")
     .update({
       status: nextStatus,
@@ -202,19 +240,18 @@ export async function GET(req: NextRequest) {
     })
     .eq("order_reference", orderReference)
 
-  if (upd.error) {
-    console.error("[billing][check] db update error", { orderReference, error: upd.error })
-    return NextResponse.json({ ok: false, error: "db_update_failed" }, { status: 500 })
-  }
+  // ✅ если paid -> активируем доступ (и юзеру, и гостю)
+  let activatedPaidUntil: string | null = null
+  if (nextStatus === "paid") {
+    const userId = String(latest?.user_id || "").trim() || null
+    const deviceHash = String(latest?.device_hash || "").trim() || null
+    const planId = String(latest?.plan_id || "monthly").trim() || "monthly"
 
-  // если paid -> выдаём доступ по user_id из заказа
-  const userId = String((existing.data?.[0] as any)?.user_id || "")
-  if (nextStatus === "paid" && userId) {
+    const days = planId === "monthly" ? 30 : 30
+
     try {
-      await extendPaidUntil(admin, userId, 30)
-    } catch (e: any) {
-      console.error("[billing][check] extendPaidUntil failed", e?.message || e)
-    }
+      activatedPaidUntil = await activatePaid(admin, { userId, deviceHash, days })
+    } catch {}
   }
 
   return NextResponse.json({
@@ -222,5 +259,6 @@ export async function GET(req: NextRequest) {
     orderReference,
     status: nextStatus,
     transactionStatus: txStatus,
+    activatedPaidUntil,
   })
 }

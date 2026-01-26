@@ -23,9 +23,9 @@ function hmacMd5(data: string, secret: string) {
 function normalizeStatus(txStatus: string) {
   const s = (txStatus || "").toLowerCase()
   if (s === "approved") return "paid"
-  if (s === "pending" || s === "inprocessing") return "pending"
+  if (s === "pending" || s === "inprocessing") return "processing"
   if (s === "refunded" || s === "voided" || s === "expired" || s === "declined") return "failed"
-  return txStatus || "unknown"
+  return "unknown"
 }
 
 function supabaseAdmin() {
@@ -45,7 +45,6 @@ async function wayforpayCheckStatus(orderReference: string) {
   const secretKey = mustEnv("WAYFORPAY_SECRET_KEY")
   const apiUrl = pickEnv("WAYFORPAY_API_URL", "https://api.wayforpay.com/api")
 
-  // CHECK_STATUS signature = HMAC_MD5("merchantAccount;orderReference", SecretKey)
   const signature = hmacMd5(`${merchantAccount};${orderReference}`, secretKey)
 
   const payload: any = {
@@ -100,17 +99,17 @@ async function handler(req: NextRequest) {
   const txStatus = String(json?.transactionStatus || json?.status || "").trim()
   const state = normalizeStatus(txStatus)
 
-  // пишем в базу всегда, чтобы не было пусто
   await upsertBillingOrder(orderReference, {
     status: state,
     currency: json?.currency || null,
     amount: typeof json?.amount === "number" ? json.amount : Number(json?.amount || 0) || null,
     raw: json || null,
+    updated_at: new Date().toISOString(),
   })
 
   return NextResponse.json(
     {
-      ok: true,
+      ok: state === "paid",
       orderReference,
       state,
       transactionStatus: txStatus || null,

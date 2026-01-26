@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 
 type SummaryLike = {
   logged_in?: boolean
@@ -19,6 +20,8 @@ function isActive(iso?: string | null) {
 }
 
 export default function ProfilePage() {
+  const router = useRouter()
+
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<SummaryLike | null>(null)
 
@@ -42,11 +45,11 @@ export default function ProfilePage() {
       const j: any = await r.json().catch(() => null)
 
       const s: SummaryLike = {
-        logged_in: !!(j?.logged_in ?? j?.user?.id),
+        logged_in: !!(j?.logged_in ?? j?.user?.id ?? j?.isLoggedIn),
         email: j?.email ?? j?.user?.email ?? null,
-        trial_questions_left: j?.trial_questions_left ?? j?.grant?.trial_questions_left ?? 5,
-        paid_until: j?.paid_until ?? j?.grant?.paid_until ?? null,
-        promo_until: j?.promo_until ?? j?.grant?.promo_until ?? null,
+        trial_questions_left: j?.trial_questions_left ?? j?.trialLeft ?? 5,
+        paid_until: j?.paid_until ?? j?.paidUntil ?? null,
+        promo_until: j?.promo_until ?? j?.promoUntil ?? null,
         access: j?.access ?? null,
       }
       setSummary(s)
@@ -77,9 +80,16 @@ export default function ProfilePage() {
           </Link>
 
           {isLoggedIn ? (
-            <a href="/api/auth/clear?next=/profile" className="rounded-full border px-5 py-2 text-sm">
+            <button
+              onClick={async () => {
+                await fetch("/api/auth/clear", { method: "POST" }).catch(() => {})
+                router.refresh()
+                router.push("/")
+              }}
+              className="rounded-full border px-5 py-2 text-sm"
+            >
               Выйти
-            </a>
+            </button>
           ) : (
             <Link href="/login" className="rounded-full border px-5 py-2 text-sm">
               Войти
@@ -89,7 +99,6 @@ export default function ProfilePage() {
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        {/* ACCOUNT */}
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="text-2xl font-semibold">Аккаунт</div>
           <div className="mt-1 text-gray-600">Статус входа и доступ</div>
@@ -99,9 +108,7 @@ export default function ProfilePage() {
             <div className="text-right">{loading ? "…" : summary?.email || "Гость"}</div>
 
             <div className="text-gray-500">Доступ:</div>
-            <div className="text-right">
-              {loading ? "…" : access === "Paid" ? "Подписка активна" : "Бесплатно"}
-            </div>
+            <div className="text-right">{loading ? "…" : access === "Paid" ? "Подписка активна" : "Бесплатно"}</div>
 
             <div className="text-gray-500">Осталось вопросов:</div>
             <div className="text-right">{loading ? "…" : trialLeft}</div>
@@ -127,7 +134,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ACCESS CONTROL */}
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="text-2xl font-semibold">Управление доступом</div>
           <div className="mt-1 text-gray-600">Подписка и промокод</div>
@@ -137,11 +143,11 @@ export default function ProfilePage() {
             <div className="text-right">{loading ? "…" : access === "Paid" ? "Активна" : "Не активна"}</div>
 
             <div className="text-gray-500">Автопродление:</div>
-            <div className="text-right">Выключено</div>
+            <div className="text-right">Скоро</div>
           </div>
 
           <div className="mt-4 text-sm text-gray-600">
-            {isLoggedIn ? "Здесь будут кнопки отмены автопродления и промо." : "Войдите, чтобы управлять подпиской и промо."}
+            {isLoggedIn ? "Здесь появятся кнопки отмены автопродления и промо." : "Войдите, чтобы управлять подпиской и промо."}
           </div>
 
           <div className="mt-4 space-y-3">

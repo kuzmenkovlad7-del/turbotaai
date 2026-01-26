@@ -4,13 +4,7 @@ import React, { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { RainbowButton } from "@/components/ui/rainbow-button"
 import TurbotaHoloCard from "@/components/turbota-holo-card"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useLanguage } from "@/lib/i18n/language-context"
@@ -50,8 +44,7 @@ export default function PricingPage() {
     const c = {
       uk: {
         title: "Тарифи",
-        subtitle:
-          "Безлімітний доступ до чату, голосу та відео. Пробний режим має 5 запитань.",
+        subtitle: "Безлімітний доступ до чату, голосу та відео. Пробний режим має 5 запитань.",
         planTitle: "Щомісяця",
         planDesc: "Безлімітний доступ до чату, голосу і відео",
         uah: "UAH",
@@ -60,9 +53,8 @@ export default function PricingPage() {
         p3: "Історія зберігається у профілі",
         subscribe: "Підписатися",
         opening: "Відкриваємо оплату...",
-        needLoginToPay: "Щоб оформити підписку, потрібно увійти.",
-        signInToSubscribe: "Увійти, щоб підписатися",
-        invoiceOpened: "Рахунок відкрито. Завершіть оплату у новій вкладці.",
+        needLoginToPay: "Оплата доступна без входу. Після оплати доступ активується автоматично.",
+        invoiceOpened: "Переадресація на оплату...",
         payFailed: "Не вдалося створити оплату",
         profileTitle: "Ваш профіль",
         profileDesc: "Перевірити доступ і історію",
@@ -93,8 +85,7 @@ export default function PricingPage() {
       },
       ru: {
         title: "Тарифы",
-        subtitle:
-          "Безлимитный доступ к чату, голосу и видео. Пробный режим включает 5 вопросов.",
+        subtitle: "Безлимитный доступ к чату, голосу и видео. Пробный режим включает 5 вопросов.",
         planTitle: "Ежемесячно",
         planDesc: "Безлимитный доступ к чату, голосу и видео",
         uah: "UAH",
@@ -103,9 +94,8 @@ export default function PricingPage() {
         p3: "История сохраняется в профиле",
         subscribe: "Подписаться",
         opening: "Открываем оплату...",
-        needLoginToPay: "Чтобы оформить подписку, нужно войти.",
-        signInToSubscribe: "Войти, чтобы подписаться",
-        invoiceOpened: "Счёт открыт. Завершите оплату в новой вкладке.",
+        needLoginToPay: "Оплата доступна без входа. После оплаты доступ активируется автоматически.",
+        invoiceOpened: "Переадресация на оплату...",
         payFailed: "Не удалось создать оплату",
         profileTitle: "Ваш профиль",
         profileDesc: "Проверить доступ и историю",
@@ -136,8 +126,7 @@ export default function PricingPage() {
       },
       en: {
         title: "Pricing",
-        subtitle:
-          "Unlimited access to chat, voice and video. Trial includes 5 questions.",
+        subtitle: "Unlimited access to chat, voice and video. Trial includes 5 questions.",
         planTitle: "Monthly",
         planDesc: "Unlimited chat, voice and video access",
         uah: "UAH",
@@ -146,9 +135,8 @@ export default function PricingPage() {
         p3: "History saved in your profile",
         subscribe: "Subscribe",
         opening: "Opening...",
-        needLoginToPay: "Please sign in to subscribe.",
-        signInToSubscribe: "Sign in to subscribe",
-        invoiceOpened: "Invoice opened. Complete payment in the new tab.",
+        needLoginToPay: "You can pay without signing in. Access activates automatically after payment.",
+        invoiceOpened: "Redirecting to payment...",
         payFailed: "Payment init failed",
         profileTitle: "Your profile",
         profileDesc: "Check access and history",
@@ -194,11 +182,7 @@ export default function PricingPage() {
   const isLoggedIn = Boolean(summary?.isLoggedIn ?? summary?.loggedIn ?? summary?.user)
 
   const trialLeftNum = Number(
-    summary?.trialLeft ??
-      summary?.trial_left ??
-      summary?.trial_questions_left ??
-      summary?.trialQuestionsLeft ??
-      0
+    summary?.trialLeft ?? summary?.trial_left ?? summary?.trial_questions_left ?? summary?.trialQuestionsLeft ?? 0
   )
   const trialLeft = Number.isFinite(trialLeftNum) ? trialLeftNum : 0
 
@@ -206,16 +190,10 @@ export default function PricingPage() {
   const paidUntilRaw = summary?.paidUntil ?? summary?.paid_until ?? null
   const promoUntilRaw = summary?.promoUntil ?? summary?.promo_until ?? null
 
-  const paidActive =
-    accessRaw === "Paid" || (Boolean(summary?.hasAccess) && isActiveDate(paidUntilRaw))
-  const promoActive =
-    accessRaw === "Promo" || isActiveDate(promoUntilRaw)
+  const paidActive = accessRaw === "Paid" || (Boolean(summary?.hasAccess) && isActiveDate(paidUntilRaw))
+  const promoActive = accessRaw === "Promo" || isActiveDate(promoUntilRaw)
 
-  const accessLabel = paidActive
-    ? copy.accessUnlimited
-    : promoActive
-    ? copy.accessPromo
-    : copy.accessFree
+  const accessLabel = paidActive ? copy.accessUnlimited : promoActive ? copy.accessPromo : copy.accessFree
 
   const accessUntilPretty = fmtDateDMY(summary?.accessUntil ?? summary?.access_until) || null
   const questionsLabel = paidActive || promoActive ? copy.unlimited : String(trialLeft)
@@ -223,24 +201,19 @@ export default function PricingPage() {
   useEffect(() => {
     let alive = true
 
-    async function load() {
+    ;(async () => {
       setLoadingSummary(true)
       try {
         const r = await fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
         const d = await r.json().catch(() => ({}))
-
-      try {
-        if (d?.orderReference) localStorage.setItem("ta_last_order_ref", String(d.orderReference))
-      } catch {}
-if (alive) setSummary(d)
+        if (alive) setSummary(d)
       } catch {
         if (alive) setSummary(null)
       } finally {
         if (alive) setLoadingSummary(false)
       }
-    }
+    })()
 
-    load()
     return () => {
       alive = false
     }
@@ -248,13 +221,6 @@ if (alive) setSummary(d)
 
   async function handleSubscribe() {
     setPayMsg(null)
-
-    if (!isLoggedIn) {
-      setPayMsg(copy.needLoginToPay)
-      router.push("/login?next=/pricing")
-      return
-    }
-
     setPayLoading(true)
 
     try {
@@ -266,16 +232,10 @@ if (alive) setSummary(d)
       })
 
       const d = await r.json().catch(() => ({}))
+      if (!r.ok || !d?.invoiceUrl) throw new Error(d?.error || copy.payFailed)
 
-      try {
-        if (d?.orderReference) localStorage.setItem("ta_last_order_ref", String(d.orderReference))
-      } catch {}
-if (!r.ok || !d?.invoiceUrl) {
-        throw new Error(d?.error || copy.payFailed)
-      }
-
-      window.location.assign(String(d?.invoiceUrl ?? d?.url ?? ""))
       setPayMsg(copy.invoiceOpened)
+      window.location.assign(String(d?.invoiceUrl ?? d?.url ?? ""))
     } catch (e: any) {
       setPayMsg(e?.message || copy.payFailed)
     } finally {
@@ -303,11 +263,7 @@ if (!r.ok || !d?.invoiceUrl) {
       })
 
       const d = await r.json().catch(() => ({}))
-
-      try {
-        if (d?.orderReference) localStorage.setItem("ta_last_order_ref", String(d.orderReference))
-      } catch {}
-if (!r.ok) throw new Error(d?.error || "Promo activation failed")
+      if (!r.ok) throw new Error(d?.error || "Promo activation failed")
 
       setPromoMsg(copy.promoOk)
 
@@ -349,11 +305,9 @@ if (!r.ok) throw new Error(d?.error || "Promo activation failed")
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => (isLoggedIn ? handleSubscribe() : router.push("/login?next=/pricing"))}
+                onClick={handleSubscribe}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    isLoggedIn ? handleSubscribe() : router.push("/login?next=/pricing")
-                  }
+                  if (e.key === "Enter") handleSubscribe()
                 }}
                 className="cursor-pointer"
                 title={copy.subscribe}
@@ -369,7 +323,7 @@ if (!r.ok) throw new Error(d?.error || "Promo activation failed")
                 disabled={payLoading}
                 className="border border-slate-200"
               >
-                {payLoading ? copy.opening : isLoggedIn ? copy.subscribe : copy.signInToSubscribe}
+                {payLoading ? copy.opening : copy.subscribe}
               </RainbowButton>
 
               {payMsg ? (
@@ -416,11 +370,7 @@ if (!r.ok) throw new Error(d?.error || "Promo activation failed")
               </div>
 
               <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                <Button
-                  variant="outline"
-                  className="border border-slate-200"
-                  onClick={() => router.push("/profile")}
-                >
+                <Button variant="outline" className="border border-slate-200" onClick={() => router.push("/profile")}>
                   {copy.openProfile}
                 </Button>
 
@@ -474,13 +424,9 @@ if (!r.ok) throw new Error(d?.error || "Promo activation failed")
                 </Button>
               </div>
 
-              {!isLoggedIn ? (
-                <div className="mt-2 text-xs text-muted-foreground">{copy.promoNeedLogin}</div>
-              ) : null}
+              {!isLoggedIn ? <div className="mt-2 text-xs text-muted-foreground">{copy.promoNeedLogin}</div> : null}
 
-              {promoMsg ? (
-                <p className="mt-2 text-sm text-muted-foreground">{promoMsg}</p>
-              ) : null}
+              {promoMsg ? <p className="mt-2 text-sm text-muted-foreground">{promoMsg}</p> : null}
             </CardContent>
           </Card>
 
@@ -494,19 +440,11 @@ if (!r.ok) throw new Error(d?.error || "Promo activation failed")
               <Button
                 variant="outline"
                 className="w-full border border-slate-200"
-                onClick={() => {
-                  if (!isLoggedIn) {
-                    router.push("/login?next=/profile")
-                    return
-                  }
-                  router.push("/profile")
-                }}
+                onClick={() => router.push(isLoggedIn ? "/profile" : "/login?next=/profile")}
               >
                 {copy.openManage}
               </Button>
-              {!isLoggedIn ? (
-                <p className="mt-2 text-xs text-muted-foreground">{copy.manageNeedLogin}</p>
-              ) : null}
+              {!isLoggedIn ? <p className="mt-2 text-xs text-muted-foreground">{copy.manageNeedLogin}</p> : null}
             </CardContent>
           </Card>
         </div>

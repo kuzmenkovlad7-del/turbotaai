@@ -5,7 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation"
 
 function readCookie(name: string) {
   if (typeof document === "undefined") return ""
-  const m = document.cookie.match(new RegExp("(^| )" + name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&") + "=([^;]+)"))
+  const m = document.cookie.match(
+    new RegExp("(^| )" + name.replace(/[-[\]{}()*+?.,\^$|#\s]/g, "\\$&") + "=([^;]+)")
+  )
   return m ? decodeURIComponent(m[2]) : ""
 }
 
@@ -30,29 +32,40 @@ export default function PaymentResultPage() {
     async function run() {
       if (!orderReference) {
         setState("fail")
-        setMsg("Не вдалося прочитати чек-код оплати. Спробуйте ще раз або поверніться в профіль.")
+        setMsg("Не вдалося прочитати чек-код оплати. Поверніться в тарифи та спробуйте ще раз.")
         return
       }
 
-      for (let i = 1; i <= 10; i++) {
+      for (let i = 1; i <= 12; i++) {
         if (!alive) return
         setAttempt(i)
         setState("checking")
-        setMsg(i <= 2 ? "Підтверджуємо оплату…" : `Очікуємо підтвердження… (спроба ${i}/10)`)
+        setMsg(i <= 2 ? "Підтверджуємо оплату…" : `Очікуємо підтвердження… (спроба ${i}/12)`)
 
         try {
-          const r = await fetch(`/api/billing/wayforpay/sync?orderReference=${encodeURIComponent(orderReference)}`, {
-            method: "GET",
-            cache: "no-store",
-          })
+          const r = await fetch(
+            `/api/billing/wayforpay/check?orderReference=${encodeURIComponent(orderReference)}`,
+            { method: "GET", cache: "no-store" }
+          )
           const json: any = await r.json().catch(() => null)
 
-          if (json?.ok) {
+          if (json?.ok && json?.status === "paid") {
             setState("ok")
             setMsg("Оплату підтверджено. Доступ активовано ✅")
+
+            try {
+              window.dispatchEvent(new Event("turbota:refresh"))
+            } catch {}
+
             setTimeout(() => {
               router.replace("/profile?paid=1")
             }, 600)
+            return
+          }
+
+          if (json?.status === "failed") {
+            setState("fail")
+            setMsg("Оплата не підтвердилась або була відхилена. Спробуйте ще раз.")
             return
           }
         } catch {}
@@ -82,7 +95,7 @@ export default function PaymentResultPage() {
         <div className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-800">
           {msg}
           {state === "checking" ? (
-            <div className="mt-2 text-xs text-gray-500">Спроба: {attempt}/10</div>
+            <div className="mt-2 text-xs text-gray-500">Спроба: {attempt}/12</div>
           ) : null}
         </div>
 
@@ -101,7 +114,10 @@ export default function PaymentResultPage() {
         ) : null}
 
         {state === "ok" ? (
-          <button onClick={() => router.replace("/profile?paid=1")} className="mt-4 w-full rounded-xl bg-black px-4 py-2 text-white">
+          <button
+            onClick={() => router.replace("/profile?paid=1")}
+            className="mt-4 w-full rounded-xl bg-black px-4 py-2 text-white"
+          >
             Перейти в профіль
           </button>
         ) : null}
