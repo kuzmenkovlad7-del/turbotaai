@@ -8,15 +8,20 @@ export type AccessGrant = {
   paid_until: string | null
 }
 
-const DEFAULT_TRIAL_QUESTIONS = 20
 const TABLE = "access_grants"
 
+function num(v: any, fallback: number) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function getTrialLimit() {
+  const limit = num(process.env.TRIAL_QUESTIONS_LIMIT, 5)
+  return limit > 0 ? Math.floor(limit) : 5
+}
+
 export function getDeviceHash(req: NextRequest): string {
-  return (
-    req.cookies.get("turbotaai_device")?.value ||
-    req.headers.get("x-device-hash") ||
-    ""
-  ).trim()
+  return (req.cookies.get("ta_device_hash")?.value || req.headers.get("x-device-hash") || "").trim()
 }
 
 function isPaidActive(paidUntil: string | null): boolean {
@@ -31,6 +36,7 @@ export async function getOrCreateGrant(deviceHash: string): Promise<AccessGrant 
   if (!isSupabaseServerConfigured()) return null
 
   const supabase = getSupabaseServerClient()
+  const trialDefault = getTrialLimit()
 
   const { data: existing, error: selErr } = await supabase
     .from(TABLE)
@@ -45,7 +51,7 @@ export async function getOrCreateGrant(deviceHash: string): Promise<AccessGrant 
     .from(TABLE)
     .insert({
       device_hash: deviceHash,
-      trial_questions_left: DEFAULT_TRIAL_QUESTIONS,
+      trial_questions_left: trialDefault,
     })
     .select("id,device_hash,trial_questions_left,paid_until")
     .single()
@@ -65,7 +71,6 @@ export async function requireAccessByDeviceHash(args: {
 }> {
   const { deviceHash, consumeTrial } = args
 
-  // Если Supabase ещё не подключён, не блокируем сборку/демо
   if (!isSupabaseServerConfigured()) {
     return { ok: true, status: 200, grant: null }
   }
@@ -99,7 +104,6 @@ export async function requireAccessByDeviceHash(args: {
 }
 
 export async function requireAccess(req: NextRequest, consumeTrial: boolean) {
-  let deviceHash = getDeviceHash(req)
-  if (!deviceHash) deviceHash = crypto.randomUUID()
+  const deviceHash = getDeviceHash(req)
   return requireAccessByDeviceHash({ deviceHash, consumeTrial })
 }

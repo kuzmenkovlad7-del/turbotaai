@@ -5,7 +5,9 @@ import { createClient } from "@supabase/supabase-js";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function hmacMd5Hex(message: string, secret: string) {
+const DEVICE_COOKIE = "ta_device_hash";
+
+function hmacMd5HexLower(message: string, secret: string) {
   return crypto.createHmac("md5", secret).update(message, "utf8").digest("hex");
 }
 
@@ -43,9 +45,9 @@ function hidden(name: string, value: string) {
   return `<input type="hidden" name="${htmlEscape(name)}" value="${htmlEscape(value)}" />`;
 }
 
-function safeNumber(v: any) {
+function num(v: any, fallback: number) {
   const n = Number(v);
-  return Number.isFinite(n) ? n : NaN;
+  return Number.isFinite(n) ? n : fallback;
 }
 
 async function handler(req: Request) {
@@ -69,18 +71,17 @@ async function handler(req: Request) {
 
   const currency = "UAH";
 
-  const monthlyPrice = safeNumber(
-    process.env.NEXT_PUBLIC_TA_MONTHLY_PRICE_UAH ||
+  // Цена только из env, дефолт 499
+  // Для теста ставишь 1 в Vercel env и делаешь redeploy
+  const monthlyPrice = num(
+    process.env.TA_MONTHLY_PRICE_UAH ||
       process.env.MONTHLY_PRICE_UAH ||
-      499
+      process.env.NEXT_PUBLIC_TA_MONTHLY_PRICE_UAH ||
+      499,
+    499
   );
 
-  // Тестовая сумма для проверки оплат без правки кода
-  // На Vercel можно поставить TA_WFP_TEST_AMOUNT_UAH=1 и потом удалить
-  const testAmount = safeNumber(process.env.TA_WFP_TEST_AMOUNT_UAH || process.env.WFP_TEST_AMOUNT_UAH);
-
-  const amountNumberBase = planId === "monthly" ? monthlyPrice : monthlyPrice;
-  const amountNumber = Number.isFinite(testAmount) && testAmount > 0 ? testAmount : amountNumberBase;
+  const amountNumber = planId === "monthly" ? monthlyPrice : monthlyPrice;
 
   const amount = Number(amountNumber || 0);
   const amountStr = amount.toFixed(2);
@@ -104,45 +105,41 @@ async function handler(req: Request) {
     productPrice,
   ].join(";");
 
-  const merchantSignature = secret ? hmacMd5Hex(signString, secret) : "";
+  const merchantSignature = secret ? hmacMd5HexLower(signString, secret) : "";
 
-  console.log("[WFP PURCHASE] planId=", planId);
-  console.log("[WFP PURCHASE] orderReference=", orderReference);
-  console.log("[WFP PURCHASE] signString=", signString);
-  console.log("[WFP PURCHASE] signature=", merchantSignature);
-
-  const existingDeviceHash = getCookie(req, "ta_device_hash");
+  const existingDeviceHash = getCookie(req, DEVICE_COOKIE);
   const deviceHash = existingDeviceHash || crypto.randomUUID();
 
-  // Создаём запись в billing_orders сразу
+  // Пишем billing_orders, но не тормозим ответ если Supabase завис
   try {
     const sb = getSupabaseAdmin();
     if (sb) {
-      await sb.from("billing_orders").upsert([
-        {
-          order_reference: orderReference,
-          plan_id: planId,
-          amount: amount,
-          currency,
-          status: "invoice_created",
-          device_hash: deviceHash,
-          raw: {
-            merchantAccount,
-            merchantDomainName,
-            orderReference,
-            orderDate,
-            amount: amountStr,
+      await Promise.race([
+        sb.from("billing_orders").upsert([
+          {
+            order_reference: orderReference,
+            plan_id: planId,
+            amount,
             currency,
-            productName,
-            productCount,
-            productPrice,
+            status: "invoice_created",
+            device_hash: deviceHash,
+            raw: {
+              merchantAccount,
+              merchantDomainName,
+              orderReference,
+              orderDate,
+              amount: amountStr,
+              currency,
+              productName,
+              productCount,
+              productPrice,
+            },
           },
-        },
+        ]),
+        new Promise((resolve) => setTimeout(resolve, 2000)),
       ]);
     }
-  } catch (e: any) {
-    console.log("[WFP PURCHASE] supabase upsert error:", String(e?.message || e));
-  }
+  } catch {}
 
   if (debug) {
     return NextResponse.json({
@@ -158,7 +155,7 @@ async function handler(req: Request) {
     });
   }
 
-  // ВАЖНО: прокидываем orderReference в returnUrl
+  // Важно: returnUrl сразу с orderReference
   const returnUrl = `${url.origin}/payment/result?orderReference=${encodeURIComponent(orderReference)}`;
   const serviceUrl = `${url.origin}/api/billing/wayforpay/callback`;
 
@@ -225,7 +222,7 @@ async function handler(req: Request) {
     sameSite: "lax",
   });
 
-  res.cookies.set("ta_device_hash", deviceHash, {
+  res.cookies.set(DEVICE_COOKIE, deviceHash, {
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
     sameSite: "lax",

@@ -5,7 +5,7 @@ import { createServerClient } from "@supabase/ssr"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const DEVICE_COOKIE = "turbotaai_device"
+const DEVICE_COOKIE = "ta_device_hash"
 const LAST_USER_COOKIE = "turbotaai_last_user"
 const ACCOUNT_PREFIX = "account:"
 

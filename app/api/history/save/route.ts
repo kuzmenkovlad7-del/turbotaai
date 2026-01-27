@@ -32,12 +32,12 @@ function routeSupabase() {
   });
 
   const getOrCreateDeviceHash = () => {
-    const existing = cookieStore.get("turbotaai_device")?.value ?? null;
+    const existing = cookieStore.get("ta_device_hash")?.value ?? null;
     if (existing) return existing;
 
     const created = crypto.randomUUID();
     pendingCookies.push({
-      name: "turbotaai_device",
+      name: "ta_device_hash",
       value: created,
       options: {
         path: "/",

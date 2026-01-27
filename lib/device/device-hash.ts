@@ -1,7 +1,7 @@
 export function getClientDeviceHash(userId?: string | null) {
   if (typeof window === "undefined") return null
 
-  const key = "turbotaai_device_hash"
+  const key = "ta_device_hash"
 
   // если юзер залогинен — фиксируем account:<userId>
   if (userId) {
@@ -10,7 +10,7 @@ export function getClientDeviceHash(userId?: string | null) {
       localStorage.setItem(key, v)
     } catch {}
     try {
-      document.cookie = `turbotaai_device_hash=${encodeURIComponent(
+      document.cookie = `ta_device_hash=${encodeURIComponent(
         v
       )}; Path=/; Max-Age=31536000; SameSite=Lax`
     } catch {}
@@ -32,7 +32,7 @@ export function getClientDeviceHash(userId?: string | null) {
   }
 
   try {
-    document.cookie = `turbotaai_device_hash=${encodeURIComponent(
+    document.cookie = `ta_device_hash=${encodeURIComponent(
       v
     )}; Path=/; Max-Age=31536000; SameSite=Lax`
   } catch {}

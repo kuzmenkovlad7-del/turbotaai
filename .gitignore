@@ -53,3 +53,9 @@ Thumbs.db
 
 # local backups
 _bak_*/
+# turbota local мусор и бэкапы
+*.bak
+dev.log
+tsconfig.tsbuildinfo
+.next/
+node_modules/

@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     // история (не ломает ответ клиенту)
     try {
       const deviceHash =
-        request.cookies.get("turbotaai_device")?.value || ""
+        request.cookies.get("ta_device_hash")?.value || ""
 
       const title = userMessage.trim().slice(0, 80)
       const convId = await getOrCreateConversationId({

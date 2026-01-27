@@ -6,7 +6,7 @@ import { createClient } from "@supabase/supabase-js"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const DEVICE_COOKIE = "turbotaai_device"
+const DEVICE_COOKIE = "ta_device_hash"
 const ACCOUNT_PREFIX = "account:"
 
 type GrantRow = {

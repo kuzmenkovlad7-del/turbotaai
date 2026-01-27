@@ -1,37 +1,26 @@
-import { NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@supabase/ssr"
+import type { NextRequest } from "next/server"
+import { NextResponse } from "next/server"
 
-export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({
-    request: { headers: request.headers },
+const COOKIE = "ta_device_hash"
+
+export function middleware(req: NextRequest) {
+  const v = req.cookies.get(COOKIE)?.value
+  if (v) return NextResponse.next()
+
+  const res = NextResponse.next()
+  const uuid = crypto.randomUUID()
+
+  res.cookies.set(COOKIE, uuid, {
+    path: "/",
+    sameSite: "lax",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 60 * 60 * 24 * 365,
   })
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anon) return response
-
-  const supabase = createServerClient(url, anon, {
-    cookies: {
-      get(name: string) {
-        return request.cookies.get(name)?.value
-      },
-      set(name: string, value: string, options: any) {
-        response.cookies.set({ name, value, ...options })
-      },
-      remove(name: string, options: any) {
-        response.cookies.set({ name, value: "", ...options, maxAge: 0 })
-      },
-    },
-  })
-
-  // важный вызов: Supabase обновит cookies при необходимости
-  await supabase.auth.getUser()
-
-  return response
+  return res
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|ico|css|js)$).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 }
