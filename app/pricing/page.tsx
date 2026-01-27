@@ -67,8 +67,7 @@ export default function PricingPage() {
       summary?.paid ??
       summary?.subscription?.active ??
       summary?.subscriptionActive ??
-      summary?.plan === "paid" ??
-      false;
+      (summary?.plan === "paid");
 
     return paidLike ? "Paid" : "Trial";
   }, [summary]);
