@@ -7,6 +7,7 @@ type Summary = {
   email: string | null
   access: string
   questionsLeft: number
+  unlimited: boolean
   paid_until: string | null
   promo_until: string | null
   subscription_status: "active" | "inactive"
@@ -30,59 +31,45 @@ function fmtDate(until: string | null) {
   }
 }
 
-function pickNumber(j: any, keys: string[], fallback = 0) {
-  for (const k of keys) {
-    const v = j?.[k]
-    if (typeof v === "number" && Number.isFinite(v)) return v
-  }
-  return fallback
-}
-
 async function loadSummary(): Promise<Summary> {
   const r = await fetch("/api/account/summary", { cache: "no-store" })
   const j = await r.json().catch(() => ({} as any))
 
   const paidUntil = (j?.paidUntil ?? j?.paid_until ?? null) as string | null
   const promoUntil = (j?.promoUntil ?? j?.promo_until ?? null) as string | null
+  const unlimited = Boolean(j?.unlimited ?? false)
 
-  const questionsLeft = pickNumber(j, ["trial_questions_left", "trialLeft", "trial_left", "questionsLeft"], 0)
+  const questionsLeft =
+    typeof j?.questionsLeft === "number"
+      ? j.questionsLeft
+      : typeof j?.trial_questions_left === "number"
+        ? j.trial_questions_left
+        : 0
 
-  const email = (j?.user?.email ?? j?.email ?? null) as string | null
+  const accessFromApi = String(j?.access || "").trim()
 
   const hasPaid = isActive(paidUntil)
   const hasPromo = isActive(promoUntil)
 
-  const accessRaw = String(j?.access || "")
   const access =
-    hasPaid || accessRaw === "Paid"
-      ? "Оплачено"
-      : hasPromo || accessRaw === "Promo"
-        ? "Промо"
-        : questionsLeft > 0
-          ? "Бесплатно"
-          : "Нет доступа"
-
-  const subscription_status = (j?.subscriptionStatus ?? j?.subscription_status ?? (hasPaid || hasPromo ? "active" : "inactive")) as
-    | "active"
-    | "inactive"
-
-  const auto_renew = Boolean(j?.autoRenew ?? j?.auto_renew ?? false)
+    accessFromApi ||
+    (hasPaid ? "Оплачено" : hasPromo ? "Промо" : questionsLeft > 0 ? "Бесплатно" : "Нет доступа")
 
   return {
-    email,
+    email: (j?.user?.email ?? j?.email ?? null) as string | null,
     access,
     questionsLeft,
+    unlimited,
     paid_until: paidUntil,
     promo_until: promoUntil,
-    subscription_status,
-    auto_renew,
+    subscription_status: (j?.subscription_status ?? (hasPaid || hasPromo ? "active" : "inactive")) as "active" | "inactive",
+    auto_renew: Boolean(j?.auto_renew ?? false),
   }
 }
 
 export default function ProfilePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-
   const paidParam = useMemo(() => searchParams.get("paid"), [searchParams])
 
   const [loading, setLoading] = useState(true)
@@ -92,6 +79,7 @@ export default function ProfilePage() {
     email: null,
     access: "Бесплатно",
     questionsLeft: 0,
+    unlimited: false,
     paid_until: null,
     promo_until: null,
     subscription_status: "inactive",
@@ -135,9 +123,7 @@ export default function ProfilePage() {
     }
   }, [paidParam, refresh])
 
-  const hasPaid = isActive(summary.paid_until)
-  const hasPromo = isActive(summary.promo_until)
-  const questionsLabel = hasPaid || hasPromo ? "∞" : String(summary.questionsLeft)
+  const questionsLabel = summary.unlimited ? "∞" : String(summary.questionsLeft)
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">

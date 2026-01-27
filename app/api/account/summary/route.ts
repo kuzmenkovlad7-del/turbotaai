@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { randomUUID } from "crypto"
@@ -50,15 +50,11 @@ function toDateOrNull(v: any): Date | null {
 function laterDateIso(a: any, b: any): string | null {
   const da = toDateOrNull(a)
   const db = toDateOrNull(b)
-
   if (!da && !db) return null
-  if (!da && db) return db.toISOString()
   if (da && !db) return da.toISOString()
-
-  // тут гарантированно оба Date
-  const A = da as Date
-  const B = db as Date
-  return (A.getTime() >= B.getTime() ? A : B).toISOString()
+  if (!da && db) return db.toISOString()
+  if (da && db) return (da.getTime() >= db.getTime() ? da : db).toISOString()
+  return null
 }
 
 function isFuture(iso: string | null) {
@@ -68,20 +64,10 @@ function isFuture(iso: string | null) {
   return d.getTime() > Date.now()
 }
 
-function pickEnv(name: string) {
-  const v = process.env[name]
-  return v && String(v).trim() ? String(v).trim() : ""
-}
-
-function mustEnv(name: string) {
-  const v = pickEnv(name)
-  if (!v) throw new Error("Missing env " + name)
-  return v
-}
-
-function routeSupabaseSession() {
-  const url = mustEnv("NEXT_PUBLIC_SUPABASE_URL")
-  const anon = mustEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+function routeSessionSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anon) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY")
 
   const cookieStore = cookies()
   const pendingCookies: any[] = []
@@ -97,19 +83,16 @@ function routeSupabaseSession() {
     },
   })
 
-  const json = (body: any, status = 200, extra?: { deviceHash?: string; needSetDeviceCookie?: boolean }) => {
+  const json = (body: any, status = 200, extra?: { setDeviceCookie?: { value: string } }) => {
     const res = NextResponse.json(body, { status })
-
     for (const c of pendingCookies) res.cookies.set(c.name, c.value, c.options)
 
-    if (extra?.needSetDeviceCookie && extra.deviceHash) {
-      res.cookies.set({
-        name: DEVICE_COOKIE,
-        value: extra.deviceHash,
+    if (extra?.setDeviceCookie?.value) {
+      res.cookies.set(DEVICE_COOKIE, extra.setDeviceCookie.value, {
+        path: "/",
         httpOnly: true,
         sameSite: "lax",
-        secure: true,
-        path: "/",
+        secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 365,
       })
     }
@@ -121,11 +104,11 @@ function routeSupabaseSession() {
   return { sb, cookieStore, json }
 }
 
-async function findGrantByDeviceHash(admin: any, deviceHash: string): Promise<GrantRow | null> {
+async function findGrantByKey(admin: any, key: string): Promise<GrantRow | null> {
   const { data } = await admin
     .from("access_grants")
     .select("*")
-    .eq("device_hash", deviceHash)
+    .eq("device_hash", key)
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -133,32 +116,20 @@ async function findGrantByDeviceHash(admin: any, deviceHash: string): Promise<Gr
   return (data ?? null) as GrantRow | null
 }
 
-async function findGrantByUserId(admin: any, userId: string): Promise<GrantRow | null> {
-  const { data } = await admin
-    .from("access_grants")
-    .select("*")
-    .eq("user_id", userId)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  return (data ?? null) as GrantRow | null
-}
-
-async function createGrant(admin: any, patch: Partial<GrantRow> & { trial_questions_left: number; nowIso: string }) {
+async function createGrant(admin: any, opts: { userId: string | null; key: string; trialLeft: number; nowIso: string }) {
   const { data } = await admin
     .from("access_grants")
     .insert({
       id: randomUUID(),
-      user_id: patch.user_id ?? null,
-      device_hash: patch.device_hash ?? null,
-      trial_questions_left: patch.trial_questions_left,
-      paid_until: patch.paid_until ?? null,
-      promo_until: patch.promo_until ?? null,
+      user_id: opts.userId,
+      device_hash: opts.key,
+      trial_questions_left: opts.trialLeft,
+      paid_until: null,
+      promo_until: null,
       auto_renew: false,
       cancelled_at: null,
-      created_at: patch.nowIso,
-      updated_at: patch.nowIso,
+      created_at: opts.nowIso,
+      updated_at: opts.nowIso,
     } as any)
     .select("*")
     .single()
@@ -171,42 +142,35 @@ async function updateGrant(admin: any, id: string, patch: any) {
   return (data ?? null) as GrantRow | null
 }
 
-async function ensureGuestGrant(admin: any, deviceHash: string, trialDefault: number, nowIso: string): Promise<GrantRow> {
-  let g = await findGrantByDeviceHash(admin, deviceHash)
-  if (!g) g = await createGrant(admin, { user_id: null, device_hash: deviceHash, trial_questions_left: trialDefault, nowIso })
-  if (!g) g = await findGrantByDeviceHash(admin, deviceHash)
-  if (!g) throw new Error("GRANT_CREATE_FAILED_GUEST")
-  return g
-}
+async function ensureGrant(
+  admin: any,
+  key: string,
+  userId: string | null,
+  trialDefault: number,
+  nowIso: string
+): Promise<GrantRow> {
+  let g = await findGrantByKey(admin, key)
 
-async function ensureAccountGrant(admin: any, userId: string, trialDefault: number, nowIso: string): Promise<GrantRow> {
-  let g = await findGrantByUserId(admin, userId)
+  if (!g) g = await createGrant(admin, { userId, key, trialLeft: trialDefault, nowIso })
+  if (!g) g = await findGrantByKey(admin, key)
+  if (!g) throw new Error("GRANT_CREATE_FAILED")
 
-  if (!g) {
-    const accountKey = `${ACCOUNT_PREFIX}${userId}`
-    g = await findGrantByDeviceHash(admin, accountKey)
-    if (g?.id && !g.user_id) {
-      const upd = await updateGrant(admin, g.id, { user_id: userId, updated_at: nowIso })
-      if (upd) g = upd
-    }
+  if (userId && !g.user_id) {
+    const upd = await updateGrant(admin, g.id, { user_id: userId, updated_at: nowIso })
+    if (upd) g = upd
   }
 
-  if (!g) g = await createGrant(admin, { user_id: userId, device_hash: null, trial_questions_left: trialDefault, nowIso })
-  if (!g) g = await findGrantByUserId(admin, userId)
-  if (!g) throw new Error("GRANT_CREATE_FAILED_ACCOUNT")
-
   return g
 }
 
-export async function GET(req: NextRequest) {
-  const { sb, cookieStore, json } = routeSupabaseSession()
+export async function GET() {
+  const { sb, cookieStore, json } = routeSessionSupabase()
   const admin = getSupabaseAdmin()
 
   const trialDefault = getTrialLimit()
   const nowIso = new Date().toISOString()
-  const debug = req.nextUrl.searchParams.get("debug") === "1"
 
-  let deviceHash = String(cookieStore.get(DEVICE_COOKIE)?.value || "").trim() || null
+  let deviceHash = cookieStore.get(DEVICE_COOKIE)?.value ?? null
   let needSetDeviceCookie = false
   if (!deviceHash) {
     deviceHash = randomUUID()
@@ -217,104 +181,108 @@ export async function GET(req: NextRequest) {
   const user = userData?.user ?? null
   const isLoggedIn = Boolean(user?.id)
 
-  const guestGrant = await ensureGuestGrant(admin, deviceHash!, trialDefault, nowIso)
+  const guestKey = deviceHash!
+  const guestGrant = await ensureGrant(admin, guestKey, null, trialDefault, nowIso)
 
   let accountGrant: GrantRow | null = null
+  let accountKey: string | null = null
+
   if (isLoggedIn) {
-    accountGrant = await ensureAccountGrant(admin, user!.id, trialDefault, nowIso)
+    accountKey = `${ACCOUNT_PREFIX}${user!.id}`
+    accountGrant = await ensureGrant(admin, accountKey, user!.id, trialDefault, nowIso)
 
     const gLeft = clampTrial(guestGrant?.trial_questions_left ?? trialDefault, trialDefault)
     const aLeft = clampTrial(accountGrant?.trial_questions_left ?? trialDefault, trialDefault)
-    const eff = Math.min(gLeft, aLeft)
+    const effTrial = Math.min(gLeft, aLeft)
 
-    if (gLeft !== eff) await updateGrant(admin, guestGrant.id, { trial_questions_left: eff, updated_at: nowIso })
-    if (aLeft !== eff) await updateGrant(admin, accountGrant.id, { trial_questions_left: eff, updated_at: nowIso })
+    const gPaid = guestGrant?.paid_until ? String(guestGrant.paid_until) : null
+    const aPaid = accountGrant?.paid_until ? String(accountGrant.paid_until) : null
+    const effPaid = laterDateIso(gPaid, aPaid)
+
+    const gPromo = guestGrant?.promo_until ? String(guestGrant.promo_until) : null
+    const aPromo = accountGrant?.promo_until ? String(accountGrant.promo_until) : null
+    const effPromo = laterDateIso(gPromo, aPromo)
+
+    if (gLeft !== effTrial) {
+      await updateGrant(admin, guestGrant.id, { trial_questions_left: effTrial, updated_at: nowIso })
+    }
+    if (accountGrant && aLeft !== effTrial) {
+      const upd = await updateGrant(admin, accountGrant.id, { trial_questions_left: effTrial, updated_at: nowIso })
+      if (upd) accountGrant = upd
+    }
+
+    if (effPaid && effPaid !== aPaid && accountGrant) {
+      const upd = await updateGrant(admin, accountGrant.id, { paid_until: effPaid, updated_at: nowIso })
+      if (upd) accountGrant = upd
+    }
+
+    if (effPromo && effPromo !== aPromo && accountGrant) {
+      const upd = await updateGrant(admin, accountGrant.id, { promo_until: effPromo, updated_at: nowIso })
+      if (upd) accountGrant = upd
+    }
   }
 
   const guestPaid = guestGrant?.paid_until ? String(guestGrant.paid_until) : null
   const guestPromo = guestGrant?.promo_until ? String(guestGrant.promo_until) : null
+  const guestTrial = clampTrial(guestGrant?.trial_questions_left ?? trialDefault, trialDefault)
 
   const accPaid = accountGrant?.paid_until ? String(accountGrant.paid_until) : null
   const accPromo = accountGrant?.promo_until ? String(accountGrant.promo_until) : null
+  const accTrial = clampTrial(accountGrant?.trial_questions_left ?? trialDefault, trialDefault)
 
   const paidUntil = isLoggedIn ? laterDateIso(guestPaid, accPaid) : guestPaid
   const promoUntil = isLoggedIn ? laterDateIso(guestPromo, accPromo) : guestPromo
-  const accessUntil = laterDateIso(paidUntil, promoUntil)
 
-  const paidActive = isFuture(paidUntil)
-  const promoActive = isFuture(promoUntil)
+  const hasPaid = isFuture(paidUntil)
+  const hasPromo = isFuture(promoUntil)
+  const unlimited = hasPaid || hasPromo
 
-  const trialLeftRaw = clampTrial(
-    isLoggedIn
-      ? Math.min(
-          clampTrial(guestGrant?.trial_questions_left ?? trialDefault, trialDefault),
-          clampTrial(accountGrant?.trial_questions_left ?? trialDefault, trialDefault)
-        )
-      : guestGrant?.trial_questions_left ?? trialDefault,
-    trialDefault
-  )
+  const questionsLeft = unlimited ? -1 : isLoggedIn ? Math.min(guestTrial, accTrial) : guestTrial
+  const hasAccess = unlimited || questionsLeft > 0
 
-  const hasAccess = paidActive || promoActive || trialLeftRaw > 0
-  const access = paidActive ? "Paid" : promoActive ? "Promo" : "Trial"
-  const subscriptionStatus = paidActive ? "active" : "inactive"
+  const access =
+    hasPaid ? "Paid" : hasPromo ? "Promo" : questionsLeft > 0 ? "Trial" : "NoAccess"
 
-  const autoRenew = ((isLoggedIn ? accountGrant?.auto_renew : guestGrant?.auto_renew) === true)
+  const subscriptionStatus = hasPaid ? "active" : "inactive"
+
+  const autoRenewRaw = (isLoggedIn ? accountGrant?.auto_renew : guestGrant?.auto_renew) ?? false
+  const autoRenew = hasPaid ? Boolean(autoRenewRaw) : false
 
   const body: any = {
     ok: true,
     isLoggedIn,
-    user: user?.email ? { id: user.id, email: user.email } : null,
+    user: user ? { id: user.id, email: user.email || null } : null,
 
     access,
-    unlimited: paidActive || promoActive,
     hasAccess,
+    unlimited,
 
-    trial_questions_left: trialLeftRaw,
-    trial_left: trialLeftRaw,
-    trialLeft: trialLeftRaw,
+    trial_questions_left: questionsLeft,
+    trial_left: questionsLeft,
+    trialLeft: questionsLeft,
+    questionsLeft,
 
     paidUntil,
     promoUntil,
-    accessUntil,
-
-    autoRenew,
-    subscriptionStatus,
-
-    // совместимость со старым фронтом
-    email: user?.email ?? null,
-    questionsLeft: trialLeftRaw,
     paid_until: paidUntil,
     promo_until: promoUntil,
+
+    subscriptionStatus,
     subscription_status: subscriptionStatus,
+    autoRenew,
     auto_renew: autoRenew,
   }
 
-  if (debug) {
+  const sp = new URL("http://x").searchParams
+  if (sp.get("debug") === "1") {
     body.debug = {
       deviceHash,
       needSetDeviceCookie,
-      guestGrant: {
-        id: guestGrant.id,
-        user_id: guestGrant.user_id,
-        device_hash: guestGrant.device_hash,
-        trial_questions_left: guestGrant.trial_questions_left,
-        paid_until: guestGrant.paid_until,
-        promo_until: guestGrant.promo_until,
-        updated_at: guestGrant.updated_at,
-      },
-      accountGrant: accountGrant
-        ? {
-            id: accountGrant.id,
-            user_id: accountGrant.user_id,
-            device_hash: accountGrant.device_hash,
-            trial_questions_left: accountGrant.trial_questions_left,
-            paid_until: accountGrant.paid_until,
-            promo_until: accountGrant.promo_until,
-            updated_at: accountGrant.updated_at,
-          }
-        : null,
+      guestGrant,
+      accountGrant,
+      accountKey,
     }
   }
 
-  return json(body, 200, { deviceHash: deviceHash!, needSetDeviceCookie })
+  return json(body, 200, needSetDeviceCookie ? { setDeviceCookie: { value: deviceHash! } } : undefined)
 }

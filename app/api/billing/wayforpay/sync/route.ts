@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
+import { cookies } from "next/headers"
+import { createServerClient } from "@supabase/ssr"
 import { createClient } from "@supabase/supabase-js"
-import { createHash, randomUUID } from "crypto"
+import { createHmac, randomUUID } from "crypto"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const WFP_URL = "https://api.wayforpay.com/api"
 const DEVICE_COOKIE = "ta_device_hash"
+const LAST_ORDER_COOKIE = "ta_last_order"
 const ACCOUNT_PREFIX = "account:"
 
 function pickEnv(name: string) {
@@ -20,31 +23,31 @@ function mustEnv(name: string) {
   return v
 }
 
-function merchantSignature(parts: string[], secret: string) {
-  const base = parts.join(";")
-  return createHash("md5").update(base + ";" + secret).digest("hex")
+function hmacMd5(base: string, key: string) {
+  return createHmac("md5", key).update(base, "utf8").digest("hex")
 }
 
-function mapStatus(txStatus: string) {
+function mapTxStatus(txStatus: string) {
   const s = String(txStatus || "").toLowerCase()
 
   if (s === "approved" || s === "paid") return "paid"
 
-  if (s === "pending" || s === "inprocessing" || s === "processing" || s === "waitings" || s === "waitingauthcomplete")
+  if (
+    s === "pending" ||
+    s === "inprocessing" ||
+    s === "processing" ||
+    s === "in_process" ||
+    s === "inprogress" ||
+    s === "created"
+  ) {
     return "pending"
+  }
 
-  if (s === "refunded" || s === "voided") return "refunded"
+  if (s === "refunded" || s === "voided" || s === "chargeback") return "refunded"
 
   if (s === "declined" || s === "expired" || s === "refused" || s === "rejected") return "failed"
 
   return "unknown"
-}
-
-function toDateOrNull(v: any): Date | null {
-  if (!v) return null
-  const d = new Date(String(v))
-  if (Number.isNaN(d.getTime())) return null
-  return d
 }
 
 function addDays(base: Date, days: number) {
@@ -53,11 +56,17 @@ function addDays(base: Date, days: number) {
   return d
 }
 
-function calcNextPaidUntil(currentPaidUntil: any, days: number) {
-  const now = new Date()
-  const cur = toDateOrNull(currentPaidUntil)
-  const base = cur && cur.getTime() > now.getTime() ? cur : now
-  return addDays(base, days).toISOString()
+function parseDateOrNull(v: any): Date | null {
+  if (!v) return null
+  const d = new Date(String(v))
+  if (Number.isNaN(d.getTime())) return null
+  return d
+}
+
+function planDays(planId: string) {
+  const p = String(planId || "monthly").toLowerCase()
+  if (p === "yearly" || p === "annual" || p === "year") return 365
+  return 30
 }
 
 function sbAdmin() {
@@ -66,47 +75,48 @@ function sbAdmin() {
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
-function getAccessTokenFromReqCookies(req: NextRequest): string | null {
-  const all = req.cookies.getAll()
+async function getUserIdFromRequest(): Promise<string | null> {
+  const url = pickEnv("NEXT_PUBLIC_SUPABASE_URL")
+  const anon = pickEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+  if (!url || !anon) return null
 
-  for (const c of all) {
-    if (!c.name.includes("auth-token")) continue
-    try {
-      const j: any = JSON.parse(c.value)
-      if (j?.access_token) return String(j.access_token)
-      if (Array.isArray(j) && j[0]?.access_token) return String(j[0].access_token)
-    } catch {}
-  }
+  const jar = cookies()
+  const sb = createServerClient(url, anon, {
+    cookies: {
+      getAll() {
+        return jar.getAll()
+      },
+      setAll() {},
+    },
+  })
 
-  for (const c of all) {
-    if (c.name === "sb-access-token" || c.name.endsWith("access-token")) return String(c.value)
-  }
-
-  return null
-}
-
-async function resolveUserIdFromCookies(sb: ReturnType<typeof sbAdmin>, req: NextRequest) {
   try {
-    const token = getAccessTokenFromReqCookies(req)
-    if (!token) return null
-    const { data } = await sb.auth.getUser(token)
+    const { data } = await sb.auth.getUser()
     return data?.user?.id || null
   } catch {
     return null
   }
 }
 
-async function fetchWfpStatus(orderReference: string) {
+function getDeviceHashFromCookies(): string | null {
+  const jar = cookies()
+  const v = jar.get(DEVICE_COOKIE)?.value
+  return v && String(v).trim() ? String(v).trim() : null
+}
+
+async function fetchWfpCheckStatus(orderReference: string) {
   const merchantAccount = mustEnv("WAYFORPAY_MERCHANT_ACCOUNT")
   const secret = mustEnv("WAYFORPAY_SECRET_KEY")
 
-  const signature = merchantSignature([merchantAccount, orderReference], secret)
+  const base = [merchantAccount, orderReference].join(";")
+  const merchantSignature = hmacMd5(base, secret)
 
   const payload = {
-    transactionType: "STATUS",
+    transactionType: "CHECK_STATUS",
     merchantAccount,
-    merchantSignature: signature,
     orderReference,
+    merchantSignature,
+    apiVersion: 1,
   }
 
   const r = await fetch(WFP_URL, {
@@ -117,114 +127,93 @@ async function fetchWfpStatus(orderReference: string) {
   })
 
   const j = await r.json().catch(() => ({}))
-  return { httpOk: r.ok, status: r.status, body: j }
+  return { httpOk: r.ok, httpStatus: r.status, body: j }
 }
 
-async function upsertGrantByDeviceHash(
+async function upsertPaidGrant(
   sb: ReturnType<typeof sbAdmin>,
-  deviceHash: string,
-  days: number
+  opts: { grantKey: string; userId: string | null; days: number }
 ) {
-  const nowIso = new Date().toISOString()
+  const now = new Date()
+  const nowIso = now.toISOString()
 
   const existing = await sb
     .from("access_grants")
     .select("id, paid_until")
-    .eq("device_hash", deviceHash)
+    .eq("device_hash", opts.grantKey)
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle()
 
   if (existing.error) throw new Error("access_grants select failed: " + existing.error.message)
 
-  const nextPaid = calcNextPaidUntil(existing.data?.paid_until, days)
+  const currentPaid = parseDateOrNull(existing.data?.paid_until)
+  const base = currentPaid && currentPaid.getTime() > now.getTime() ? currentPaid : now
+  const nextPaidUntil = addDays(base, opts.days).toISOString()
 
   if (existing.data?.id) {
     const upd = await sb
       .from("access_grants")
       .update({
-        paid_until: nextPaid,
+        paid_until: nextPaidUntil,
         trial_questions_left: 0,
+        cancelled_at: null,
         updated_at: nowIso,
+        ...(opts.userId ? { user_id: opts.userId } : {}),
       } as any)
       .eq("id", existing.data.id)
 
     if (upd.error) throw new Error("access_grants update failed: " + upd.error.message)
-    return { mode: "update", id: existing.data.id, paid_until: nextPaid }
+    return nextPaidUntil
   }
 
   const ins = await sb.from("access_grants").insert({
     id: randomUUID(),
-    user_id: null,
-    device_hash: deviceHash,
+    user_id: opts.userId,
+    device_hash: opts.grantKey,
     trial_questions_left: 0,
-    paid_until: nextPaid,
+    paid_until: nextPaidUntil,
     promo_until: null,
-    auto_renew: false,
-    cancelled_at: null,
     created_at: nowIso,
     updated_at: nowIso,
+    auto_renew: false,
+    cancelled_at: null,
   } as any)
 
   if (ins.error) throw new Error("access_grants insert failed: " + ins.error.message)
-  return { mode: "insert", paid_until: nextPaid }
+  return nextPaidUntil
 }
 
-async function upsertGrantByUserId(
+async function activateAccessIfPaid(
   sb: ReturnType<typeof sbAdmin>,
-  userId: string,
-  days: number
+  opts: { orderReference: string; deviceHash: string | null; userId: string | null; planId: string }
 ) {
-  const nowIso = new Date().toISOString()
+  const days = planDays(opts.planId)
 
-  const existing = await sb
-    .from("access_grants")
-    .select("id, paid_until")
-    .eq("user_id", userId)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const paidUntilByDevice = opts.deviceHash
+    ? await upsertPaidGrant(sb, { grantKey: opts.deviceHash, userId: null, days })
+    : null
 
-  if (existing.error) throw new Error("access_grants user select failed: " + existing.error.message)
+  const paidUntilByAccount = opts.userId
+    ? await upsertPaidGrant(sb, { grantKey: ACCOUNT_PREFIX + opts.userId, userId: opts.userId, days })
+    : null
 
-  const nextPaid = calcNextPaidUntil(existing.data?.paid_until, days)
+  const paid_until = paidUntilByAccount || paidUntilByDevice
 
-  if (existing.data?.id) {
-    const upd = await sb
-      .from("access_grants")
-      .update({
-        paid_until: nextPaid,
-        trial_questions_left: 0,
-        updated_at: nowIso,
-      } as any)
-      .eq("id", existing.data.id)
-
-    if (upd.error) throw new Error("access_grants user update failed: " + upd.error.message)
-  } else {
-    const ins = await sb.from("access_grants").insert({
-      id: randomUUID(),
-      user_id: userId,
-      device_hash: null,
-      trial_questions_left: 0,
-      paid_until: nextPaid,
-      promo_until: null,
-      auto_renew: false,
-      cancelled_at: null,
-      created_at: nowIso,
-      updated_at: nowIso,
-    } as any)
-
-    if (ins.error) throw new Error("access_grants user insert failed: " + ins.error.message)
+  if (opts.userId && paid_until) {
+    try {
+      await sb
+        .from("profiles")
+        .update({
+          paid_until,
+          subscription_status: "active",
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq("id", opts.userId)
+    } catch {}
   }
 
-  const accountKey = `${ACCOUNT_PREFIX}${userId}`
-  await sb
-    .from("access_grants")
-    .update({ user_id: userId, updated_at: nowIso } as any)
-    .eq("device_hash", accountKey)
-    .is("user_id", null)
-
-  return { paid_until: nextPaid }
+  return { paid_until }
 }
 
 async function handler(req: NextRequest) {
@@ -233,138 +222,90 @@ async function handler(req: NextRequest) {
 
   const orderReference =
     String(url.searchParams.get("orderReference") || "").trim() ||
-    String(req.cookies.get("ta_last_order")?.value || "").trim()
+    String(req.cookies.get(LAST_ORDER_COOKIE)?.value || "").trim()
 
   if (!orderReference) {
     return NextResponse.json({ ok: false, error: "Missing orderReference" }, { status: 400 })
   }
 
   const sb = sbAdmin()
+  const userIdFromCookie = await getUserIdFromRequest()
 
   const ord = await sb
     .from("billing_orders")
-    .select("order_reference, user_id, device_hash, plan_id, status, raw, updated_at")
+    .select("order_reference,user_id,device_hash,plan_id,status,raw,updated_at")
     .eq("order_reference", orderReference)
     .maybeSingle()
 
   if (ord.error) {
     return NextResponse.json({ ok: false, error: "billing_orders select failed", details: ord.error.message }, { status: 500 })
   }
+
   if (!ord.data) {
-    return NextResponse.json({ ok: false, error: "Order not found", orderReference }, { status: 200 })
+    return NextResponse.json({ ok: false, error: "Order not found", orderReference }, { status: 404 })
   }
 
-  const wfp = await fetchWfpStatus(orderReference)
-  const txStatus = String((wfp.body as any)?.transactionStatus || (wfp.body as any)?.status || "")
-  const state = mapStatus(txStatus)
+  const deviceHash = String(ord.data.device_hash || "").trim() || getDeviceHashFromCookies()
+  const planId = String(ord.data.plan_id || "monthly")
+  const userId = String(ord.data.user_id || userIdFromCookie || "").trim() || null
 
-  const raw = (wfp.body && typeof wfp.body === "object" ? wfp.body : {}) as any
-  const nowIso = new Date().toISOString()
+  const wfp = await fetchWfpCheckStatus(orderReference)
+
+  const txStatus = String((wfp.body as any)?.transactionStatus || (wfp.body as any)?.status || "")
+  const reason = String((wfp.body as any)?.reason || "")
+  const reasonCode = (wfp.body as any)?.reasonCode ?? null
+
+  const state = mapTxStatus(txStatus)
+
+  const rawToStore =
+    wfp.body && typeof wfp.body === "object" ? JSON.stringify(wfp.body) : JSON.stringify({ body: wfp.body })
 
   const upd = await sb
     .from("billing_orders")
     .update({
       status: state,
-      raw,
-      updated_at: nowIso,
+      raw: rawToStore,
+      updated_at: new Date().toISOString(),
+      ...(userId && !ord.data.user_id ? { user_id: userId } : {}),
     } as any)
     .eq("order_reference", orderReference)
 
-  const planId = String(ord.data.plan_id || "monthly")
-  const days = planId === "yearly" ? 366 : 31
-
-  const userIdFromCookie = await resolveUserIdFromCookies(sb, req)
-  const deviceFromCookie = String(req.cookies.get(DEVICE_COOKIE)?.value || "").trim() || null
-
-  const deviceHash = String(ord.data.device_hash || "").trim() || deviceFromCookie
-  let userId = String(ord.data.user_id || "").trim() || null
-
-  if (!userId && userIdFromCookie) {
-    userId = userIdFromCookie
-    await sb
-      .from("billing_orders")
-      .update({ user_id: userIdFromCookie, updated_at: nowIso } as any)
-      .eq("order_reference", orderReference)
+  if (upd.error) {
+    return NextResponse.json({ ok: false, error: "billing_orders update failed", details: upd.error.message }, { status: 500 })
   }
 
-  const final = state === "paid" || state === "failed" || state === "refunded"
-
   if (state !== "paid") {
-    const message =
-      state === "pending"
-        ? "Платіж обробляється. Спробуйте перевірити ще раз через хвилину."
-        : state === "failed"
-          ? "Оплата не пройшла. Спробуйте іншу картку або повторіть оплату."
-          : state === "refunded"
-            ? "Оплату було повернено платіжною системою."
-            : "Статус поки невідомий. Спробуйте перевірити ще раз через хвилину."
-
     const payload: any = {
       ok: false,
-      final,
+      orderReference,
       state,
       txStatus,
-      orderReference,
-      billingUpdated: !upd.error,
-      billingUpdateError: upd.error?.message || null,
-      message,
+      reason,
+      reasonCode,
+      retryable: state === "pending" || state === "unknown",
     }
-
-    if (debug) {
-      payload.debug = {
-        userIdFromCookie,
-        orderUserId: ord.data.user_id,
-        userIdUsed: userId,
-        deviceHash,
-        deviceFromCookie,
-        planId,
-        days,
-        wfp,
-      }
-    }
-
+    if (debug) payload.debug = { wfp, order: ord.data, userIdFromCookie, deviceHash }
     return NextResponse.json(payload, { status: 200 })
   }
 
-  if (!deviceHash && !userId) {
-    return NextResponse.json(
-      { ok: false, final: true, state, txStatus, orderReference, error: "Order has no device_hash and no user_id" },
-      { status: 200 }
-    )
-  }
-
-  const ops: any[] = []
-  if (deviceHash) ops.push({ scope: "device", ...(await upsertGrantByDeviceHash(sb, deviceHash, days)) })
-  if (userId) ops.push({ scope: "user", ...(await upsertGrantByUserId(sb, userId, days)) })
-
-  const paidUntil =
-    ops.find((x) => x.scope === "user")?.paid_until ||
-    ops.find((x) => x.scope === "device")?.paid_until ||
-    null
+  const activated = await activateAccessIfPaid(sb, {
+    orderReference,
+    deviceHash,
+    userId,
+    planId,
+  })
 
   const payload: any = {
     ok: true,
-    final: true,
+    orderReference,
     state,
     txStatus,
-    orderReference,
-    paidUntil,
-    ops,
+    reason,
+    reasonCode,
+    granted: true,
+    paid_until: activated.paid_until || null,
   }
-
-  if (debug) {
-    payload.debug = {
-      userIdFromCookie,
-      orderUserId: ord.data.user_id,
-      userIdUsed: userId,
-      deviceHash,
-      deviceFromCookie,
-      planId,
-      days,
-      wfp,
-    }
-  }
-
+  if (debug) payload.debug = { wfp, order: ord.data, userIdFromCookie, deviceHash, planId }
   return NextResponse.json(payload, { status: 200 })
 }
 
