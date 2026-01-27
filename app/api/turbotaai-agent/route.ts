@@ -1,335 +1,95 @@
-import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { createServerClient } from "@supabase/ssr"
+import { type NextRequest, NextResponse } from "next/server"
+import { requireAccess } from "@/lib/access/access-control"
 
-export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
 
-const DEVICE_COOKIE = "ta_device_hash"
-const LAST_USER_COOKIE = "turbotaai_last_user"
-const ACCOUNT_PREFIX = "account:"
+const FALLBACK_WEBHOOK_URL = "https://vladkuzmenko.com/webhook/turbotaai-agent"
 
-type GrantRow = {
-  id: string
-  user_id: string | null
-  device_hash: string
-  trial_questions_left: number | null
-  paid_until: any
-  promo_until: any
-  created_at: string | null
-  updated_at: string | null
+// Важно: используем только серверные переменные, НЕ NEXT_PUBLIC, чтобы не словить рекурсию
+const WEBHOOK_URL =
+  process.env.TURBOTA_AGENT_WEBHOOK_URL ||
+  process.env.N8N_TURBOTA_AGENT_WEBHOOK_URL ||
+  FALLBACK_WEBHOOK_URL
+
+function isBadWebhookUrl(url: string) {
+  const u = String(url || "").trim()
+  if (!u) return true
+  if (u.startsWith("/")) return true
+  if (u.includes("/api/turbotaai-agent")) return true
+  if (u.includes("/api/chat")) return true
+  return false
 }
 
-function num(v: string | undefined, fallback = 0) {
-  const n = Number(v)
-  return Number.isFinite(n) ? n : fallback
-}
-
-function getTrialLimit() {
-  const raw = process.env.TRIAL_QUESTIONS_LIMIT
-  const limit = num(raw, 5)
-  return limit > 0 ? Math.floor(limit) : 5
-}
-
-function clampTrial(v: any, trialDefault: number) {
-  const n = Number(v)
-  if (!Number.isFinite(n)) return trialDefault
-  if (n < 0) return 0
-  // ВАЖНО: никогда не даем "поднять" выше дефолта
-  return Math.min(Math.floor(n), trialDefault)
-}
-
-function isActiveDate(v: any) {
-  if (!v) return false
-  const t = new Date(v).getTime()
-  if (!Number.isFinite(t)) return false
-  return t > Date.now()
-}
-
-function routeSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url || !anon) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY")
-  }
-
-  const cookieStore = cookies()
-  const pendingCookies: any[] = []
-  const extraCookies: Array<{ name: string; value: string; options?: any }> = []
-
-  const sb = createServerClient(url, anon, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll()
-      },
-      setAll(cookiesToSet) {
-        pendingCookies.push(...cookiesToSet)
-      },
-    },
-  })
-
-  const applyPendingCookies = (res: NextResponse) => {
-    for (const c of pendingCookies) {
-      res.cookies.set(c.name, c.value, c.options)
+export async function POST(request: NextRequest) {
+  try {
+    if (isBadWebhookUrl(WEBHOOK_URL)) {
+      return NextResponse.json(
+        { ok: false, error: "Bad webhook URL. Check TURBOTA_AGENT_WEBHOOK_URL or N8N_TURBOTA_AGENT_WEBHOOK_URL" },
+        { status: 500, headers: { "cache-control": "no-store" } }
+      )
     }
-  }
 
-  return { sb, cookieStore, extraCookies, applyPendingCookies }
-}
-
-async function findGrantByDevice(sb: any, deviceHash: string): Promise<GrantRow | null> {
-  const { data } = await sb
-    .from("access_grants")
-    .select("*")
-    .eq("device_hash", deviceHash)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  return (data ?? null) as GrantRow | null
-}
-
-// legacy bug: sometimes you had user_id but device_hash was device uuid
-async function findGrantByUserAndDevice(sb: any, userId: string, deviceHash: string): Promise<GrantRow | null> {
-  const { data } = await sb
-    .from("access_grants")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("device_hash", deviceHash)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  return (data ?? null) as GrantRow | null
-}
-
-async function createGrant(
-  sb: any,
-  opts: { userId: string | null; deviceHash: string; trialLeft: number; nowIso: string }
-): Promise<GrantRow | null> {
-  const { data } = await sb
-    .from("access_grants")
-    .insert({
-      id: crypto.randomUUID(),
-      user_id: opts.userId,
-      device_hash: opts.deviceHash,
-      trial_questions_left: opts.trialLeft,
-      paid_until: null,
-      promo_until: null,
-      created_at: opts.nowIso,
-      updated_at: opts.nowIso,
-    })
-    .select("*")
-    .single()
-
-  return (data ?? null) as GrantRow | null
-}
-
-async function updateGrant(
-  sb: any,
-  id: string,
-  patch: Partial<GrantRow> & { updated_at?: string }
-): Promise<GrantRow | null> {
-  const { data, error } = await sb.from("access_grants").update(patch).eq("id", id).select("*").maybeSingle()
-  if (error) console.error("[grant] update failed", error)
-  return (data ?? null) as GrantRow | null
-}
-
-/**
- * ЕДИНАЯ логика:
- * - guest: grant по device_hash
- * - account: grant по device_hash = account:<userId>
- * - при логине seed = текущий guestLeft
- * - никогда не даем увеличить trial: effective = min(guestLeft, accountLeft)
- * - при работе в account синхроним оба, чтобы logout не обходил лимит
- */
-
-
-/**
- * ЕДИНАЯ логика:
- * - guest: grant по device_hash = device uuid cookie
- * - account: grant по device_hash = account:<userId>
- * - при логине никогда не даем поднять trial: effective = min(guestLeft, accountLeft)
- * - paid/promo берем как max-date из обоих
- */
-async function ensureGrant(sb: any, deviceHash: string, userId: string | null, trialDefault: number, nowIso: string) {
-  const laterDate = (a: any, b: any) => {
-    if (!a && !b) return null
-    if (!a) return b
-    if (!b) return a
-    const ta = new Date(a).getTime()
-    const tb = new Date(b).getTime()
-    if (!Number.isFinite(ta)) return b
-    if (!Number.isFinite(tb)) return a
-    return ta >= tb ? a : b
-  }
-
-  // 1) guest grant
-  let guestGrant = await findGrantByDevice(sb, deviceHash)
-  if (!guestGrant) {
-    const created = await createGrant(sb, { userId: null, deviceHash, trialLeft: trialDefault, nowIso })
-    guestGrant = created ?? (await findGrantByDevice(sb, deviceHash))
-  }
-  if (!guestGrant) throw new Error("Failed to create guest grant")
-
-  // guest only
-  if (!userId) {
-    return { grant: guestGrant, scope: "guest", guestGrant }
-  }
-
-  // 2) account grant by stable key
-  const accountKey = ACCOUNT_PREFIX + userId
-  let accountGrant = await findGrantByDevice(sb, accountKey)
-
-  // legacy: if there is any row by user_id with wrong device_hash -> migrate to stable key
-  if (!accountGrant) {
-    const { data: legacy } = await sb
-      .from("access_grants")
-      .select("*")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (legacy) {
-      const migrated = await updateGrant(sb, legacy.id, { device_hash: accountKey, updated_at: nowIso })
-      accountGrant = migrated ?? (await findGrantByDevice(sb, accountKey))
+    let body: any = {}
+    try {
+      body = await request.json()
+    } catch {
+      body = {}
     }
-  }
 
-  if (!accountGrant) {
-    const created = await createGrant(sb, { userId, deviceHash: accountKey, trialLeft: trialDefault, nowIso })
-    accountGrant = created ?? (await findGrantByDevice(sb, accountKey))
-  }
-  if (!accountGrant) throw new Error("Failed to create account grant")
+    const query = String(body?.query ?? body?.message ?? body?.text ?? "").trim()
+    const language = String(body?.language ?? "uk")
+    const userEmail = String(body?.user ?? body?.email ?? "guest@example.com")
 
-  // 3) never increase trial after login
-  const gLeft = clampTrial(guestGrant.trial_questions_left ?? trialDefault, trialDefault)
-  const aLeft = clampTrial(accountGrant.trial_questions_left ?? trialDefault, trialDefault)
-  const eff = Math.min(gLeft, aLeft)
+    if (!query) {
+      return NextResponse.json({ ok: false, error: "Empty query" }, { status: 400, headers: { "cache-control": "no-store" } })
+    }
 
-  if (gLeft !== eff) {
-    guestGrant = (await updateGrant(sb, guestGrant.id, { trial_questions_left: eff, updated_at: nowIso })) ?? guestGrant
-  }
-  if (aLeft !== eff) {
-    accountGrant = (await updateGrant(sb, accountGrant.id, { trial_questions_left: eff, updated_at: nowIso })) ?? accountGrant
-  }
+    const access = await requireAccess(request, true)
+    if (!access.ok) {
+      return NextResponse.json(
+        { ok: false, error: "payment_required", reason: access.reason, grant: access.grant },
+        { status: access.status, headers: { "cache-control": "no-store" } }
+      )
+    }
 
-  // 4) merge paid/promo from both (take later)
-  const paidUntil = laterDate(guestGrant?.paid_until ?? null, accountGrant?.paid_until ?? null)
-  const promoUntil = laterDate(guestGrant?.promo_until ?? null, accountGrant?.promo_until ?? null)
+    const payload = {
+      ...body,
+      query,
+      language,
+      user: userEmail,
+    }
 
-  const grant = { ...accountGrant, paid_until: paidUntil, promo_until: promoUntil }
-
-  return { grant, scope: "account", guestGrant }
-}
-
-
-export async function POST(req: NextRequest) {
-  const { sb, cookieStore, extraCookies, applyPendingCookies } = routeSupabase()
-
-  // device cookie
-  let deviceHash = cookieStore.get(DEVICE_COOKIE)?.value ?? null
-  if (!deviceHash) {
-    deviceHash = crypto.randomUUID()
-    extraCookies.push({
-      name: DEVICE_COOKIE,
-      value: deviceHash,
-      options: { path: "/", sameSite: "lax", httpOnly: false, maxAge: 60 * 60 * 24 * 365 },
+    const r = await fetch(WEBHOOK_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(payload),
+      cache: "no-store",
     })
-  }
 
-  const trialDefault = getTrialLimit()
-  const nowIso = new Date().toISOString()
+    const raw = await r.text()
 
-  const { data: userData } = await sb.auth.getUser()
-  const user = userData?.user ?? null
-  const isLoggedIn = Boolean(user?.id)
+    if (!r.ok) {
+      return NextResponse.json(
+        { ok: false, error: "Webhook failed", httpStatus: r.status, body: raw },
+        { status: 502, headers: { "cache-control": "no-store" } }
+      )
+    }
 
-  // remember last logged-in user (for trial sync after logout)
-  if (isLoggedIn && user?.id) {
-    extraCookies.push({
-      name: LAST_USER_COOKIE,
-      value: user.id,
-      options: { path: "/", sameSite: "lax", httpOnly: false, maxAge: 60 * 60 * 24 * 365 },
-    })
-  }
-
-  const { grant, scope, guestGrant } = await ensureGrant(sb, deviceHash, user?.id ?? null, trialDefault, nowIso)
-
-  const trialLeft = clampTrial(grant?.trial_questions_left ?? trialDefault, trialDefault)
-  const paidUntil = grant?.paid_until ?? null
-  const promoUntil = grant?.promo_until ?? null
-
-  const paidActive = isActiveDate(paidUntil)
-  const promoActive = isActiveDate(promoUntil)
-  const unlimited = paidActive || promoActive
-
-  // block only when Trial and 0
-  if (!unlimited && trialLeft <= 0) {
-    const res = NextResponse.json(
-      { ok: false, error: "PAYMENT_REQUIRED", reason: "trial_limit_reached", trialLeft, scope, isLoggedIn },
-      { status: 402 }
+    try {
+      const json = JSON.parse(raw)
+      return NextResponse.json(json, { status: 200, headers: { "cache-control": "no-store" } })
+    } catch {
+      return NextResponse.json({ ok: true, response: raw }, { status: 200, headers: { "cache-control": "no-store" } })
+    }
+  } catch (e: any) {
+    return NextResponse.json(
+      { ok: false, error: "Agent route failed", details: String(e?.message || e) },
+      { status: 500, headers: { "cache-control": "no-store" } }
     )
-    for (const c of extraCookies) res.cookies.set(c.name, c.value, c.options)
-    applyPendingCookies(res)
-    res.headers.set("x-access", "Trial")
-    res.headers.set("x-trial-left", String(trialLeft))
-    res.headers.set("x-scope", scope)
-    res.headers.set("cache-control", "no-store, max-age=0")
-    return res
   }
+}
 
-  // proxy to n8n
-  const upstream = String(process.env.N8N_TURBOTA_AGENT_WEBHOOK_URL || "").trim()
-  if (!upstream) {
-    const res = NextResponse.json({ ok: false, error: "Missing N8N_TURBOTA_AGENT_WEBHOOK_URL" }, { status: 500 })
-    for (const c of extraCookies) res.cookies.set(c.name, c.value, c.options)
-    applyPendingCookies(res)
-    return res
-  }
-
-  const contentType = req.headers.get("content-type") || "application/json"
-  const bodyText = await req.text()
-
-  const upstreamRes = await fetch(upstream, {
-    method: "POST",
-    headers: { "content-type": contentType },
-    body: bodyText,
-    cache: "no-store",
-  })
-
-  const text = await upstreamRes.text()
-
-  // decrement only after success and only if NOT unlimited
-  let nextTrialLeft = trialLeft
-  if (upstreamRes.ok && !unlimited) {
-    nextTrialLeft = Math.max(0, trialLeft - 1)
-
-    // update active grant
-    await updateGrant(sb, grant.id, { trial_questions_left: nextTrialLeft, updated_at: nowIso })
-
-    // IMPORTANT: if account -> sync guest too (logout can't bypass)
-    if (scope === "account" && guestGrant?.id) {
-      await updateGrant(sb, guestGrant.id, { trial_questions_left: nextTrialLeft, updated_at: nowIso })
-    }
-  }
-
-  const res = new NextResponse(text, {
-    status: upstreamRes.status,
-    headers: {
-      "content-type": upstreamRes.headers.get("content-type") || "application/json",
-    },
-  })
-
-  for (const c of extraCookies) res.cookies.set(c.name, c.value, c.options)
-  applyPendingCookies(res)
-
-  res.headers.set("x-access", paidActive ? "Paid" : promoActive ? "Promo" : "Trial")
-  res.headers.set("x-trial-left", String(nextTrialLeft))
-  res.headers.set("x-scope", scope)
-  res.headers.set("cache-control", "no-store, max-age=0")
-
-  return res
+export async function GET() {
+  return NextResponse.json({ ok: true }, { status: 200, headers: { "cache-control": "no-store" } })
 }
