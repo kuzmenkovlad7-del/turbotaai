@@ -104,6 +104,12 @@ function getDeviceHashFromCookies(): string | null {
   return v && String(v).trim() ? String(v).trim() : null
 }
 
+function cookieDomainFromHost(host: string | null) {
+  const h = String(host || "").toLowerCase()
+  if (h.endsWith(".turbotaai.com") || h === "turbotaai.com") return ".turbotaai.com"
+  return undefined
+}
+
 async function fetchWfpCheckStatus(orderReference: string) {
   const merchantAccount = mustEnv("WAYFORPAY_MERCHANT_ACCOUNT")
   const secret = mustEnv("WAYFORPAY_SECRET_KEY")
@@ -186,19 +192,35 @@ async function upsertPaidGrant(
 
 async function activateAccessIfPaid(
   sb: ReturnType<typeof sbAdmin>,
-  opts: { orderReference: string; deviceHash: string | null; userId: string | null; planId: string }
+  opts: {
+    orderReference: string
+    orderDeviceHash: string | null
+    cookieDeviceHash: string | null
+    userId: string | null
+    planId: string
+  }
 ) {
   const days = planDays(opts.planId)
 
-  const paidUntilByDevice = opts.deviceHash
-    ? await upsertPaidGrant(sb, { grantKey: opts.deviceHash, userId: null, days })
-    : null
+  const keys: { key: string; userId: string | null }[] = []
 
-  const paidUntilByAccount = opts.userId
-    ? await upsertPaidGrant(sb, { grantKey: ACCOUNT_PREFIX + opts.userId, userId: opts.userId, days })
-    : null
+  if (opts.orderDeviceHash) keys.push({ key: opts.orderDeviceHash, userId: null })
+  if (opts.cookieDeviceHash && opts.cookieDeviceHash !== opts.orderDeviceHash) {
+    keys.push({ key: opts.cookieDeviceHash, userId: null })
+  }
+  if (opts.userId) keys.push({ key: ACCOUNT_PREFIX + opts.userId, userId: opts.userId })
 
-  const paid_until = paidUntilByAccount || paidUntilByDevice
+  let paid_until: string | null = null
+
+  for (const k of keys) {
+    const pu = await upsertPaidGrant(sb, { grantKey: k.key, userId: k.userId, days })
+    if (!paid_until) paid_until = pu
+    else {
+      const a = parseDateOrNull(paid_until)
+      const b = parseDateOrNull(pu)
+      if (a && b && b.getTime() > a.getTime()) paid_until = pu
+    }
+  }
 
   if (opts.userId && paid_until) {
     try {
@@ -213,12 +235,14 @@ async function activateAccessIfPaid(
     } catch {}
   }
 
-  return { paid_until }
+  return { paid_until, keys: keys.map((x) => x.key) }
 }
 
 async function handler(req: NextRequest) {
   const url = new URL(req.url)
   const debug = url.searchParams.get("debug") === "1"
+  const host = req.headers.get("host")
+  const cookieDomain = cookieDomainFromHost(host)
 
   const orderReference =
     String(url.searchParams.get("orderReference") || "").trim() ||
@@ -230,6 +254,7 @@ async function handler(req: NextRequest) {
 
   const sb = sbAdmin()
   const userIdFromCookie = await getUserIdFromRequest()
+  const cookieDeviceHash = getDeviceHashFromCookies()
 
   const ord = await sb
     .from("billing_orders")
@@ -240,12 +265,11 @@ async function handler(req: NextRequest) {
   if (ord.error) {
     return NextResponse.json({ ok: false, error: "billing_orders select failed", details: ord.error.message }, { status: 500 })
   }
-
   if (!ord.data) {
     return NextResponse.json({ ok: false, error: "Order not found", orderReference }, { status: 404 })
   }
 
-  const deviceHash = String(ord.data.device_hash || "").trim() || getDeviceHashFromCookies()
+  const orderDeviceHash = String(ord.data.device_hash || "").trim() || null
   const planId = String(ord.data.plan_id || "monthly")
   const userId = String(ord.data.user_id || userIdFromCookie || "").trim() || null
 
@@ -254,7 +278,6 @@ async function handler(req: NextRequest) {
   const txStatus = String((wfp.body as any)?.transactionStatus || (wfp.body as any)?.status || "")
   const reason = String((wfp.body as any)?.reason || "")
   const reasonCode = (wfp.body as any)?.reasonCode ?? null
-
   const state = mapTxStatus(txStatus)
 
   const rawToStore =
@@ -284,18 +307,19 @@ async function handler(req: NextRequest) {
       reasonCode,
       retryable: state === "pending" || state === "unknown",
     }
-    if (debug) payload.debug = { wfp, order: ord.data, userIdFromCookie, deviceHash }
+    if (debug) payload.debug = { wfp, order: ord.data, userIdFromCookie, cookieDeviceHash, orderDeviceHash }
     return NextResponse.json(payload, { status: 200 })
   }
 
   const activated = await activateAccessIfPaid(sb, {
     orderReference,
-    deviceHash,
+    orderDeviceHash,
+    cookieDeviceHash,
     userId,
     planId,
   })
 
-  const payload: any = {
+  const body: any = {
     ok: true,
     orderReference,
     state,
@@ -304,9 +328,29 @@ async function handler(req: NextRequest) {
     reasonCode,
     granted: true,
     paid_until: activated.paid_until || null,
+    granted_keys: activated.keys,
   }
-  if (debug) payload.debug = { wfp, order: ord.data, userIdFromCookie, deviceHash, planId }
-  return NextResponse.json(payload, { status: 200 })
+  if (debug) body.debug = { wfp, order: ord.data, userIdFromCookie, cookieDeviceHash, orderDeviceHash, planId }
+
+  const res = NextResponse.json(body, { status: 200 })
+
+  // ВАЖНО: фиксируем cookie доменом, чтобы www и без www делили один device id
+  // и чтобы профиль сразу видел grant
+  const shouldSetDevice =
+    Boolean(orderDeviceHash) && (!cookieDeviceHash || cookieDeviceHash !== orderDeviceHash)
+
+  if (shouldSetDevice && orderDeviceHash) {
+    res.cookies.set(DEVICE_COOKIE, orderDeviceHash, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 365,
+      ...(cookieDomain ? { domain: cookieDomain } : {}),
+    })
+  }
+
+  return res
 }
 
 export async function GET(req: NextRequest) {

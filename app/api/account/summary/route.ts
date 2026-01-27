@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { randomUUID } from "crypto"
@@ -64,6 +64,12 @@ function isFuture(iso: string | null) {
   return d.getTime() > Date.now()
 }
 
+function cookieDomainFromHost(host: string | null) {
+  const h = String(host || "").toLowerCase()
+  if (h.endsWith(".turbotaai.com") || h === "turbotaai.com") return ".turbotaai.com"
+  return undefined
+}
+
 function routeSessionSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -83,17 +89,23 @@ function routeSessionSupabase() {
     },
   })
 
-  const json = (body: any, status = 200, extra?: { setDeviceCookie?: { value: string } }) => {
+  const json = (
+    body: any,
+    status = 200,
+    extra?: { setDeviceCookie?: { value: string; host?: string | null } }
+  ) => {
     const res = NextResponse.json(body, { status })
     for (const c of pendingCookies) res.cookies.set(c.name, c.value, c.options)
 
     if (extra?.setDeviceCookie?.value) {
+      const domain = cookieDomainFromHost(extra.setDeviceCookie.host || null)
       res.cookies.set(DEVICE_COOKIE, extra.setDeviceCookie.value, {
         path: "/",
         httpOnly: true,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 365,
+        ...(domain ? { domain } : {}),
       })
     }
 
@@ -163,9 +175,12 @@ async function ensureGrant(
   return g
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const { sb, cookieStore, json } = routeSessionSupabase()
   const admin = getSupabaseAdmin()
+
+  const debug = new URL(req.url).searchParams.get("debug") === "1"
+  const host = req.headers.get("host")
 
   const trialDefault = getTrialLimit()
   const nowIso = new Date().toISOString()
@@ -237,11 +252,11 @@ export async function GET() {
   const hasPromo = isFuture(promoUntil)
   const unlimited = hasPaid || hasPromo
 
-  const questionsLeft = unlimited ? -1 : isLoggedIn ? Math.min(guestTrial, accTrial) : guestTrial
+  const questionsLeft = unlimited ? 0 : isLoggedIn ? Math.min(guestTrial, accTrial) : guestTrial
   const hasAccess = unlimited || questionsLeft > 0
 
   const access =
-    hasPaid ? "Paid" : hasPromo ? "Promo" : questionsLeft > 0 ? "Trial" : "NoAccess"
+    hasPaid ? "paid" : hasPromo ? "promo" : questionsLeft > 0 ? "trial" : "noaccess"
 
   const subscriptionStatus = hasPaid ? "active" : "inactive"
 
@@ -257,32 +272,17 @@ export async function GET() {
     hasAccess,
     unlimited,
 
-    trial_questions_left: questionsLeft,
-    trial_left: questionsLeft,
-    trialLeft: questionsLeft,
     questionsLeft,
-
     paidUntil,
     promoUntil,
-    paid_until: paidUntil,
-    promo_until: promoUntil,
 
-    subscriptionStatus,
     subscription_status: subscriptionStatus,
-    autoRenew,
     auto_renew: autoRenew,
   }
 
-  const sp = new URL("http://x").searchParams
-  if (sp.get("debug") === "1") {
-    body.debug = {
-      deviceHash,
-      needSetDeviceCookie,
-      guestGrant,
-      accountGrant,
-      accountKey,
-    }
+  if (debug) {
+    body.debug = { deviceHash, needSetDeviceCookie, guestGrant, accountGrant, accountKey }
   }
 
-  return json(body, 200, needSetDeviceCookie ? { setDeviceCookie: { value: deviceHash! } } : undefined)
+  return json(body, 200, needSetDeviceCookie ? { setDeviceCookie: { value: deviceHash!, host } } : undefined)
 }
