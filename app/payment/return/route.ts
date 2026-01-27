@@ -1,28 +1,68 @@
 import { NextRequest, NextResponse } from "next/server"
 
 export const runtime = "nodejs"
-export const dynamic = "force-dynamic"
 
-// Этот роут оставляем только как совместимость, если где-то returnUrl ещё указывает сюда.
-// Он НЕ должен чистить сессию и НЕ должен менять auth.
-// Просто переводим на /payment/result.
-export async function GET(req: NextRequest) {
-  const src = new URL(req.url)
-  const dst = new URL("/payment/result", src.origin)
-
-  // перенесём самые важные поля
-  const keys = ["orderReference", "status", "planId"]
-  for (const k of keys) {
-    const v = src.searchParams.get(k)
-    if (v) dst.searchParams.set(k, v)
+function safeJsonParse(s: string) {
+  try {
+    return JSON.parse(s)
+  } catch {
+    return null
   }
-
-  return NextResponse.redirect(dst.toString(), { status: 302 })
 }
 
-// Иногда платёжки возвращают POST на returnUrl. Мы тоже редиректим.
+async function readAnyBody(req: NextRequest): Promise<any> {
+  const ct = (req.headers.get("content-type") || "").toLowerCase()
+  const text = await req.text()
+  if (!text) return {}
+
+  if (ct.includes("application/json")) {
+    const j = safeJsonParse(text)
+    return j ?? {}
+  }
+
+  if (ct.includes("application/x-www-form-urlencoded")) {
+    const params = new URLSearchParams(text)
+    const out: any = {}
+    for (const [k, v] of params.entries()) out[k] = v
+    if (typeof out.response === "string") {
+      const j = safeJsonParse(out.response)
+      if (j) return j
+    }
+    if (typeof out.data === "string") {
+      const j = safeJsonParse(out.data)
+      if (j) return j
+    }
+    return out
+  }
+
+  const j = safeJsonParse(text)
+  return j ?? { raw: text }
+}
+
+function redirectToResult(req: NextRequest, payload: any) {
+  const orderReference =
+    payload?.orderReference ||
+    payload?.order_reference ||
+    req.nextUrl.searchParams.get("orderReference") ||
+    ""
+
+  const status =
+    payload?.transactionStatus ||
+    payload?.status ||
+    req.nextUrl.searchParams.get("status") ||
+    ""
+
+  const url = new URL("/payment/result", req.nextUrl.origin)
+  if (orderReference) url.searchParams.set("orderReference", String(orderReference))
+  if (status) url.searchParams.set("status", String(status))
+  return NextResponse.redirect(url, 303)
+}
+
 export async function POST(req: NextRequest) {
-  const src = new URL(req.url)
-  const dst = new URL("/payment/result", src.origin)
-  return NextResponse.redirect(dst.toString(), { status: 302 })
+  const payload = await readAnyBody(req)
+  return redirectToResult(req, payload)
+}
+
+export async function GET(req: NextRequest) {
+  return redirectToResult(req, null)
 }
