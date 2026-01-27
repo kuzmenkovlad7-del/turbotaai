@@ -25,7 +25,6 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 const DEMO_KEY = "turbotaai_demo_user"
 
-// ✅ ВАЖНО: больше не вызываем /api/auth/clear автоматически, чтобы не выбивало сессии
 async function syncServerToken(accessToken: string | null) {
   if (!accessToken) return
   try {
@@ -42,6 +41,14 @@ async function syncServerToken(accessToken: string | null) {
 async function clearServerToken() {
   try {
     await fetch("/api/auth/clear", { method: "POST", headers: { "x-ta-logout": "1" } })
+  } catch {
+    // ignore
+  }
+}
+
+async function claimAccessToAccount() {
+  try {
+    await fetch("/api/account/claim", { method: "POST", cache: "no-store" })
   } catch {
     // ignore
   }
@@ -65,17 +72,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const supabase = getSupabaseBrowser()
 
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       const u = data.session?.user
       setUser(u?.email ? { id: u.id, email: u.email } : null)
       setIsLoading(false)
-      void syncServerToken(data.session?.access_token ?? null)
+
+      await syncServerToken(data.session?.access_token ?? null)
+      if (data.session?.user?.id) await claimAccessToAccount()
     })
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const u = session?.user
       setUser(u?.email ? { id: u.id, email: u.email } : null)
-      void syncServerToken(session?.access_token ?? null)
+
+      await syncServerToken(session?.access_token ?? null)
+      if (session?.user?.id) await claimAccessToAccount()
     })
 
     return () => sub.subscription.unsubscribe()
@@ -99,8 +110,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const supabase = getSupabaseBrowser()
           const { data, error } = await supabase.auth.signInWithPassword({ email, password })
           if (error) return { ok: false, error: error.message }
+
           const u = data.user
           setUser(u?.email ? { id: u.id, email: u.email } : null)
+
+          await claimAccessToAccount()
+
           return { ok: true }
         } catch (e: any) {
           return { ok: false, error: e?.message || "Sign-in failed" }
@@ -125,7 +140,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             },
           })
           if (error) return { ok: false, error: error.message }
+
           const needsEmailConfirm = !data.session
+
+          if (!needsEmailConfirm && data.user?.id) {
+            await claimAccessToAccount()
+          }
+
           return { ok: true, needsEmailConfirm }
         } catch (e: any) {
           return { ok: false, error: e?.message || "Sign-up failed" }

@@ -1,75 +1,121 @@
-"use client";
+"use client"
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 
 type SyncResp = {
-  ok?: boolean;
-  state?: string;
-  orderReference?: string;
-  error?: string;
-};
+  ok?: boolean
+  final?: boolean
+  state?: string
+  txStatus?: string
+  orderReference?: string
+  paidUntil?: string | null
+  message?: string
+  error?: string
+  details?: string
+}
+
+type UiState = "checking" | "pending" | "ok" | "fail" | "stopped"
 
 export default function PaymentResultPage() {
-  const router = useRouter();
-  const sp = useSearchParams();
-  const orderReference = sp.get("orderReference") || "";
+  const router = useRouter()
+  const sp = useSearchParams()
+  const orderReference = sp.get("orderReference") || ""
 
-  const [state, setState] = useState<"checking" | "ok" | "fail">("checking");
-  const [msg, setMsg] = useState("Перевіряємо оплату…");
-  const [attempt, setAttempt] = useState(0);
+  const [ui, setUi] = useState<UiState>("checking")
+  const [attempt, setAttempt] = useState(0)
+  const [msg, setMsg] = useState("Перевіряємо оплату…")
+  const [lastState, setLastState] = useState<string>("unknown")
+
+  const maxAttempts = 10
+
+  const canPoll = useMemo(() => Boolean(orderReference), [orderReference])
 
   useEffect(() => {
-    let alive = true;
-
-    async function syncOnce(): Promise<boolean> {
-      const base = "/api/billing/wayforpay/sync";
-      const url = orderReference ? `${base}?orderReference=${encodeURIComponent(orderReference)}` : base;
-
-      try {
-        const r = await fetch(url, { method: "POST", cache: "no-store" });
-        const j = (await r.json().catch(() => ({}))) as SyncResp;
-
-        if (j?.ok) return true;
-
-        return false;
-      } catch {
-        return false;
-      }
+    if (!canPoll) {
+      setUi("fail")
+      setMsg("Невірний чек-код. Поверніться до тарифів і спробуйте оплату ще раз.")
+      return
     }
 
-    async function run() {
-      setState("checking");
-      setMsg("Перевіряємо оплату…");
+    let alive = true
+    let timer: any = null
 
-      for (let i = 1; i <= 10; i++) {
-        if (!alive) return;
-        setAttempt(i);
+    const sleepMs = (i: number) => {
+      if (i <= 2) return 1200
+      if (i <= 5) return 1800
+      return 2500
+    }
 
-        const ok = await syncOnce();
-        if (!alive) return;
+    async function syncOnce(i: number) {
+      const url = `/api/billing/wayforpay/sync?orderReference=${encodeURIComponent(orderReference)}`
+      try {
+        const r = await fetch(url, { method: "POST", cache: "no-store" })
+        const j = (await r.json().catch(() => ({}))) as SyncResp
 
-        if (ok) {
-          setState("ok");
-          setMsg("Оплату підтверджено. Доступ активовано.");
-          setTimeout(() => router.replace("/profile?paid=1"), 500);
-          return;
+        if (!alive) return
+
+        const st = String(j?.state || "unknown")
+        setLastState(st)
+
+        if (j?.ok && st === "paid") {
+          setUi("ok")
+          setMsg("Оплату підтверджено. Доступ активовано.")
+          timer = setTimeout(() => router.replace("/profile?paid=1"), 700)
+          return
         }
 
-        setMsg("Оплату поки не підтверджено. Якщо Ви оплатили, зачекайте або натисніть Перевірити знову.");
-        await new Promise((r) => setTimeout(r, 1500));
-      }
+        if (j?.final && st !== "paid") {
+          setUi("fail")
+          setMsg(
+            j?.message ||
+              (st === "failed"
+                ? "Оплата не пройшла. Спробуйте іншу картку або повторіть оплату."
+                : st === "refunded"
+                  ? "Оплату було повернено платіжною системою."
+                  : "Оплату не підтверджено.")
+          )
+          return
+        }
 
-      if (!alive) return;
-      setState("fail");
-      setMsg("Оплату не підтверджено. Якщо Ви оплатили, натисніть Перевірити знову.");
+        setUi(st === "pending" ? "pending" : "checking")
+        setMsg(j?.message || (st === "pending" ? "Платіж обробляється…" : "Перевіряємо оплату…"))
+
+        if (i >= maxAttempts) {
+          setUi("stopped")
+          setMsg(
+            st === "pending"
+              ? "Платіж ще обробляється. Натисніть Перевірити знову через 1–2 хвилини."
+              : "Не вдалося підтвердити оплату автоматично. Натисніть Перевірити знову."
+          )
+          return
+        }
+
+        timer = setTimeout(() => syncOnce(i + 1), sleepMs(i))
+      } catch {
+        if (!alive) return
+        if (i >= maxAttempts) {
+          setUi("stopped")
+          setMsg("Не вдалося перевірити оплату. Натисніть Перевірити знову.")
+          return
+        }
+        timer = setTimeout(() => syncOnce(i + 1), sleepMs(i))
+      }
     }
 
-    run();
+    setUi("checking")
+    setMsg("Перевіряємо оплату…")
+    setAttempt(1)
+    syncOnce(1)
+
     return () => {
-      alive = false;
-    };
-  }, [orderReference, router]);
+      alive = false
+      if (timer) clearTimeout(timer)
+    }
+  }, [canPoll, orderReference, router])
+
+  const showRetry = ui === "fail" || ui === "stopped"
+  const showAttempt = ui === "checking" || ui === "pending"
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-4">
@@ -82,21 +128,31 @@ export default function PaymentResultPage() {
 
         <div className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-800">
           {msg}
-          {state === "checking" ? <div className="mt-2 text-xs text-gray-500">Спроба: {attempt}/10</div> : null}
+          {showAttempt ? (
+            <div className="mt-2 text-xs text-gray-500">
+              Стан: {lastState} · Спроба: {attempt}/{maxAttempts}
+            </div>
+          ) : null}
         </div>
 
-        {state === "fail" ? (
+        {showRetry ? (
           <div className="mt-4 flex gap-2">
-            <button onClick={() => location.reload()} className="flex-1 rounded-xl bg-black px-4 py-2 text-white">
+            <button
+              onClick={() => location.reload()}
+              className="flex-1 rounded-xl bg-black px-4 py-2 text-white"
+            >
               Перевірити знову
             </button>
-            <button onClick={() => router.replace("/pricing")} className="flex-1 rounded-xl border px-4 py-2">
+            <button
+              onClick={() => router.replace("/pricing")}
+              className="flex-1 rounded-xl border px-4 py-2"
+            >
               Тарифи
             </button>
           </div>
         ) : null}
 
-        {state === "ok" ? (
+        {ui === "ok" ? (
           <button
             onClick={() => router.replace("/profile?paid=1")}
             className="mt-4 w-full rounded-xl bg-black px-4 py-2 text-white"
@@ -104,11 +160,7 @@ export default function PaymentResultPage() {
             Перейти в профіль
           </button>
         ) : null}
-
-        <div className="mt-4 text-xs text-gray-500">
-          Порада: щоб не втратити доступ при очищенні cookie, увійдіть або зареєструйтесь і привʼяжіть доступ до акаунта.
-        </div>
       </div>
     </div>
-  );
+  )
 }

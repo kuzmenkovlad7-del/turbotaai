@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { randomUUID, createHash } from "crypto"
+import { createHash } from "crypto"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 const WFP_URL = "https://api.wayforpay.com/api"
+const DEVICE_COOKIE = "ta_device_hash"
+const ACCOUNT_PREFIX = "account:"
 
 function pickEnv(name: string) {
   const v = process.env[name]
@@ -15,23 +20,44 @@ function mustEnv(name: string) {
   return v
 }
 
-function mapStatus(txStatus: string) {
-  const s = String(txStatus || "").toLowerCase()
-  if (s === "approved" || s === "paid") return "paid"
-  if (s === "pending" || s === "inprocessing") return "pending"
-  if (s === "refunded" || s === "voided") return "refunded"
-  if (s === "declined" || s === "expired" || s === "refused") return "failed"
-  return "unknown"
-}
-
 function merchantSignature(parts: string[], secret: string) {
   const base = parts.join(";")
   return createHash("md5").update(base + ";" + secret).digest("hex")
 }
 
-function addDaysIso(days: number) {
-  const d = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
-  return d.toISOString()
+function mapStatus(txStatus: string) {
+  const s = String(txStatus || "").toLowerCase()
+
+  if (s === "approved" || s === "paid") return "paid"
+
+  if (s === "pending" || s === "inprocessing" || s === "processing" || s === "waitings" || s === "waitingauthcomplete")
+    return "pending"
+
+  if (s === "refunded" || s === "voided") return "refunded"
+
+  if (s === "declined" || s === "expired" || s === "refused" || s === "rejected") return "failed"
+
+  return "unknown"
+}
+
+function toDateOrNull(v: any): Date | null {
+  if (!v) return null
+  const d = new Date(String(v))
+  if (Number.isNaN(d.getTime())) return null
+  return d
+}
+
+function addDays(base: Date, days: number) {
+  const d = new Date(base)
+  d.setDate(d.getDate() + days)
+  return d
+}
+
+function calcNextPaidUntil(currentPaidUntil: any, days: number) {
+  const now = new Date()
+  const cur = toDateOrNull(currentPaidUntil)
+  const base = cur && cur.getTime() > now.getTime() ? cur : now
+  return addDays(base, days).toISOString()
 }
 
 function sbAdmin() {
@@ -40,81 +66,34 @@ function sbAdmin() {
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
-async function upsertGrantByDeviceHash(
-  sb: ReturnType<typeof sbAdmin>,
-  deviceHash: string,
-  paidUntilIso: string
-) {
-  const nowIso = new Date().toISOString()
+function getAccessTokenFromReqCookies(req: NextRequest): string | null {
+  const all = req.cookies.getAll()
 
-  const existing = await sb
-    .from("access_grants")
-    .select("id")
-    .eq("device_hash", deviceHash)
-    .maybeSingle()
-
-  if (existing.error) {
-    throw new Error("access_grants select failed: " + existing.error.message)
+  for (const c of all) {
+    if (!c.name.includes("auth-token")) continue
+    try {
+      const j: any = JSON.parse(c.value)
+      if (j?.access_token) return String(j.access_token)
+      if (Array.isArray(j) && j[0]?.access_token) return String(j[0].access_token)
+    } catch {}
   }
 
-  if (existing.data?.id) {
-    const upd = await sb
-      .from("access_grants")
-      .update({
-        paid_until: paidUntilIso,
-        trial_questions_left: 0,
-        updated_at: nowIso,
-      })
-      .eq("id", existing.data.id)
-
-    if (upd.error) throw new Error("access_grants update failed: " + upd.error.message)
-    return { mode: "update", id: existing.data.id }
+  for (const c of all) {
+    if (c.name === "sb-access-token" || c.name.endsWith("access-token")) return String(c.value)
   }
 
-  const ins = await sb.from("access_grants").insert({
-    id: randomUUID(),
-    user_id: null,
-    device_hash: deviceHash,
-    trial_questions_left: 0,
-    paid_until: paidUntilIso,
-    promo_until: null,
-    created_at: nowIso,
-    updated_at: nowIso,
-  })
-
-  if (ins.error) throw new Error("access_grants insert failed: " + ins.error.message)
-  return { mode: "insert" }
+  return null
 }
 
-async function ensurePaidGrant(sb: ReturnType<typeof sbAdmin>, orderReference: string) {
-  const ord = await sb
-    .from("billing_orders")
-    .select("order_reference, user_id, device_hash, plan_id")
-    .eq("order_reference", orderReference)
-    .maybeSingle()
-
-  if (ord.error) throw new Error("billing_orders select failed: " + ord.error.message)
-  if (!ord.data) throw new Error("Order not found for orderReference")
-
-  const planId = String(ord.data.plan_id || "monthly")
-  const paidUntilIso = addDaysIso(planId === "yearly" ? 366 : 31)
-
-  const ops: any[] = []
-
-  if (ord.data.device_hash) {
-    ops.push(await upsertGrantByDeviceHash(sb, String(ord.data.device_hash), paidUntilIso))
+async function resolveUserIdFromCookies(sb: ReturnType<typeof sbAdmin>, req: NextRequest) {
+  try {
+    const token = getAccessTokenFromReqCookies(req)
+    if (!token) return null
+    const { data } = await sb.auth.getUser(token)
+    return data?.user?.id || null
+  } catch {
+    return null
   }
-
-  if (ord.data.user_id) {
-    const accountKey = "account:" + String(ord.data.user_id)
-    ops.push(await upsertGrantByDeviceHash(sb, accountKey, paidUntilIso))
-  }
-
-  if (!ops.length) {
-    throw new Error("Order has no device_hash and no user_id, cannot grant access")
-  }
-
-  return { paidUntilIso, ops }
 }
 
 async function fetchWfpStatus(orderReference: string) {
@@ -141,12 +120,120 @@ async function fetchWfpStatus(orderReference: string) {
   return { httpOk: r.ok, status: r.status, body: j }
 }
 
+async function upsertGrantByDeviceHash(
+  sb: ReturnType<typeof sbAdmin>,
+  deviceHash: string,
+  days: number
+) {
+  const nowIso = new Date().toISOString()
+
+  const existing = await sb
+    .from("access_grants")
+    .select("id, paid_until")
+    .eq("device_hash", deviceHash)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (existing.error) throw new Error("access_grants select failed: " + existing.error.message)
+
+  const nextPaid = calcNextPaidUntil(existing.data?.paid_until, days)
+
+  if (existing.data?.id) {
+    const upd = await sb
+      .from("access_grants")
+      .update({
+        paid_until: nextPaid,
+        trial_questions_left: 0,
+        updated_at: nowIso,
+      } as any)
+      .eq("id", existing.data.id)
+
+    if (upd.error) throw new Error("access_grants update failed: " + upd.error.message)
+    return { mode: "update", id: existing.data.id, paid_until: nextPaid }
+  }
+
+  const ins = await sb.from("access_grants").insert({
+    id: crypto.randomUUID(),
+    user_id: null,
+    device_hash: deviceHash,
+    trial_questions_left: 0,
+    paid_until: nextPaid,
+    promo_until: null,
+    auto_renew: false,
+    cancelled_at: null,
+    created_at: nowIso,
+    updated_at: nowIso,
+  } as any)
+
+  if (ins.error) throw new Error("access_grants insert failed: " + ins.error.message)
+  return { mode: "insert", paid_until: nextPaid }
+}
+
+async function upsertGrantByUserId(
+  sb: ReturnType<typeof sbAdmin>,
+  userId: string,
+  days: number
+) {
+  const nowIso = new Date().toISOString()
+
+  const existing = await sb
+    .from("access_grants")
+    .select("id, paid_until")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (existing.error) throw new Error("access_grants user select failed: " + existing.error.message)
+
+  const nextPaid = calcNextPaidUntil(existing.data?.paid_until, days)
+
+  if (existing.data?.id) {
+    const upd = await sb
+      .from("access_grants")
+      .update({
+        paid_until: nextPaid,
+        trial_questions_left: 0,
+        updated_at: nowIso,
+      } as any)
+      .eq("id", existing.data.id)
+
+    if (upd.error) throw new Error("access_grants user update failed: " + upd.error.message)
+  } else {
+    const ins = await sb.from("access_grants").insert({
+      id: crypto.randomUUID(),
+      user_id: userId,
+      device_hash: null,
+      trial_questions_left: 0,
+      paid_until: nextPaid,
+      promo_until: null,
+      auto_renew: false,
+      cancelled_at: null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    } as any)
+
+    if (ins.error) throw new Error("access_grants user insert failed: " + ins.error.message)
+  }
+
+  const accountKey = `${ACCOUNT_PREFIX}${userId}`
+  await sb
+    .from("access_grants")
+    .update({ user_id: userId, updated_at: nowIso } as any)
+    .eq("device_hash", accountKey)
+    .is("user_id", null)
+
+  return { paid_until: nextPaid }
+}
+
 async function handler(req: NextRequest) {
   const url = new URL(req.url)
   const debug = url.searchParams.get("debug") === "1"
 
   const orderReference =
-    url.searchParams.get("orderReference") || (req.cookies.get("ta_last_order")?.value || "")
+    String(url.searchParams.get("orderReference") || "").trim() ||
+    String(req.cookies.get("ta_last_order")?.value || "").trim()
 
   if (!orderReference) {
     return NextResponse.json({ ok: false, error: "Missing orderReference" }, { status: 400 })
@@ -154,63 +241,136 @@ async function handler(req: NextRequest) {
 
   const sb = sbAdmin()
 
+  const ord = await sb
+    .from("billing_orders")
+    .select("order_reference, user_id, device_hash, plan_id, status, raw, updated_at")
+    .eq("order_reference", orderReference)
+    .maybeSingle()
+
+  if (ord.error) {
+    return NextResponse.json({ ok: false, error: "billing_orders select failed", details: ord.error.message }, { status: 500 })
+  }
+  if (!ord.data) {
+    return NextResponse.json({ ok: false, error: "Order not found", orderReference }, { status: 200 })
+  }
+
   const wfp = await fetchWfpStatus(orderReference)
   const txStatus = String((wfp.body as any)?.transactionStatus || (wfp.body as any)?.status || "")
   const state = mapStatus(txStatus)
 
   const raw = (wfp.body && typeof wfp.body === "object" ? wfp.body : {}) as any
+  const nowIso = new Date().toISOString()
 
   const upd = await sb
     .from("billing_orders")
     .update({
       status: state,
       raw,
-      updated_at: new Date().toISOString(),
-    })
+      updated_at: nowIso,
+    } as any)
     .eq("order_reference", orderReference)
 
-  const updErr = upd.error ? upd.error.message : null
+  const planId = String(ord.data.plan_id || "monthly")
+  const days = planId === "yearly" ? 366 : 31
 
-  if (state !== "paid") {
-    return NextResponse.json(
-      {
-        ok: false,
-        state,
-        txStatus,
-        orderReference,
-        billingUpdated: !upd.error,
-        billingUpdateError: updErr,
-        ...(debug ? { wfp } : {}),
-      },
-      { status: 200 }
-    )
+  const userIdFromCookie = await resolveUserIdFromCookies(sb, req)
+  const deviceFromCookie = String(req.cookies.get(DEVICE_COOKIE)?.value || "").trim() || null
+
+  const deviceHash = String(ord.data.device_hash || "").trim() || deviceFromCookie
+  let userId = String(ord.data.user_id || "").trim() || null
+
+  if (!userId && userIdFromCookie) {
+    userId = userIdFromCookie
+    await sb
+      .from("billing_orders")
+      .update({ user_id: userIdFromCookie, updated_at: nowIso } as any)
+      .eq("order_reference", orderReference)
   }
 
-  const grant = await ensurePaidGrant(sb, orderReference)
+  const final = state === "paid" || state === "failed" || state === "refunded"
 
-  return NextResponse.json(
-    {
-      ok: true,
+  if (state !== "paid") {
+    const message =
+      state === "pending"
+        ? "Платіж обробляється. Спробуйте перевірити ще раз через хвилину."
+        : state === "failed"
+          ? "Оплата не пройшла. Спробуйте іншу картку або повторіть оплату."
+          : state === "refunded"
+            ? "Оплату було повернено платіжною системою."
+            : "Статус поки невідомий. Спробуйте перевірити ще раз через хвилину."
+
+    const payload: any = {
+      ok: false,
+      final,
       state,
       txStatus,
       orderReference,
       billingUpdated: !upd.error,
-      billingUpdateError: updErr,
-      grant,
-      ...(debug ? { wfp } : {}),
-    },
-    { status: 200 }
-  )
+      billingUpdateError: upd.error?.message || null,
+      message,
+    }
+
+    if (debug) {
+      payload.debug = {
+        userIdFromCookie,
+        orderUserId: ord.data.user_id,
+        userIdUsed: userId,
+        deviceHash,
+        deviceFromCookie,
+        planId,
+        days,
+        wfp,
+      }
+    }
+
+    return NextResponse.json(payload, { status: 200 })
+  }
+
+  if (!deviceHash && !userId) {
+    return NextResponse.json(
+      { ok: false, final: true, state, txStatus, orderReference, error: "Order has no device_hash and no user_id" },
+      { status: 200 }
+    )
+  }
+
+  const ops: any[] = []
+
+  if (deviceHash) ops.push({ scope: "device", ...(await upsertGrantByDeviceHash(sb, deviceHash, days)) })
+  if (userId) ops.push({ scope: "user", ...(await upsertGrantByUserId(sb, userId, days)) })
+
+  const paidUntil = ops.find((x) => x.scope === "user")?.paid_until || ops.find((x) => x.scope === "device")?.paid_until || null
+
+  const payload: any = {
+    ok: true,
+    final: true,
+    state,
+    txStatus,
+    orderReference,
+    paidUntil,
+    ops,
+  }
+
+  if (debug) {
+    payload.debug = {
+      userIdFromCookie,
+      orderUserId: ord.data.user_id,
+      userIdUsed: userId,
+      deviceHash,
+      deviceFromCookie,
+      planId,
+      days,
+      wfp,
+    }
+  }
+
+  return NextResponse.json(payload, { status: 200 })
 }
 
 export async function GET(req: NextRequest) {
   try {
     return await handler(req)
   } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: "Sync failed", details: String(e?.message || e) },
-      { status: 500 }
-    )
+    return NextResponse.json({ ok: false, error: "Sync failed", details: String(e?.message || e) }, { status: 500 })
   }
 }
 
@@ -218,9 +378,6 @@ export async function POST(req: NextRequest) {
   try {
     return await handler(req)
   } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: "Sync failed", details: String(e?.message || e) },
-      { status: 500 }
-    )
+    return NextResponse.json({ ok: false, error: "Sync failed", details: String(e?.message || e) }, { status: 500 })
   }
 }
