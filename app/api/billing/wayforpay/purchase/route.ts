@@ -162,7 +162,7 @@ async function handler(req: Request) {
     })
   }
 
-  const returnUrl = `${url.origin}/payment/result?orderReference=${encodeURIComponent(orderReference)}`
+  const returnUrl = `${url.origin}/payment/return?orderReference=${encodeURIComponent(orderReference)}`
   const serviceUrl = `${url.origin}/api/billing/wayforpay/callback`
 
   const baseInputs = [
