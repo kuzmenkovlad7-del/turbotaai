@@ -111,7 +111,12 @@ export async function POST(req: NextRequest) {
     const planId = String(body?.planId || "monthly").trim() || "monthly"
 
     const currency = String(body?.currency || env("WAYFORPAY_CURRENCY") || "UAH").trim() || "UAH"
-    const amountStr = formatAmount(body?.amount) || pickPriceFromEnv(planId)
+    let amountStr = formatAmount(body?.amount) || pickPriceFromEnv(planId)
+    // turbota test amount override
+    const __turbota_testAmount =
+      formatAmount(env("WAYFORPAY_TEST_AMOUNT_UAH")) ||
+      formatAmount(env("WAYFORPAY_TEST_AMOUNT"));
+    if (__turbota_testAmount) amountStr = __turbota_testAmount;
     if (!amountStr) {
       return NextResponse.json(
         { ok: false, error: "Missing amount (set PRICE_* env or pass amount)" },
