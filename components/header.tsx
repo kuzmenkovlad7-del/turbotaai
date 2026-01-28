@@ -210,6 +210,7 @@ export default function Header() {
         const isPromo = url.includes("/api/billing/promo/redeem")
         const isClear = url.includes("/api/auth/clear")
         const isLogin = url.includes("/api/auth/login")
+        const isRegister = url.includes("/api/auth/register")
 
         if (isAgent && res.status === 402) {
           try {
@@ -221,7 +222,15 @@ export default function Header() {
           return res
         }
 
-        if (isLogin && res.ok) {
+        if ((isLogin || isRegister) && res.ok) {
+          try {
+            await originalFetch("/api/account/claim", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              credentials: "include",
+              body: "{}",
+            })
+          } catch {}
           try {
             sessionStorage.removeItem("turbota_conv_id")
           } catch {}

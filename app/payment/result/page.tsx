@@ -1,116 +1,71 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 
-type SyncResp = {
-  ok?: boolean
-  state?: "paid" | "pending" | "failed" | "refunded" | "unknown"
-  orderReference?: string
-  txStatus?: string
-  reason?: string
-  reasonCode?: any
-  retryable?: boolean
-  paid_until?: string | null
-  error?: string
-}
+type AnyObj = Record<string, any>
 
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms))
+function pickOrderRef(sp: ReturnType<typeof useSearchParams>) {
+  const keys = ["orderReference", "order_reference", "order", "ref", "merchantTransactionSecureType"]
+  for (const k of keys) {
+    const v = sp?.get(k)
+    if (v) return v
+  }
+  // WayForPay часто возвращает orderReference
+  return sp?.get("orderReference") || null
 }
 
 export default function PaymentResultPage() {
   const router = useRouter()
   const sp = useSearchParams()
-  const orderReference = sp.get("orderReference") || ""
 
-  const [runId, setRunId] = useState(1)
-  const [attempt, setAttempt] = useState(0)
-  const [state, setState] = useState<"checking" | "paid" | "pending" | "failed" | "unknown">("checking")
-  const [msg, setMsg] = useState("Перевіряємо оплату…")
-  const [details, setDetails] = useState<string | null>(null)
-
-  const canRun = useMemo(() => Boolean(orderReference), [orderReference])
+  const orderReference = useMemo(() => pickOrderRef(sp), [sp])
+  const [state, setState] = useState<"checking" | "ok" | "fail">("checking")
+  const [msg, setMsg] = useState<string | null>(null)
+  const [details, setDetails] = useState<AnyObj | null>(null)
 
   useEffect(() => {
-    if (!canRun) {
-      setState("unknown")
-      setMsg("Немає коду платежу. Поверніться до тарифів і спробуйте ще раз.")
-      return
-    }
-
     let alive = true
-    const MAX = 10
-
-    async function syncOnce() {
-      const url = `/api/billing/wayforpay/sync?orderReference=${encodeURIComponent(orderReference)}`
-      const r = await fetch(url, { method: "POST", cache: "no-store" })
-      const j = (await r.json().catch(() => ({}))) as SyncResp
-      return j
-    }
 
     async function run() {
-      setAttempt(0)
-      setDetails(null)
       setState("checking")
-      setMsg("Перевіряємо оплату…")
+      setMsg(null)
+      setDetails(null)
 
-      for (let i = 1; i <= MAX; i++) {
-        if (!alive) return
-        setAttempt(i)
-
-        let j: SyncResp | null = null
-        try {
-          j = await syncOnce()
-        } catch {
-          j = { ok: false, state: "unknown", retryable: true }
-        }
-
-        if (!alive) return
-
-        const st = j?.state || "unknown"
-        const reason = (j?.reason || "").trim()
-        const tx = (j?.txStatus || "").trim()
-
-        if (reason || tx) {
-          const s = [tx ? `Статус: ${tx}` : "", reason ? `Причина: ${reason}` : ""].filter(Boolean).join(" • ")
-          setDetails(s || null)
-        } else {
-          setDetails(null)
-        }
-
-        if (st === "paid" && j?.ok) {
-          setState("paid")
-          setMsg("Оплату підтверджено. Доступ активовано.")
-          setTimeout(() => router.replace("/profile?paid=1"), 600)
-          return
-        }
-
-        if (st === "failed" || st === "refunded") {
-          setState("failed")
-          setMsg("Оплату не прийнято. Спробуйте іншу картку або повторіть оплату.")
-          return
-        }
-
-        if (st === "pending") {
-          setState("pending")
-          setMsg("Оплата в обробці. Зазвичай це займає до кількох хвилин.")
-        } else {
-          setState("checking")
-          setMsg("Оплату поки не підтверджено. Якщо Ви оплатили, зачекайте або натисніть Перевірити знову.")
-        }
-
-        await sleep(1500)
+      if (!orderReference) {
+        setState("fail")
+        setMsg("Не найден orderReference в URL. Откройте страницу из возврата WayForPay или проверьте параметры.")
+        return
       }
 
-      if (!alive) return
+      try {
+        // 1) синхронизируем оплату (это то, что ты делал вручную через /sync)
+        const url = `/api/billing/wayforpay/sync?orderReference=${encodeURIComponent(orderReference)}`
+        const r = await fetch(url, { cache: "no-store", credentials: "include" })
+        const j = await r.json().catch(() => ({}))
 
-      if (state === "pending") {
-        setState("pending")
-        setMsg("Оплата все ще в обробці. Спробуйте перевірити пізніше або натисніть Перевірити знову.")
-      } else {
-        setState("unknown")
-        setMsg("Не вдалося підтвердити оплату автоматично. Натисніть Перевірити знову.")
+        if (!r.ok || !j?.ok) {
+          throw new Error(j?.error || j?.reason || "Sync failed")
+        }
+
+        if (!alive) return
+
+        // 2) обновляем UI по всему приложению
+        try {
+          window.dispatchEvent(new Event("turbota:refresh"))
+        } catch {}
+
+        setState("ok")
+        setDetails(j)
+
+        // 3) уводим на профиль без “paid=1”, чтобы не было ложной отрисовки
+        router.replace("/profile")
+      } catch (e: any) {
+        if (!alive) return
+        setState("fail")
+        setMsg(String(e?.message || e))
       }
     }
 
@@ -118,52 +73,50 @@ export default function PaymentResultPage() {
     return () => {
       alive = false
     }
-  }, [orderReference, router, runId])
-
-  const showButtons = state === "failed" || state === "unknown" || state === "pending"
+  }, [orderReference, router])
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold">Результат оплати</h1>
+    <div className="mx-auto max-w-3xl px-4 py-10">
+      <Card>
+        <CardHeader>
+          <CardTitle>Оплата</CardTitle>
+          <CardDescription>
+            {state === "checking"
+              ? "Проверяем статус оплаты..."
+              : state === "ok"
+              ? "Оплата подтверждена. Переходим в профиль."
+              : "Не удалось подтвердить оплату."}
+          </CardDescription>
+        </CardHeader>
 
-        <div className="mt-2 text-sm text-gray-600">
-          Чек-код: <span className="font-mono text-gray-900">{orderReference || "—"}</span>
-        </div>
+        <CardContent className="space-y-4">
+          {orderReference ? (
+            <div className="text-sm text-gray-600">
+              orderReference: <span className="font-mono">{orderReference}</span>
+            </div>
+          ) : null}
 
-        <div className="mt-4 rounded-xl bg-gray-50 p-4 text-sm text-gray-800">
-          {msg}
-          {state === "checking" ? <div className="mt-2 text-xs text-gray-500">Спроба: {attempt}/10</div> : null}
-          {details ? <div className="mt-2 text-xs text-gray-500">{details}</div> : null}
-        </div>
+          {msg ? <div className="text-sm text-red-600">{msg}</div> : null}
 
-        {showButtons ? (
-          <div className="mt-4 flex gap-2">
-            <button
-              onClick={() => setRunId((v) => v + 1)}
-              className="flex-1 rounded-xl bg-black px-4 py-2 text-white"
-            >
-              Перевірити знову
-            </button>
-            <button onClick={() => router.replace("/pricing")} className="flex-1 rounded-xl border px-4 py-2">
-              Тарифи
-            </button>
-          </div>
-        ) : null}
+          {state === "fail" ? (
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => window.location.reload()}>Повторить</Button>
+              <Button variant="outline" onClick={() => router.push("/profile")}>
+                Открыть профиль
+              </Button>
+              <Button variant="outline" onClick={() => router.push("/pricing")}>
+                Тарифы
+              </Button>
+            </div>
+          ) : null}
 
-        {state === "paid" ? (
-          <button
-            onClick={() => router.replace("/profile?paid=1")}
-            className="mt-4 w-full rounded-xl bg-black px-4 py-2 text-white"
-          >
-            Перейти в профіль
-          </button>
-        ) : null}
-
-        <div className="mt-4 text-xs text-gray-500">
-          Порада: щоб не втратити доступ при очищенні cookie, увійдіть або зареєструйтесь і привʼяжіть доступ до акаунта.
-        </div>
-      </div>
+          {details ? (
+            <pre className="max-h-72 overflow-auto rounded-lg bg-gray-50 p-3 text-xs">
+              {JSON.stringify(details, null, 2)}
+            </pre>
+          ) : null}
+        </CardContent>
+      </Card>
     </div>
   )
 }
