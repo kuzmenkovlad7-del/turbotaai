@@ -1,15 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
+export const dynamic = "force-dynamic"
 
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-  url.pathname = "/api/auth/logout";
-  url.search = "";
-  return NextResponse.redirect(url, { status: 302 });
-}
+  try {
+    const supabase = createRouteHandlerClient({ cookies })
+    await supabase.auth.signOut()
+  } catch {}
 
-export async function POST(req: Request) {
-  return GET(req);
+  const url = new URL(req.url)
+  const next = url.searchParams.get("next") || "/pricing"
+  const res = NextResponse.redirect(next)
+  res.headers.set("cache-control", "no-store")
+  return res
 }
