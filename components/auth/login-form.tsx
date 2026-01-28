@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
 import { Button } from "@/components/ui/button"
@@ -10,9 +11,25 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertCircle, Mail, Lock, ArrowRight, Brain } from "lucide-react"
 
+function safeNext(v: string | null) {
+  const p = String(v || "").trim()
+  return p.startsWith("/") ? p : "/profile"
+}
+
 export default function LoginForm() {
   const { t } = useLanguage()
   const { signInWithPassword } = useAuth()
+  const sp = useSearchParams()
+
+  const next = useMemo(() => safeNext(sp.get("next")), [sp])
+  const promo = useMemo(() => (sp.get("promo") === "1" ? "1" : "0"), [sp])
+
+  const registerHref = useMemo(() => {
+    const q = new URLSearchParams()
+    q.set("next", next)
+    if (promo === "1") q.set("promo", "1")
+    return `/register?${q.toString()}`
+  }, [next, promo])
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -26,7 +43,7 @@ export default function LoginForm() {
     const r = await signInWithPassword(email, password)
     setIsLoading(false)
     if (!r.ok) setError(r.error || "Sign-in failed")
-    else window.location.href = "/profile"
+    else window.location.href = next
   }
 
   return (
@@ -86,13 +103,19 @@ export default function LoginForm() {
             </div>
 
             <Button type="submit" className="w-full h-12" disabled={isLoading}>
-              {isLoading ? t("Signing in...") : <span className="flex items-center justify-center gap-2">{t("Sign In")} <ArrowRight className="h-4 w-4" /></span>}
+              {isLoading ? (
+                t("Signing in...")
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  {t("Sign In")} <ArrowRight className="h-4 w-4" />
+                </span>
+              )}
             </Button>
           </form>
 
           <p className="text-center text-sm text-gray-600">
             {t("Don't have an account?")}{" "}
-            <Link href="/register" className="text-primary-600 hover:text-primary-800 font-medium">
+            <Link href={registerHref} className="text-primary-600 hover:text-primary-800 font-medium">
               {t("Create account")}
             </Link>
           </p>

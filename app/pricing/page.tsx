@@ -1,9 +1,9 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
-import { RainbowButton } from "@/components/ui/rainbow-button"
-import TurbotaHoloCard from "@/components/turbota-holo-card"
+import React, { useEffect, useMemo, useRef, useState } from "react"
+import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,8 @@ type AnyObj = Record<string, any>
 
 const PRICE_UAH = Number(process.env.NEXT_PUBLIC_PRICE_UAH || "499")
 const CURRENCY = String(process.env.NEXT_PUBLIC_CURRENCY || "UAH")
+
+const PENDING_PROMO_KEY = "turbota_promo_pending"
 
 function isActiveDate(v: any) {
   if (!v) return false
@@ -31,9 +33,23 @@ function fmtDateDMY(v: any) {
   return `${dd}.${mm}.${yyyy}`
 }
 
+async function loadCombinedSummary(): Promise<AnyObj> {
+  const r1 = await fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
+  const d1 = (await r1.json().catch(() => ({}))) as AnyObj
+
+  let d2: AnyObj = {}
+  try {
+    const r2 = await fetch("/api/billing/subscription/status", { cache: "no-store", credentials: "include" })
+    d2 = (await r2.json().catch(() => ({}))) as AnyObj
+  } catch {}
+
+  return { ...d1, ...d2 }
+}
+
 export default function PricingPage() {
   const { currentLanguage } = useLanguage()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const lang = useMemo(() => {
     const code = String(currentLanguage?.code || "uk").toLowerCase()
@@ -47,7 +63,6 @@ export default function PricingPage() {
         subtitle: "Безлімітний доступ до чату, голосу та відео. Пробний режим має 5 запитань.",
         planTitle: "Щомісяця",
         planDesc: "Безлімітний доступ до чату, голосу і відео",
-        uah: "UAH",
         p1: "Безлімітна кількість запитів",
         p2: "Чат, голос і відео",
         p3: "Історія зберігається у профілі",
@@ -55,9 +70,8 @@ export default function PricingPage() {
         opening: "Відкриваємо оплату...",
         invoiceOpened: "Оплата відкрита. Завершіть оплату у WayForPay.",
         payFailed: "Не вдалося створити оплату",
-        profileTitle: "Ваш профіль",
-        profileDesc: "Перевірити доступ і історію",
-        status: "Статус",
+        statusTitle: "Статус доступу",
+        statusDesc: "Перевірка доступу та ліміту",
         guest: "Гість",
         loggedIn: "Вхід виконано",
         access: "Доступ",
@@ -74,19 +88,14 @@ export default function PricingPage() {
         promoPh: "Промокод",
         promoActivate: "Активувати промо",
         promoActivating: "Активуємо...",
-        promoNeedLogin: "Активація промокоду потребує входу.",
+        promoNeedLogin: "Активація промокоду потребує входу. Після входу промокод застосовується автоматично.",
         promoOk: "Промокод активовано",
-        manageTitle: "Керувати доступом",
-        manageDesc: "Підписка та промо в профілі",
-        openManage: "Відкрити керування",
-        manageNeedLogin: "Щоб керувати доступом, потрібно увійти.",
       },
       ru: {
         title: "Тарифы",
         subtitle: "Безлимитный доступ к чату, голосу и видео. Пробный режим включает 5 вопросов.",
         planTitle: "Ежемесячно",
         planDesc: "Безлимитный доступ к чату, голосу и видео",
-        uah: "UAH",
         p1: "Безлимитное количество запросов",
         p2: "Чат, голос и видео",
         p3: "История сохраняется в профиле",
@@ -94,9 +103,8 @@ export default function PricingPage() {
         opening: "Открываем оплату...",
         invoiceOpened: "Оплата открыта. Завершите оплату в WayForPay.",
         payFailed: "Не удалось создать оплату",
-        profileTitle: "Ваш профиль",
-        profileDesc: "Проверить доступ и историю",
-        status: "Статус",
+        statusTitle: "Статус доступа",
+        statusDesc: "Проверка доступа и лимита",
         guest: "Гость",
         loggedIn: "Вход выполнен",
         access: "Доступ",
@@ -113,19 +121,14 @@ export default function PricingPage() {
         promoPh: "Промокод",
         promoActivate: "Активировать промо",
         promoActivating: "Активируем...",
-        promoNeedLogin: "Активация промокода требует входа.",
+        promoNeedLogin: "Активация промокода требует входа. После входа промокод применится автоматически.",
         promoOk: "Промокод активирован",
-        manageTitle: "Управлять доступом",
-        manageDesc: "Подписка и промо в профиле",
-        openManage: "Открыть управление",
-        manageNeedLogin: "Чтобы управлять доступом, нужно войти.",
       },
       en: {
         title: "Pricing",
         subtitle: "Unlimited access to chat, voice and video. Trial includes 5 questions.",
         planTitle: "Monthly",
         planDesc: "Unlimited chat, voice and video access",
-        uah: "UAH",
         p1: "Unlimited questions",
         p2: "Chat, voice and video",
         p3: "History saved in your profile",
@@ -133,14 +136,13 @@ export default function PricingPage() {
         opening: "Opening...",
         invoiceOpened: "Payment opened. Complete it in WayForPay.",
         payFailed: "Payment init failed",
-        profileTitle: "Your profile",
-        profileDesc: "Check access and history",
-        status: "Status",
+        statusTitle: "Access status",
+        statusDesc: "Check access and limits",
         guest: "Guest",
         loggedIn: "Logged in",
         access: "Access",
         accessFree: "Free",
-        accessPromo: "Promo code",
+        accessPromo: "Promo",
         accessUnlimited: "Unlimited",
         questionsLeft: "Questions left",
         unlimited: "Unlimited",
@@ -152,12 +154,8 @@ export default function PricingPage() {
         promoPh: "Promo code",
         promoActivate: "Activate promo",
         promoActivating: "Activating...",
-        promoNeedLogin: "Promo activation requires login.",
+        promoNeedLogin: "Promo activation requires login. After login it will apply automatically.",
         promoOk: "Promo activated",
-        manageTitle: "Manage access",
-        manageDesc: "Subscription & promo in profile",
-        openManage: "Open management",
-        manageNeedLogin: "Please sign in to manage access.",
       },
     }
     return c[lang as "uk" | "ru" | "en"]
@@ -173,10 +171,11 @@ export default function PricingPage() {
   const [promoLoading, setPromoLoading] = useState(false)
   const [promoMsg, setPromoMsg] = useState<string | null>(null)
 
+  const triedPendingRef = useRef(false)
+
   const isLoggedIn = Boolean(summary?.isLoggedIn ?? summary?.loggedIn ?? summary?.user)
 
   const accessRaw = String(summary?.access ?? "").toLowerCase()
-
   const paidUntilRaw = summary?.paidUntil ?? summary?.paid_until ?? null
   const promoUntilRaw = summary?.promoUntil ?? summary?.promo_until ?? null
 
@@ -196,32 +195,29 @@ export default function PricingPage() {
   const questionsLeft = Number.isFinite(questionsLeftNum) ? questionsLeftNum : 0
 
   const accessLabel = hasPaid ? copy.accessUnlimited : hasPromo ? copy.accessPromo : copy.accessFree
-
-  // в summary нет accessUntil, показываем реальный until из paidUntil или promoUntil
   const accessUntilPretty = fmtDateDMY(hasPaid ? paidUntilRaw : hasPromo ? promoUntilRaw : null) || null
-
   const questionsLabel = unlimited ? copy.unlimited : String(questionsLeft)
 
+  async function refreshSummary() {
+    setLoadingSummary(true)
+    try {
+      const d = await loadCombinedSummary()
+      setSummary(d)
+    } catch {
+      setSummary(null)
+    } finally {
+      setLoadingSummary(false)
+    }
+  }
+
   useEffect(() => {
-    let alive = true
+    refreshSummary()
+  }, [])
 
-    async function load() {
-      setLoadingSummary(true)
-      try {
-        const r = await fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
-        const d = await r.json().catch(() => ({}))
-        if (alive) setSummary(d)
-      } catch {
-        if (alive) setSummary(null)
-      } finally {
-        if (alive) setLoadingSummary(false)
-      }
-    }
-
-    load()
-    return () => {
-      alive = false
-    }
+  useEffect(() => {
+    const onRefresh = () => refreshSummary()
+    window.addEventListener("turbota:refresh", onRefresh)
+    return () => window.removeEventListener("turbota:refresh", onRefresh)
   }, [])
 
   async function doLogout() {
@@ -237,6 +233,7 @@ export default function PricingPage() {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
+        cache: "no-store",
         body: JSON.stringify({ planId: "monthly", amount: PRICE_UAH, currency: CURRENCY }),
       })
 
@@ -252,185 +249,194 @@ export default function PricingPage() {
     }
   }
 
-  async function handleActivatePromo() {
-    setPromoMsg(null)
-
-    if (!isLoggedIn) {
-      setPromoMsg(copy.promoNeedLogin)
-      router.push("/login?next=/pricing")
+  async function redeemPromo(code: string) {
+    const clean = String(code || "").trim()
+    if (!clean) {
+      setPromoMsg(copy.payFailed)
       return
     }
 
     setPromoLoading(true)
+    setPromoMsg(null)
 
     try {
       const r = await fetch("/api/billing/promo/redeem", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ code: promoCode.trim() }),
+        cache: "no-store",
+        body: JSON.stringify({ code: clean }),
       })
-
       const d = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(d?.error || "Promo activation failed")
+
+      if (!r.ok) {
+        const msg = String(d?.error || d?.message || "Promo failed")
+        throw new Error(msg)
+      }
 
       setPromoMsg(copy.promoOk)
+      try {
+        sessionStorage.removeItem(PENDING_PROMO_KEY)
+      } catch {}
 
-      const s = await fetch("/api/account/summary", { cache: "no-store", credentials: "include" }).then((x) => x.json())
-      setSummary(s)
-      setPromoCode("")
+      window.dispatchEvent(new Event("turbota:refresh"))
+      await refreshSummary()
     } catch (e: any) {
-      setPromoMsg(e?.message || "Promo activation failed")
+      setPromoMsg(String(e?.message || "Promo failed"))
     } finally {
       setPromoLoading(false)
     }
   }
 
-  return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-10">
-      <h1 className="text-4xl font-semibold">{copy.title}</h1>
-      <p className="mt-2 text-muted-foreground">{copy.subtitle}</p>
+  async function handleActivatePromo() {
+    setPromoMsg(null)
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-4">
+    const code = String(promoCode || "").trim()
+    if (!code) return
+
+    if (!isLoggedIn) {
+      try {
+        sessionStorage.setItem(PENDING_PROMO_KEY, code)
+      } catch {}
+      setPromoMsg(copy.promoNeedLogin)
+      router.push("/login?next=/pricing&promo=1")
+      return
+    }
+
+    await redeemPromo(code)
+  }
+
+  useEffect(() => {
+    if (!isLoggedIn) return
+    if (triedPendingRef.current) return
+
+    triedPendingRef.current = true
+
+    let pending = ""
+    try {
+      pending = String(sessionStorage.getItem(PENDING_PROMO_KEY) || "").trim()
+    } catch {}
+
+    if (pending) {
+      setPromoCode(pending)
+      redeemPromo(pending)
+    }
+  }, [isLoggedIn])
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-10">
+      <div className="mb-10">
+        <h1 className="text-4xl font-semibold">{copy.title}</h1>
+        <p className="mt-2 text-gray-500">{copy.subtitle}</p>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card className="md:col-span-2 rounded-2xl">
+          <CardHeader>
             <CardTitle className="text-2xl">{copy.planTitle}</CardTitle>
             <CardDescription>{copy.planDesc}</CardDescription>
           </CardHeader>
-
-          <CardContent className="pb-8">
-            <div className="flex items-end gap-3">
-              <div className="text-6xl font-bold leading-none">{Number.isFinite(PRICE_UAH) ? PRICE_UAH : 499}</div>
-              <div className="pb-1 text-muted-foreground">{copy.uah}</div>
+          <CardContent>
+            <div className="flex items-end gap-2">
+              <div className="text-5xl font-semibold">{PRICE_UAH}</div>
+              <div className="pb-2 text-gray-500">{CURRENCY} / {lang === "en" ? "month" : "місяць"}</div>
             </div>
 
-            <ul className="mt-5 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-              <li>{copy.p1}</li>
-              <li>{copy.p2}</li>
-              <li>{copy.p3}</li>
+            <ul className="mt-6 space-y-2 text-sm text-gray-700">
+              <li>• {copy.p1}</li>
+              <li>• {copy.p2}</li>
+              <li>• {copy.p3}</li>
             </ul>
 
-            <div className="mt-6 py-4">
-              <div role="button" tabIndex={0} onClick={handleSubscribe} className="cursor-pointer" title={copy.subscribe}>
-                <TurbotaHoloCard title="TurbotaAI" subtitle="TurbotaAI Monthly" height={260} />
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-col gap-2">
-              <RainbowButton
-                id="turbota-subscribe"
-                onClick={handleSubscribe}
-                disabled={payLoading}
-                className="border border-slate-200"
-              >
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Button className="h-12 rounded-xl" onClick={handleSubscribe} disabled={payLoading}>
                 {payLoading ? copy.opening : copy.subscribe}
-              </RainbowButton>
+              </Button>
 
-              {payMsg ? <p className="text-sm text-muted-foreground">{payMsg}</p> : null}
+              <Link href="/profile" className="sm:ml-auto">
+                <Button className="h-12 rounded-xl" variant="outline">
+                  {copy.openProfile}
+                </Button>
+              </Link>
             </div>
+
+            {payMsg ? <div className="mt-4 text-sm text-gray-700">{payMsg}</div> : null}
           </CardContent>
         </Card>
 
-        <div className="grid gap-6">
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="text-2xl">{copy.profileTitle}</CardTitle>
-              <CardDescription>{copy.profileDesc}</CardDescription>
-            </CardHeader>
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle className="text-xl">{copy.statusTitle}</CardTitle>
+            <CardDescription>{copy.statusDesc}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <div className="text-gray-500">Status</div>
+              <div className="font-medium">{isLoggedIn ? copy.loggedIn : copy.guest}</div>
+            </div>
 
-            <CardContent className="pb-8">
-              <div className="grid gap-3 text-sm text-muted-foreground">
-                <div className="flex items-center justify-between">
-                  <span>{copy.status}</span>
-                  <span className="text-slate-900">{loadingSummary ? "…" : isLoggedIn ? copy.loggedIn : copy.guest}</span>
-                </div>
+            <div className="flex items-center justify-between">
+              <div className="text-gray-500">{copy.access}</div>
+              <div className="font-medium">{accessLabel}</div>
+            </div>
 
-                <div className="flex items-center justify-between">
-                  <span>{copy.access}</span>
-                  <span className="text-slate-900">{loadingSummary ? "…" : accessLabel}</span>
-                </div>
+            <div className="flex items-center justify-between">
+              <div className="text-gray-500">{copy.questionsLeft}</div>
+              <div className="font-medium">{questionsLabel}</div>
+            </div>
 
-                <div className="flex items-center justify-between">
-                  <span>{copy.questionsLeft}</span>
-                  <span className="text-slate-900">{loadingSummary ? "…" : questionsLabel}</span>
-                </div>
+            <div className="flex items-center justify-between">
+              <div className="text-gray-500">{copy.accessUntil}</div>
+              <div className="font-medium">{accessUntilPretty || "—"}</div>
+            </div>
 
-                {(summary?.accessUntil || summary?.access_until) && (
-                  <div className="flex items-center justify-between">
-                    <span>{copy.accessUntil}</span>
-                    <span className="text-slate-900">{loadingSummary ? "…" : accessUntilPretty || "—"}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                <Button variant="outline" className="border border-slate-200" onClick={() => router.push("/profile")}>
-                  {copy.openProfile}
-                </Button>
-
-                {isLoggedIn ? (
-                  <Button variant="outline" className="border border-slate-200" onClick={doLogout}>
-                    {copy.logout}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    className="border border-slate-200"
-                    onClick={() => router.push("/login?next=/pricing")}
-                  >Увійти</Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="text-2xl">{copy.promoTitle}</CardTitle>
-              <CardDescription>{copy.promoDesc}</CardDescription>
-            </CardHeader>
-
-            <CardContent className="pb-8">
-              <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-                <Input
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value)}
-                  placeholder={copy.promoPh}
-                  autoCapitalize="characters"
-                />
-
-                <Button
-                  onClick={handleActivatePromo}
-                  disabled={promoLoading || !promoCode.trim()}
-                  className="border border-slate-200"
-                  variant="outline"
-                >
-                  {promoLoading ? copy.promoActivating : copy.promoActivate}
-                </Button>
-              </div>
-
-              {!isLoggedIn ? <div className="mt-2 text-xs text-muted-foreground">{copy.promoNeedLogin}</div> : null}
-              {promoMsg ? <p className="mt-2 text-sm text-muted-foreground">{promoMsg}</p> : null}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="text-2xl">{copy.manageTitle}</CardTitle>
-              <CardDescription>{copy.manageDesc}</CardDescription>
-            </CardHeader>
-
-            <CardContent className="pb-8">
-              <Button
-                variant="outline"
-                className="w-full border border-slate-200"
-                onClick={() => (isLoggedIn ? router.push("/profile") : router.push("/login?next=/profile"))}
-              >
-                {copy.openManage}
+            <div className="pt-2">
+              <Button className="w-full rounded-xl" variant="outline" onClick={refreshSummary} disabled={loadingSummary}>
+                {loadingSummary ? "..." : "Refresh"}
               </Button>
-              {!isLoggedIn ? <p className="mt-2 text-xs text-muted-foreground">{copy.manageNeedLogin}</p> : null}
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+
+            {isLoggedIn ? (
+              <div>
+                <Button className="w-full rounded-xl" variant="outline" onClick={doLogout}>
+                  {copy.logout}
+                </Button>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-8 grid gap-6 md:grid-cols-2">
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle className="text-xl">{copy.promoTitle}</CardTitle>
+            <CardDescription>{copy.promoDesc}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Input
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value)}
+              placeholder={copy.promoPh}
+              className="h-12"
+            />
+            <Button className="h-12 w-full rounded-xl" onClick={handleActivatePromo} disabled={promoLoading}>
+              {promoLoading ? copy.promoActivating : copy.promoActivate}
+            </Button>
+            {promoMsg ? <div className="text-sm text-gray-700">{promoMsg}</div> : null}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle className="text-xl">Тест</CardTitle>
+            <CardDescription>Для чистої перевірки відкрийте інкогніто</CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm text-gray-700 space-y-2">
+            <div>Инкогнито создает новый device hash, поэтому пробный режим и доступ начинаются с нуля.</div>
+            <div>После оплаты переходите в профиль и нажимайте Проверить оплату, если доступ не обновился сразу.</div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

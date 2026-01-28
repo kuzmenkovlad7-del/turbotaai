@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
 import { Button } from "@/components/ui/button"
@@ -10,9 +11,25 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertCircle, ArrowRight } from "lucide-react"
 
+function safeNext(v: string | null) {
+  const p = String(v || "").trim()
+  return p.startsWith("/") ? p : "/profile"
+}
+
 export default function RegisterForm() {
   const { t } = useLanguage()
   const { signUpWithPassword } = useAuth()
+  const sp = useSearchParams()
+
+  const next = useMemo(() => safeNext(sp.get("next")), [sp])
+  const promo = useMemo(() => (sp.get("promo") === "1" ? "1" : "0"), [sp])
+
+  const loginHref = useMemo(() => {
+    const q = new URLSearchParams()
+    q.set("next", next)
+    if (promo === "1") q.set("promo", "1")
+    return `/login?${q.toString()}`
+  }, [next, promo])
 
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
@@ -44,7 +61,7 @@ export default function RegisterForm() {
     if (r.needsEmailConfirm) {
       setSuccess("Аккаунт создан. Подтвердите email и войдите.")
     } else {
-      window.location.href = "/profile"
+      window.location.href = next
     }
   }
 
@@ -53,7 +70,9 @@ export default function RegisterForm() {
       <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
         <CardHeader className="space-y-1 pb-6 text-center">
           <CardTitle className="text-2xl font-semibold text-gray-900">{t("Create account")}</CardTitle>
-          <CardDescription className="text-gray-600">{t("Register to save your sessions and preferences.")}</CardDescription>
+          <CardDescription className="text-gray-600">
+            {t("Register to save your sessions and preferences.")}
+          </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-6">
@@ -66,7 +85,10 @@ export default function RegisterForm() {
 
           {success && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
-              {success}
+              {success}{" "}
+              <Link href={loginHref} className="underline">
+                Войти
+              </Link>
             </div>
           )}
 
@@ -83,22 +105,40 @@ export default function RegisterForm() {
 
             <div className="space-y-2">
               <Label htmlFor="password">{t("Password")}</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">{t("Repeat password")}</Label>
-              <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
             </div>
 
             <Button type="submit" className="w-full h-12" disabled={isLoading}>
-              {isLoading ? t("Creating account...") : <span className="flex items-center justify-center gap-2">{t("Sign Up")} <ArrowRight className="h-4 w-4" /></span>}
+              {isLoading ? (
+                t("Creating account...")
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  {t("Sign Up")} <ArrowRight className="h-4 w-4" />
+                </span>
+              )}
             </Button>
           </form>
 
           <p className="pt-2 text-center text-sm text-gray-600">
             {t("Already have an account?")}{" "}
-            <Link href="/login" className="text-primary-600 hover:text-primary-800 font-medium">
+            <Link href={loginHref} className="text-primary-600 hover:text-primary-800 font-medium">
               {t("Sign In")}
             </Link>
           </p>
