@@ -377,9 +377,7 @@ export default function PricingPage() {
                     variant="outline"
                     className="border border-slate-200"
                     onClick={() => router.push("/login?next=/pricing")}
-                  >
-                    Login
-                  </Button>
+                  >Увійти</Button>
                 )}
               </div>
             </CardContent>

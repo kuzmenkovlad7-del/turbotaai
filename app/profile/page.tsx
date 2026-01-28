@@ -1,340 +1,238 @@
 "use client"
 
-import React, { useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { useLanguage } from "@/lib/i18n/language-context"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 
-type AnyObj = Record<string, any>
-
-function isActiveDate(v: any) {
-  if (!v) return false
-  const d = new Date(String(v))
-  if (Number.isNaN(d.getTime())) return false
-  return d.getTime() > Date.now()
+type Summary = {
+  email: string | null
+  access: string
+  questionsLeft: number
+  paid_until: string | null
+  promo_until: string | null
+  subscription_status: "active" | "inactive"
+  auto_renew: boolean
 }
 
-function fmtDateDMY(v: any) {
-  if (!v) return null
-  const d = new Date(String(v))
-  if (Number.isNaN(d.getTime())) return null
-  const dd = String(d.getDate()).padStart(2, "0")
-  const mm = String(d.getMonth() + 1).padStart(2, "0")
-  const yyyy = d.getFullYear()
-  return `${dd}.${mm}.${yyyy}`
+function isActive(until: string | null) {
+  if (!until) return false
+  const t = new Date(until).getTime()
+  return Number.isFinite(t) && t > Date.now()
+}
+
+function fmtDate(until: string | null) {
+  if (!until) return "Не активно"
+  try {
+    const d = new Date(until)
+    if (!Number.isFinite(d.getTime())) return "Не активно"
+    return d.toLocaleDateString("uk-UA")
+  } catch {
+    return "Не активно"
+  }
+}
+
+function accessLabel(raw: any, hasPaid: boolean, hasPromo: boolean, questionsLeft: number) {
+  // UI всегда приоритетно строим от фактов (paid_until / promo_until / questionsLeft)
+  if (hasPaid) return "Оплачено"
+  if (hasPromo) return "Промо"
+  if (questionsLeft > 0) return "Бесплатно"
+  const s = String(raw || "").toLowerCase()
+  if (s === "paid") return "Оплачено"
+  if (s === "promo") return "Промо"
+  if (s === "trial") return "Бесплатно"
+  return "Нет доступа"
+}
+
+function subscriptionLabel(v: "active" | "inactive") {
+  return v === "active" ? "Активна" : "Неактивна"
+}
+
+async function loadSummary(): Promise<Summary> {
+  const r = await fetch("/api/account/summary", { cache: "no-store" })
+  const j = await r.json().catch(() => ({} as any))
+
+  const paidUntil = (j?.paidUntil ?? j?.paid_until ?? null) as string | null
+  const promoUntil = (j?.promoUntil ?? j?.promo_until ?? null) as string | null
+  const questionsLeft = typeof j?.questionsLeft === "number" ? j.questionsLeft : 0
+
+  const hasPaid = isActive(paidUntil)
+  const hasPromo = isActive(promoUntil)
+
+  const access = accessLabel(j?.access, hasPaid, hasPromo, questionsLeft)
+
+  const subRaw = String(j?.subscription_status ?? "").toLowerCase()
+  const subscription_status =
+    (subRaw === "active" || subRaw === "inactive"
+      ? (subRaw as "active" | "inactive")
+      : (hasPaid || hasPromo ? "active" : "inactive"))
+
+  return {
+    email: (j?.email ?? null) as string | null,
+    access,
+    questionsLeft,
+    paid_until: paidUntil,
+    promo_until: promoUntil,
+    subscription_status,
+    auto_renew: Boolean(j?.auto_renew ?? false),
+  }
 }
 
 export default function ProfilePage() {
-  const { currentLanguage } = useLanguage()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
-  const lang = useMemo(() => {
-    const code = String(currentLanguage?.code || "uk").toLowerCase()
-    return code.startsWith("ru") ? "ru" : code.startsWith("en") ? "en" : "uk"
-  }, [currentLanguage?.code])
+  const paidParam = useMemo(() => searchParams.get("paid"), [searchParams])
 
-  const copy = useMemo(() => {
-    const c = {
-      uk: {
-        title: "Профіль",
-        subtitle: "Управління доступом і історія",
-        account: "Акаунт",
-        accountDesc: "Статус входу і доступ",
-        email: "Email",
-        status: "Статус",
-        access: "Доступ",
-        questionsLeft: "Залишилось питань",
-        paidUntil: "Оплачено до",
-        promoUntil: "Промо до",
-        guest: "Гість",
-        loggedIn: "Вхід виконано",
-        free: "Безкоштовно",
-        paid: "Оплачено",
-        promo: "Промо",
-        unlimited: "Безліміт",
-        refresh: "Оновити",
-        pricing: "Тарифи",
-        manage: "Управління доступом",
-        manageDesc: "Підписка і промокод",
-        subStatus: "Статус підписки",
-        autoRenew: "Автопродовження",
-        active: "Активна",
-        inactive: "Неактивна",
-        enabled: "Увімкнено",
-        disabled: "Вимкнено",
-        cancelAuto: "Скасувати автопродовження",
-        cancelPromo: "Скасувати промокод",
-        history: "Історія",
-        historyDesc: "Збережені сесії",
-        needLoginHistory: "Увійдіть, щоб бачити історію.",
-        login: "Увійти",
-      },
-      ru: {
-        title: "Профиль",
-        subtitle: "Управление доступом и история",
-        account: "Аккаунт",
-        accountDesc: "Статус входа и доступ",
-        email: "Email",
-        status: "Статус",
-        access: "Доступ",
-        questionsLeft: "Осталось вопросов",
-        paidUntil: "Оплачено до",
-        promoUntil: "Промо до",
-        guest: "Гость",
-        loggedIn: "Вход выполнен",
-        free: "Бесплатно",
-        paid: "Оплачено",
-        promo: "Промо",
-        unlimited: "Безлимит",
-        refresh: "Обновить",
-        pricing: "Тарифы",
-        manage: "Управление доступом",
-        manageDesc: "Подписка и промокод",
-        subStatus: "Статус подписки",
-        autoRenew: "Автопродление",
-        active: "Активна",
-        inactive: "Неактивна",
-        enabled: "Включено",
-        disabled: "Выключено",
-        cancelAuto: "Отменить автопродление",
-        cancelPromo: "Отменить промокод",
-        history: "История",
-        historyDesc: "Сохранённые сессии",
-        needLoginHistory: "Войдите, чтобы видеть историю.",
-        login: "Войти",
-      },
-      en: {
-        title: "Profile",
-        subtitle: "Access management and history",
-        account: "Account",
-        accountDesc: "Sign-in and access status",
-        email: "Email",
-        status: "Status",
-        access: "Access",
-        questionsLeft: "Questions left",
-        paidUntil: "Paid until",
-        promoUntil: "Promo until",
-        guest: "Guest",
-        loggedIn: "Logged in",
-        free: "Free",
-        paid: "Paid",
-        promo: "Promo",
-        unlimited: "Unlimited",
-        refresh: "Refresh",
-        pricing: "Pricing",
-        manage: "Manage access",
-        manageDesc: "Subscription and promo",
-        subStatus: "Subscription status",
-        autoRenew: "Auto-renew",
-        active: "Active",
-        inactive: "Inactive",
-        enabled: "Enabled",
-        disabled: "Disabled",
-        cancelAuto: "Cancel auto-renew",
-        cancelPromo: "Cancel promo",
-        history: "History",
-        historyDesc: "Saved sessions",
-        needLoginHistory: "Please sign in to see history.",
-        login: "Sign in",
-      },
-    }
-    return c[lang as "uk" | "ru" | "en"]
-  }, [lang])
-
-  const [summary, setSummary] = useState<AnyObj | null>(null)
   const [loading, setLoading] = useState(true)
-  const claimedRef = useRef(false)
+  const [syncing, setSyncing] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [summary, setSummary] = useState<Summary>({
+    email: null,
+    access: "Бесплатно",
+    questionsLeft: 0,
+    paid_until: null,
+    promo_until: null,
+    subscription_status: "inactive",
+    auto_renew: false,
+  })
 
-  async function load() {
+  const refresh = useCallback(async () => {
+    setErr(null)
     setLoading(true)
     try {
-      const r = await fetch("/api/account/summary", { cache: "no-store", credentials: "include" })
-      const j = await r.json().catch(() => ({}))
-      setSummary(j)
-    } catch {
-      setSummary(null)
+      const s = await loadSummary()
+      setSummary(s)
+    } catch (e: any) {
+      setErr(String(e?.message || e))
     } finally {
       setLoading(false)
     }
-  }
-
-  useEffect(() => {
-    load()
   }, [])
 
-  const isLoggedIn = Boolean(summary?.isLoggedIn ?? summary?.loggedIn ?? summary?.user)
-
-  // когда пользователь уже вошёл — делаем claim один раз, чтобы приклеить guest-доступ к user_id
   useEffect(() => {
-    if (!isLoggedIn) return
-    if (claimedRef.current) return
-    claimedRef.current = true
+    refresh()
+  }, [refresh])
 
+  useEffect(() => {
+    if (paidParam !== "1") return
+
+    let alive = true
     ;(async () => {
+      setSyncing(true)
       try {
-        await fetch("/api/account/claim", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          credentials: "include",
-          body: "{}",
-        })
-      } catch {}
-      finally {
-        try {
-          window.dispatchEvent(new Event("turbota:refresh"))
-        } catch {}
-        load()
+        await fetch("/api/billing/wayforpay/sync", { method: "POST", cache: "no-store" })
+      } catch {
+      } finally {
+        if (alive) setSyncing(false)
       }
+      if (alive) await refresh()
     })()
-  }, [isLoggedIn])
 
-  const accessRaw = String(summary?.access ?? "")
-  const paidUntilRaw = summary?.paidUntil ?? summary?.paid_until ?? null
-  const promoUntilRaw = summary?.promoUntil ?? summary?.promo_until ?? null
-
-  const hasPaid = accessRaw === "paid" || accessRaw === "Paid" || isActiveDate(paidUntilRaw)
-  const hasPromo = accessRaw === "promo" || accessRaw === "Promo" || isActiveDate(promoUntilRaw)
-  const unlimited = Boolean(summary?.unlimited) || hasPaid || hasPromo
-
-  const qNum = Number(summary?.questionsLeft ?? summary?.trialLeft ?? summary?.trial_questions_left ?? 0)
-  const questionsLeft = Number.isFinite(qNum) ? qNum : 0
-
-  const accessLabel = hasPaid ? copy.paid : hasPromo ? copy.promo : questionsLeft > 0 ? copy.free : copy.free
-  const questionsLabel = unlimited ? copy.unlimited : String(questionsLeft)
-
-  const paidUntilPretty = fmtDateDMY(paidUntilRaw) || null
-  const promoUntilPretty = fmtDateDMY(promoUntilRaw) || null
-
-  const subStatusRaw = String(summary?.subscription_status ?? summary?.subscriptionStatus ?? "")
-  const subStatus = hasPaid ? copy.active : subStatusRaw === "active" ? copy.active : copy.inactive
-
-  const autoRenewVal = Boolean(summary?.auto_renew ?? summary?.autoRenew ?? false)
-  const autoRenew = hasPaid ? (autoRenewVal ? copy.enabled : copy.disabled) : copy.disabled
-
-  async function cancelAutoRenew() {
-    try {
-      await fetch("/api/billing/subscription/cancel", { method: "POST", credentials: "include" })
-    } catch {}
-    finally {
-      try { window.dispatchEvent(new Event("turbota:refresh")) } catch {}
-      load()
+    return () => {
+      alive = false
     }
-  }
+  }, [paidParam, refresh])
 
-  async function cancelPromo() {
-    try {
-      await fetch("/api/billing/promo/cancel", { method: "POST", credentials: "include" })
-    } catch {}
-    finally {
-      try { window.dispatchEvent(new Event("turbota:refresh")) } catch {}
-      load()
-    }
-  }
+  const hasPaid = isActive(summary.paid_until)
+  const hasPromo = isActive(summary.promo_until)
+
+  const questionsLabel = hasPaid || hasPromo ? "Безлимит" : String(summary.questionsLeft)
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="text-4xl font-bold tracking-tight">{copy.title}</h1>
-      <p className="mt-2 text-gray-600">{copy.subtitle}</p>
+    <div className="mx-auto max-w-6xl px-4 py-8">
+      <div className="mb-8">
+        <h1 className="text-4xl font-semibold">Профиль</h1>
+        <p className="mt-2 text-gray-500">Управление доступом и история</p>
+      </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>{copy.account}</CardTitle>
-            <CardDescription>{copy.accountDesc}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-gray-500">{copy.email}:</div>
-              <div className="font-medium">{isLoggedIn ? String(summary?.email || summary?.user_email || "") || "-" : copy.guest}</div>
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="mb-6">
+            <div className="text-xl font-semibold">Аккаунт</div>
+            <div className="text-sm text-gray-500">Статус входа и доступ</div>
+          </div>
+
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <div className="text-gray-500">Email:</div>
+              <div className="font-medium">{summary.email ? summary.email : "Гость"}</div>
             </div>
 
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-gray-500">{copy.status}:</div>
-              <div className="font-medium">{isLoggedIn ? copy.loggedIn : copy.guest}</div>
+            <div className="flex items-center justify-between">
+              <div className="text-gray-500">Доступ:</div>
+              <div className="font-medium">{summary.access}</div>
             </div>
 
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-gray-500">{copy.access}:</div>
-              <div className="font-medium">{accessLabel}</div>
-            </div>
-
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-gray-500">{copy.questionsLeft}:</div>
+            <div className="flex items-center justify-between">
+              <div className="text-gray-500">Осталось вопросов:</div>
               <div className="font-medium">{questionsLabel}</div>
             </div>
 
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-gray-500">{copy.paidUntil}:</div>
-              <div className="font-medium">{hasPaid ? (paidUntilPretty || "-") : "-"}</div>
+            <div className="flex items-center justify-between">
+              <div className="text-gray-500">Оплачено до:</div>
+              <div className="font-medium">{fmtDate(summary.paid_until)}</div>
             </div>
 
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-gray-500">{copy.promoUntil}:</div>
-              <div className="font-medium">{hasPromo ? (promoUntilPretty || "-") : "-"}</div>
+            <div className="flex items-center justify-between">
+              <div className="text-gray-500">Промо до:</div>
+              <div className="font-medium">{fmtDate(summary.promo_until)}</div>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            <button
+              className="w-full rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+              onClick={refresh}
+              disabled={loading || syncing}
+            >
+              {loading ? "Обновление..." : syncing ? "Проверка оплаты..." : "Обновить"}
+            </button>
+
+            <button
+              className="w-full rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+              onClick={() => router.push("/pricing")}
+            >
+              Тарифы
+            </button>
+          </div>
+
+          {err ? <div className="mt-4 text-sm text-red-600">{err}</div> : null}
+        </div>
+
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="mb-6">
+            <div className="text-xl font-semibold">Управление доступом</div>
+            <div className="text-sm text-gray-500">Подписка и промокод</div>
+          </div>
+
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <div className="text-gray-500">Статус подписки:</div>
+              <div className="font-medium">{subscriptionLabel(summary.subscription_status)}</div>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button onClick={load} disabled={loading}>{copy.refresh}</Button>
-              <Button variant="outline" onClick={() => router.push("/pricing")}>{copy.pricing}</Button>
+            <div className="flex items-center justify-between">
+              <div className="text-gray-500">Автопродление:</div>
+              <div className="font-medium">{summary.auto_renew ? "Включено" : "Выключено"}</div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{copy.manage}</CardTitle>
-            <CardDescription>{copy.manageDesc}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-gray-500">{copy.subStatus}:</div>
-              <div className="font-medium">{subStatus}</div>
-            </div>
+          <div className="mt-6 space-y-3">
+            <button className="w-full rounded-xl border px-4 py-2 text-sm font-medium text-gray-400" disabled>
+              Отменить автопродление
+            </button>
 
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-gray-500">{copy.autoRenew}:</div>
-              <div className="font-medium">{autoRenew}</div>
-            </div>
-
-            <div className="mt-4 grid gap-2">
-              <Button
-                variant="outline"
-                onClick={cancelAutoRenew}
-                disabled={!hasPaid || !autoRenewVal}
-              >
-                {copy.cancelAuto}
-              </Button>
-
-              <Button
-                variant="outline"
-                onClick={cancelPromo}
-                disabled={!hasPromo}
-              >
-                {copy.cancelPromo}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            <button className="w-full rounded-xl border px-4 py-2 text-sm font-medium text-gray-400" disabled>
+              Отменить промокод
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div className="mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>{copy.history}</CardTitle>
-            <CardDescription>{copy.historyDesc}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoggedIn ? (
-              <div className="text-sm text-gray-600">Откройте раздел истории в меню или перейдите по ссылкам в приложении.</div>
-            ) : (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm text-gray-600">{copy.needLoginHistory}</div>
-                <Button onClick={() => router.push("/login?next=/profile")}>{copy.login}</Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      <div className="mt-8 rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="mb-2 text-xl font-semibold">История</div>
+        <div className="text-sm text-gray-500">Сохранённые сессии</div>
+
+        <div className="mt-4 text-sm text-gray-500">Войдите, чтобы видеть историю.</div>
       </div>
     </div>
   )
