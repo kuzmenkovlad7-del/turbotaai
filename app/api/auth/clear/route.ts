@@ -1,18 +1,43 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 
+export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export async function GET(req: Request) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    await supabase.auth.signOut()
-  } catch {}
+function shouldClearCookie(name: string) {
+  const n = name.toLowerCase()
+  if (n.startsWith("sb-")) return true
+  if (n.includes("supabase")) return true
+  if (n.includes("auth-token")) return true
+  if (n.includes("access-token")) return true
+  if (n.includes("refresh-token")) return true
+  return false
+}
 
-  const url = new URL(req.url)
-  const next = url.searchParams.get("next") || "/pricing"
-  const res = NextResponse.redirect(next)
-  res.headers.set("cache-control", "no-store")
+function buildResponse() {
+  const res = NextResponse.json({ ok: true }, { status: 200 })
+
+  const all = cookies().getAll()
+  for (const c of all) {
+    if (!shouldClearCookie(c.name)) continue
+
+    res.cookies.set(c.name, "", {
+      path: "/",
+      maxAge: 0,
+      expires: new Date(0),
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    })
+  }
+
+  res.headers.set("cache-control", "no-store, max-age=0")
   return res
+}
+
+export async function POST() {
+  return buildResponse()
+}
+
+export async function GET() {
+  return buildResponse()
 }
