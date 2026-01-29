@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { createServerClient } from "@supabase/ssr"
 import { createClient } from "@supabase/supabase-js"
 import { createHmac, randomUUID } from "crypto"
+import { buildAccessSummary } from "@/lib/server/access-summary"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -32,8 +31,7 @@ function cookieDomainFromHost(host: string | null) {
 
 function originFromRequest(req: NextRequest) {
   const proto = (req.headers.get("x-forwarded-proto") || "https").split(",")[0].trim()
-  const host =
-    (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").split(",")[0].trim()
+  const host = (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").split(",")[0].trim()
   const origin = host ? `${proto}://${host}` : ""
   return { origin, host }
 }
@@ -45,39 +43,9 @@ function formatAmount(v: any): string | null {
   return n.toFixed(2)
 }
 
-async function getUserIdFromRequest(): Promise<string | null> {
-  const url = env("NEXT_PUBLIC_SUPABASE_URL")
-  const anon = env("NEXT_PUBLIC_SUPABASE_ANON_KEY")
-  if (!url || !anon) return null
-
-  const jar = cookies()
-  const sb = createServerClient(url, anon, {
-    cookies: {
-      getAll() {
-        return jar.getAll()
-      },
-      setAll() {},
-    },
-  })
-
-  try {
-    const { data } = await sb.auth.getUser()
-    return data?.user?.id || null
-  } catch {
-    return null
-  }
-}
-
-function sbAdmin() {
-  const url = mustEnv("NEXT_PUBLIC_SUPABASE_URL")
-  const key = mustEnv("SUPABASE_SERVICE_ROLE_KEY")
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
-}
-
 function pickPriceFromEnv(planId: string): string | null {
   const p = String(planId || "monthly").toLowerCase()
 
-  // максимально толерантно к названиям переменных (чтобы не сломать текущую конфигурацию)
   const candidates =
     p === "yearly" || p === "annual" || p === "year"
       ? [
@@ -100,9 +68,14 @@ function pickPriceFromEnv(planId: string): string | null {
     if (a) return a
   }
 
-  // общий fallback (для теста 1 грн и т.п.)
   const fallback = formatAmount(env("WAYFORPAY_TEST_AMOUNT")) || formatAmount(env("WAYFORPAY_AMOUNT"))
   return fallback || null
+}
+
+function sbAdmin() {
+  const url = mustEnv("NEXT_PUBLIC_SUPABASE_URL")
+  const key = mustEnv("SUPABASE_SERVICE_ROLE_KEY")
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
 }
 
 export async function POST(req: NextRequest) {
@@ -111,16 +84,28 @@ export async function POST(req: NextRequest) {
     const planId = String(body?.planId || "monthly").trim() || "monthly"
 
     const currency = String(body?.currency || env("WAYFORPAY_CURRENCY") || "UAH").trim() || "UAH"
+
     let amountStr = formatAmount(body?.amount) || pickPriceFromEnv(planId)
-    // turbota test amount override
-    const __turbota_testAmount =
+
+    const forcedTest =
       formatAmount(env("WAYFORPAY_TEST_AMOUNT_UAH")) ||
-      formatAmount(env("WAYFORPAY_TEST_AMOUNT"));
-    if (__turbota_testAmount) amountStr = __turbota_testAmount;
+      formatAmount(env("WAYFORPAY_TEST_AMOUNT"))
+
+    if (forcedTest) amountStr = forcedTest
+
     if (!amountStr) {
       return NextResponse.json(
-        { ok: false, error: "Missing amount (set PRICE_* env or pass amount)" },
+        { ok: false, error: "missing_amount" },
         { status: 500, headers: { "cache-control": "no-store" } }
+      )
+    }
+
+    const { summary, pendingCookies, needSetDeviceCookie, deviceHash, cookieDomain } = await buildAccessSummary(req)
+
+    if (summary.hasPaid && summary.paidUntil) {
+      return NextResponse.json(
+        { ok: false, error: "already_active", paidUntil: summary.paidUntil },
+        { status: 409, headers: { "cache-control": "no-store" } }
       )
     }
 
@@ -130,23 +115,15 @@ export async function POST(req: NextRequest) {
     const { origin, host } = originFromRequest(req)
     if (!origin || !host) {
       return NextResponse.json(
-        { ok: false, error: "Cannot detect origin/host" },
+        { ok: false, error: "cannot_detect_origin" },
         { status: 500, headers: { "cache-control": "no-store" } }
       )
     }
 
     const hostNoPort = host.split(":")[0]
-    const cookieDomain = cookieDomainFromHost(hostNoPort)
+    const domain = cookieDomainFromHost(hostNoPort)
 
-    const jar = cookies()
-    let deviceHash = jar.get(DEVICE_COOKIE)?.value || ""
-    let needSetDeviceCookie = false
-    if (!deviceHash) {
-      deviceHash = randomUUID()
-      needSetDeviceCookie = true
-    }
-
-    const userId = await getUserIdFromRequest()
+    const userId = summary.userId
 
     const orderReference = `TA-${Date.now()}-${randomUUID().slice(0, 8)}`
     const orderDate = Math.floor(Date.now() / 1000)
@@ -155,8 +132,6 @@ export async function POST(req: NextRequest) {
     const productCount = "1"
     const productPrice = amountStr
 
-    // merchantSignature for PURCHASE:
-    // merchantAccount;merchantDomainName;orderReference;orderDate;amount;currency;productName...;productCount...;productPrice... :contentReference[oaicite:4]{index=4}
     const signString = [
       merchantAccount,
       hostNoPort,
@@ -174,8 +149,8 @@ export async function POST(req: NextRequest) {
     const returnUrl = `${origin}/payment/return?orderReference=${encodeURIComponent(orderReference)}`
     const serviceUrl = `${origin}/api/billing/wayforpay/callback`
 
-    // Сначала создаём заказ в БД
     const admin = sbAdmin()
+
     await admin.from("billing_orders").insert({
       order_reference: orderReference,
       status: "created",
@@ -184,7 +159,7 @@ export async function POST(req: NextRequest) {
       currency,
       user_id: userId,
       device_hash: deviceHash,
-      raw: JSON.stringify({
+      raw: {
         __event: "create_invoice_request",
         planId,
         amount: amountStr,
@@ -192,12 +167,11 @@ export async function POST(req: NextRequest) {
         origin,
         serviceUrl,
         returnUrl,
-      }),
+      },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as any)
 
-    // Получаем оплатную ссылку через behavior=offline :contentReference[oaicite:5]{index=5}
     const form = new URLSearchParams()
     form.set("merchantAccount", merchantAccount)
     form.set("merchantDomainName", hostNoPort)
@@ -224,11 +198,11 @@ export async function POST(req: NextRequest) {
     const j: any = await r.json().catch(() => ({}))
     const invoiceUrl = String(j?.url || "").trim()
 
-    // Обновим raw ответом
     await admin
       .from("billing_orders")
       .update({
-        raw: JSON.stringify({
+        status: invoiceUrl ? "invoice_created" : "failed",
+        raw: {
           __event: "create_invoice_response",
           request: {
             orderReference,
@@ -239,14 +213,14 @@ export async function POST(req: NextRequest) {
           },
           response: j,
           httpStatus: r.status,
-        }),
+        },
         updated_at: new Date().toISOString(),
       } as any)
       .eq("order_reference", orderReference)
 
     if (!r.ok || !invoiceUrl) {
       return NextResponse.json(
-        { ok: false, error: "WayForPay offline url failed", httpStatus: r.status, details: j },
+        { ok: false, error: "wayforpay_offline_failed", httpStatus: r.status, details: j },
         { status: 502, headers: { "cache-control": "no-store" } }
       )
     }
@@ -256,7 +230,6 @@ export async function POST(req: NextRequest) {
       { status: 200, headers: { "cache-control": "no-store" } }
     )
 
-    // device cookie
     if (needSetDeviceCookie) {
       res.cookies.set(DEVICE_COOKIE, deviceHash, {
         path: "/",
@@ -264,24 +237,27 @@ export async function POST(req: NextRequest) {
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 365,
-        ...(cookieDomain ? { domain: cookieDomain } : {}),
+        domain: cookieDomain || domain,
       })
     }
 
-    // last order cookie
     res.cookies.set(LAST_ORDER_COOKIE, orderReference, {
       path: "/",
-      httpOnly: true,
+      httpOnly: false,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 14,
-      ...(cookieDomain ? { domain: cookieDomain } : {}),
+      maxAge: 60 * 60 * 24 * 30,
+      domain: cookieDomain || domain,
     })
+
+    for (const c of pendingCookies) {
+      res.cookies.set(c.name, c.value, c.options)
+    }
 
     return res
   } catch (e: any) {
     return NextResponse.json(
-      { ok: false, error: "create-invoice failed", details: String(e?.message || e) },
+      { ok: false, error: "create_invoice_failed", details: String(e?.message || e) },
       { status: 500, headers: { "cache-control": "no-store" } }
     )
   }

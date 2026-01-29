@@ -42,14 +42,18 @@ async function extendPaidUntil(sb: any, key: string, days: number, userId: strin
   const now = new Date()
   const nowIso = now.toISOString()
 
-  const existing = await sb
-    .from("access_grants")
-    .select("paid_until")
-    .eq("device_hash", key)
-    .maybeSingle()
+  let base = now
 
+  const existing = await sb.from("access_grants").select("paid_until").eq("device_hash", key).maybeSingle()
   const cur = toDateOrNull(existing?.data?.paid_until)
-  const base = cur && cur.getTime() > now.getTime() ? cur : now
+  if (cur && cur.getTime() > base.getTime()) base = cur
+
+  if (userId) {
+    const p = await sb.from("profiles").select("paid_until").eq("id", userId).maybeSingle()
+    const pu = toDateOrNull(p?.data?.paid_until)
+    if (pu && pu.getTime() > base.getTime()) base = pu
+  }
+
   const next = new Date(base)
   next.setUTCDate(next.getUTCDate() + days)
   const paid_until = next.toISOString()
@@ -108,13 +112,11 @@ export async function POST(req: Request) {
     const theirSignature = String(pick(body, "merchantSignature")).trim()
 
     if (!orderReference || !theirSignature) {
-      return NextResponse.json({ ok: false, error: "Bad webhook payload" }, { status: 400 })
+      return NextResponse.json({ ok: false, error: "bad_payload" }, { status: 400 })
     }
 
     const secretKey = mustEnv("WAYFORPAY_SECRET_KEY")
 
-    // Подпись ответа/статуса в WFP считается по строке:
-    // merchantAccount;orderReference;amount;currency;authCode;cardPan;transactionStatus;reasonCode :contentReference[oaicite:9]{index=9}
     const signString = [
       merchantAccount,
       orderReference,
@@ -128,7 +130,7 @@ export async function POST(req: Request) {
 
     const ourSignature = hmacMd5Hex(signString, secretKey)
     if (ourSignature.toLowerCase() !== theirSignature.toLowerCase()) {
-      return NextResponse.json({ ok: false, error: "Invalid webhook signature" }, { status: 400 })
+      return NextResponse.json({ ok: false, error: "invalid_signature" }, { status: 400 })
     }
 
     const sb = createClient(mustEnv("NEXT_PUBLIC_SUPABASE_URL"), mustEnv("SUPABASE_SERVICE_ROLE_KEY"), {
@@ -146,11 +148,12 @@ export async function POST(req: Request) {
     const userId = String((ord.data as any)?.user_id || "").trim() || null
 
     const status = mapTxToStatus(transactionStatus)
+
     await sb
       .from("billing_orders")
       .update({
         status,
-        raw: JSON.stringify({ ...body, __event: "wayforpay_webhook" }),
+        raw: { ...body, __event: "wayforpay_webhook" },
         updated_at: new Date().toISOString(),
       } as any)
       .eq("order_reference", orderReference)
@@ -158,14 +161,16 @@ export async function POST(req: Request) {
     let paidUntil: string | null = null
     if (status === "paid") {
       const days = planDays(planId)
+
       if (deviceHash) paidUntil = await extendPaidUntil(sb, deviceHash, days, null)
+
       if (userId) {
         const accountKey = `account:${userId}`
         const pu2 = await extendPaidUntil(sb, accountKey, days, userId)
-        paidUntil =
-          paidUntil && toDateOrNull(paidUntil) && toDateOrNull(pu2) && toDateOrNull(pu2)!.getTime() > toDateOrNull(paidUntil)!.getTime()
-            ? pu2
-            : (paidUntil || pu2)
+
+        const a = toDateOrNull(paidUntil)
+        const b = toDateOrNull(pu2)
+        paidUntil = a && b && b.getTime() > a.getTime() ? pu2 : (paidUntil || pu2)
 
         try {
           await sb
@@ -173,6 +178,7 @@ export async function POST(req: Request) {
             .update({
               paid_until: paidUntil,
               subscription_status: "active",
+              auto_renew: true,
               updated_at: new Date().toISOString(),
             } as any)
             .eq("id", userId)
@@ -180,7 +186,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // accept-ответ (тот же формат что для serviceUrl подтверждения) :contentReference[oaicite:10]{index=10}
     const respStatus = "accept"
     const time = Math.floor(Date.now() / 1000)
     const respSignString = [orderReference, respStatus, String(time)].join(";")
@@ -188,7 +193,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ orderReference, status: respStatus, time, signature, updated: true, paidUntil })
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: "webhook failed", details: String(e?.message || e) }, { status: 500 })
+    return NextResponse.json({ ok: false, error: "webhook_failed", details: String(e?.message || e) }, { status: 500 })
   }
 }
 

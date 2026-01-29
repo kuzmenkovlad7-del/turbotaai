@@ -11,16 +11,42 @@ function hmacMd5(str: string, key: string) {
   return crypto.createHmac("md5", key).update(str, "utf8").digest("hex")
 }
 
+function safeLower(v: any) {
+  return String(v || "").trim().toLowerCase()
+}
+
 function mapWayforpayStatus(txStatus?: string | null): BillingStatus {
-  const s = (txStatus || "").toLowerCase()
-  if (s === "approved" || s === "paid" || s === "successful" || s === "success") return "paid"
-  if (s === "inprocessing" || s === "processing" || s === "pending") return "processing"
+  const s = safeLower(txStatus)
+  if (["approved", "paid", "successful", "success"].includes(s)) return "paid"
+  if (
+    [
+      "inprocessing",
+      "processing",
+      "pending",
+      "created",
+      "wait",
+      "waiting",
+      "hold",
+      "auth",
+      "authorized",
+      "review",
+    ].includes(s)
+  ) return "processing"
+  return "failed"
+}
+
+function normalizeDbStatus(s: any): BillingStatus {
+  const v = safeLower(s)
+  if (v === "paid") return "paid"
+  if (v === "processing") return "processing"
+  if (v === "created" || v === "invoice_created" || v === "pending") return "processing"
   return "failed"
 }
 
 function pickBestStatus(statuses: string[]): BillingStatus {
-  if (statuses.includes("paid")) return "paid"
-  if (statuses.includes("processing")) return "processing"
+  const norm = statuses.map(normalizeDbStatus)
+  if (norm.includes("paid")) return "paid"
+  if (norm.includes("processing")) return "processing"
   return "failed"
 }
 
@@ -39,15 +65,33 @@ function isFutureIso(v: any) {
 
 function addDaysFrom(base: Date, days: number) {
   const x = new Date(base)
-  x.setDate(x.getDate() + days)
+  x.setUTCDate(x.getUTCDate() + days)
   return x
+}
+
+function planDays(planId: string) {
+  const p = safeLower(planId)
+  if (p === "yearly" || p === "annual" || p === "year") return 365
+  return 30
+}
+
+function parseMaybeJson(raw: any) {
+  if (!raw) return null
+  if (typeof raw === "object") return raw
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return null
+    }
+  }
+  return null
 }
 
 async function calcNextPaidUntil(admin: any, opts: { userId?: string | null; deviceHash?: string | null; days: number }) {
   const now = new Date()
   const nowIso = now.toISOString()
 
-  // base: берём максимальный paid_until из профиля или grant
   let base = now
 
   if (opts.userId) {
@@ -85,7 +129,6 @@ async function calcNextPaidUntil(admin: any, opts: { userId?: string | null; dev
 async function activatePaid(admin: any, opts: { userId?: string | null; deviceHash?: string | null; days: number }) {
   const { nextIso, nowIso } = await calcNextPaidUntil(admin, opts)
 
-  // user (аккаунт)
   if (opts.userId) {
     const accountKey = `account:${opts.userId}`
 
@@ -97,7 +140,6 @@ async function activatePaid(admin: any, opts: { userId?: string | null; deviceHa
           device_hash: accountKey,
           trial_questions_left: 0,
           paid_until: nextIso,
-          promo_until: null,
           updated_at: nowIso,
           created_at: nowIso,
         } as any,
@@ -115,7 +157,6 @@ async function activatePaid(admin: any, opts: { userId?: string | null; deviceHa
       .eq("id", opts.userId)
   }
 
-  // guest device
   if (opts.deviceHash) {
     await admin
       .from("access_grants")
@@ -125,7 +166,6 @@ async function activatePaid(admin: any, opts: { userId?: string | null; deviceHa
           device_hash: opts.deviceHash,
           trial_questions_left: 0,
           paid_until: nextIso,
-          promo_until: null,
           updated_at: nowIso,
           created_at: nowIso,
         } as any,
@@ -158,7 +198,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "missing_wayforpay_env" }, { status: 500 })
   }
 
-  // CHECK_STATUS signature: HMAC_MD5("merchantAccount;orderReference", secretKey)
   const signStr = `${merchantAccount};${orderReference}`
   const merchantSignature = hmacMd5(signStr, secretKey)
 
@@ -196,7 +235,6 @@ export async function GET(req: NextRequest) {
   const nextStatus = mapWayforpayStatus(txStatus)
   const admin = getSupabaseAdmin()
 
-  // читаем текущие статусы в БД
   const existing = await admin
     .from("billing_orders")
     .select("status, raw, updated_at, user_id, device_hash, plan_id")
@@ -211,7 +249,6 @@ export async function GET(req: NextRequest) {
   const existingStatuses = (existing.data || []).map((r: any) => String(r.status || ""))
   const bestExisting = pickBestStatus(existingStatuses)
 
-  // НЕ даём понижать paid → failed
   if (bestExisting === "paid" && nextStatus !== "paid") {
     return NextResponse.json({
       ok: true,
@@ -223,14 +260,13 @@ export async function GET(req: NextRequest) {
   }
 
   const latest = (existing.data?.[0] as any) || null
-  const latestRaw = latest?.raw || {}
+  const latestRaw = parseMaybeJson(latest?.raw) || {}
   const mergedRaw = {
-    ...(latestRaw && typeof latestRaw === "object" ? latestRaw : {}),
+    ...latestRaw,
     check: wfpJson,
     check_received_at: new Date().toISOString(),
   }
 
-  // обновляем статус заказа
   await admin
     .from("billing_orders")
     .update({
@@ -240,14 +276,12 @@ export async function GET(req: NextRequest) {
     })
     .eq("order_reference", orderReference)
 
-  // ✅ если paid -> активируем доступ (и юзеру, и гостю)
   let activatedPaidUntil: string | null = null
   if (nextStatus === "paid") {
     const userId = String(latest?.user_id || "").trim() || null
     const deviceHash = String(latest?.device_hash || "").trim() || null
     const planId = String(latest?.plan_id || "monthly").trim() || "monthly"
-
-    const days = planId === "monthly" ? 30 : 30
+    const days = planDays(planId)
 
     try {
       activatedPaidUntil = await activatePaid(admin, { userId, deviceHash, days })

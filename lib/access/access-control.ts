@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server"
+import { createServerClient } from "@supabase/ssr"
 import { getSupabaseServerClient, isSupabaseServerConfigured } from "@/lib/supabase-server"
 
 export type AccessGrant = {
@@ -41,12 +42,35 @@ function hasUnlimited(grant: AccessGrant | null) {
   return isFuture(grant.paid_until ?? null) || isFuture(grant.promo_until ?? null)
 }
 
-export async function getOrCreateGrant(deviceHash: string): Promise<AccessGrant | null> {
+async function getUserIdFromReq(req: NextRequest): Promise<string | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anon) return null
+
+  const supabase = createServerClient(url, anon, {
+    cookies: {
+      get(name: string) {
+        return req.cookies.get(name)?.value
+      },
+      set() {},
+      remove() {},
+    },
+  })
+
+  try {
+    const { data } = await supabase.auth.getUser()
+    return data?.user?.id || null
+  } catch {
+    return null
+  }
+}
+
+export async function getOrCreateGrant(deviceHash: string, trialOverride?: number): Promise<AccessGrant | null> {
   if (!deviceHash) return null
   if (!isSupabaseServerConfigured()) return null
 
   const supabase = getSupabaseServerClient()
-  const trialDefault = getTrialLimit()
+  const trialDefault = typeof trialOverride === "number" ? Math.max(0, Math.floor(trialOverride)) : getTrialLimit()
 
   const { data: existing, error: selErr } = await supabase
     .from(TABLE)
@@ -75,13 +99,14 @@ export async function getOrCreateGrant(deviceHash: string): Promise<AccessGrant 
 export async function requireAccessByDeviceHash(args: {
   deviceHash: string
   consumeTrial: boolean
+  req?: NextRequest
 }): Promise<{
   ok: boolean
   status: number
   grant: AccessGrant | null
   reason?: string
 }> {
-  const { deviceHash, consumeTrial } = args
+  const { deviceHash, consumeTrial, req } = args
 
   if (!isSupabaseServerConfigured()) {
     return { ok: true, status: 200, grant: null }
@@ -91,6 +116,14 @@ export async function requireAccessByDeviceHash(args: {
   if (!grant) return { ok: true, status: 200, grant: null }
 
   if (hasUnlimited(grant)) return { ok: true, status: 200, grant }
+
+  if (req) {
+    const userId = await getUserIdFromReq(req)
+    if (userId) {
+      const acc = await getOrCreateGrant(`account:${userId}`, 0)
+      if (hasUnlimited(acc)) return { ok: true, status: 200, grant: acc }
+    }
+  }
 
   const left = Number(grant.trial_questions_left ?? 0)
 
@@ -116,5 +149,5 @@ export async function requireAccessByDeviceHash(args: {
 
 export async function requireAccess(req: NextRequest, consumeTrial: boolean) {
   const deviceHash = getDeviceHash(req)
-  return requireAccessByDeviceHash({ deviceHash, consumeTrial })
+  return requireAccessByDeviceHash({ deviceHash, consumeTrial, req })
 }

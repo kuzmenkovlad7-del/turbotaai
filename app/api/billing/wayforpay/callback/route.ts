@@ -48,14 +48,18 @@ async function extendPaidUntil(sb: any, key: string, days: number, userId: strin
   const now = new Date()
   const nowIso = now.toISOString()
 
-  const existing = await sb
-    .from("access_grants")
-    .select("paid_until")
-    .eq("device_hash", key)
-    .maybeSingle()
+  let base = now
 
+  const existing = await sb.from("access_grants").select("paid_until").eq("device_hash", key).maybeSingle()
   const cur = toDateOrNull(existing?.data?.paid_until)
-  const base = cur && cur.getTime() > now.getTime() ? cur : now
+  if (cur && cur.getTime() > base.getTime()) base = cur
+
+  if (userId) {
+    const p = await sb.from("profiles").select("paid_until").eq("id", userId).maybeSingle()
+    const pu = toDateOrNull(p?.data?.paid_until)
+    if (pu && pu.getTime() > base.getTime()) base = pu
+  }
+
   const next = new Date(base)
   next.setUTCDate(next.getUTCDate() + days)
   const paid_until = next.toISOString()
@@ -82,12 +86,10 @@ async function readBodyAny(req: NextRequest) {
   const text = await req.text().catch(() => "")
   if (!text) return {}
 
-  // попробуем json
   try {
     return JSON.parse(text)
   } catch {}
 
-  // form-urlencoded
   const params = new URLSearchParams(text)
   const obj: any = {}
   params.forEach((v, k) => {
@@ -123,13 +125,11 @@ export async function POST(req: NextRequest) {
     const theirSignature = String(pick(body, "merchantSignature")).trim()
 
     if (!orderReference) {
-      return NextResponse.json({ ok: false, error: "missing orderReference" }, { status: 400 })
+      return NextResponse.json({ ok: false, error: "missing_orderReference" }, { status: 400 })
     }
 
     const secretKey = mustEnv("WAYFORPAY_SECRET_KEY")
 
-    // Валидация подписи (как в CHECK_STATUS response):
-    // merchantAccount;orderReference;amount;currency;authCode;cardPan;transactionStatus;reasonCode :contentReference[oaicite:7]{index=7}
     if (theirSignature) {
       const signString = [
         merchantAccount,
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
 
       if (our.toLowerCase() !== theirSignature.toLowerCase()) {
         return NextResponse.json(
-          { ok: false, error: "invalid signature", orderReference },
+          { ok: false, error: "invalid_signature", orderReference },
           { status: 400, headers: { "cache-control": "no-store" } }
         )
       }
@@ -155,7 +155,6 @@ export async function POST(req: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    // читаем заказ, чтобы понять plan_id/device_hash/user_id
     const ord = await sb
       .from("billing_orders")
       .select("plan_id, device_hash, user_id")
@@ -167,11 +166,12 @@ export async function POST(req: NextRequest) {
     const userId = String((ord.data as any)?.user_id || "").trim() || null
 
     const status = mapTxToStatus(transactionStatus)
+
     await sb
       .from("billing_orders")
       .update({
         status,
-        raw: JSON.stringify({ ...body, __event: "wayforpay_callback" }),
+        raw: { ...body, __event: "wayforpay_callback" },
         updated_at: new Date().toISOString(),
       } as any)
       .eq("order_reference", orderReference)
@@ -179,23 +179,26 @@ export async function POST(req: NextRequest) {
     let paidUntil: string | null = null
     if (status === "paid") {
       const days = planDays(planId)
+
       if (deviceHash) {
         paidUntil = await extendPaidUntil(sb, deviceHash, days, null)
       }
+
       if (userId) {
         const accountKey = `account:${userId}`
         const pu2 = await extendPaidUntil(sb, accountKey, days, userId)
-        paidUntil = paidUntil && toDateOrNull(paidUntil) && toDateOrNull(pu2) && toDateOrNull(pu2)!.getTime() > toDateOrNull(paidUntil)!.getTime()
-          ? pu2
-          : (paidUntil || pu2)
 
-        // обновим profiles (если есть такие поля)
+        const a = toDateOrNull(paidUntil)
+        const b = toDateOrNull(pu2)
+        paidUntil = a && b && b.getTime() > a.getTime() ? pu2 : (paidUntil || pu2)
+
         try {
           await sb
             .from("profiles")
             .update({
               paid_until: paidUntil,
               subscription_status: "active",
+              auto_renew: true,
               updated_at: new Date().toISOString(),
             } as any)
             .eq("id", userId)
@@ -203,8 +206,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Ответ accept для serviceUrl:
-    // {orderReference, status:"accept", time:<unix>, signature:HMAC_MD5(orderReference;status;time)} :contentReference[oaicite:8]{index=8}
     const respStatus = "accept"
     const time = Math.floor(Date.now() / 1000)
     const respSignString = [orderReference, respStatus, String(time)].join(";")
@@ -216,7 +217,7 @@ export async function POST(req: NextRequest) {
     )
   } catch (e: any) {
     return NextResponse.json(
-      { ok: false, error: "callback failed", details: String(e?.message || e) },
+      { ok: false, error: "callback_failed", details: String(e?.message || e) },
       { status: 500, headers: { "cache-control": "no-store" } }
     )
   }
