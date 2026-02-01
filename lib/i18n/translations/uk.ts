@@ -617,6 +617,7 @@ export const uk = {
   "Enter promo code": "Введіть промокод",
   "Apply": "Застосувати",
   "Subscription": "Підписка",
+  "Promo": "Промо",
   "Manage": "Керування",
   "Monthly recurring subscription": "Щомісячна підписка",
   "Access until": "Доступ до",

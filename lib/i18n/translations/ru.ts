@@ -617,6 +617,7 @@ export const ru = {
   "Enter promo code": "Введите промокод",
   "Apply": "Применить",
   "Subscription": "Подписка",
+  "Promo": "Промо",
   "Manage": "Управление",
   "Monthly recurring subscription": "Ежемесячная подписка",
   "Access until": "Доступ до",

@@ -260,10 +260,11 @@ export async function buildAccessSummary(req: NextRequest): Promise<{
 
   // ── Self-healing: check billing_orders for paid orders not yet synced to grants ──
   {
+    // Check by device_hash
     const keysToCheck = [deviceHash]
     if (accountKey) keysToCheck.push(accountKey)
 
-    const { data: paidOrders } = await admin
+    const { data: paidByDevice } = await admin
       .from("billing_orders")
       .select("device_hash,user_id,plan_id,status,updated_at")
       .in("device_hash", keysToCheck)
@@ -271,39 +272,72 @@ export async function buildAccessSummary(req: NextRequest): Promise<{
       .order("updated_at", { ascending: false })
       .limit(5)
 
-    if (paidOrders && paidOrders.length > 0) {
-      for (const ord of paidOrders) {
-        const ordDh = String(ord.device_hash || "")
-        const planId = String(ord.plan_id || "monthly").toLowerCase()
-        const days = (planId === "yearly" || planId === "annual" || planId === "year") ? 365 : 30
+    // Also check by user_id (catches orders from other devices/sessions)
+    let paidByUser: any[] = []
+    if (userId) {
+      const { data } = await admin
+        .from("billing_orders")
+        .select("device_hash,user_id,plan_id,status,updated_at")
+        .eq("user_id", userId)
+        .eq("status", "paid")
+        .order("updated_at", { ascending: false })
+        .limit(5)
+      paidByUser = data || []
+    }
 
-        // Find the grant this order belongs to
-        const target = ordDh === deviceHash ? guest : (ordDh === accountKey ? account : null)
-        if (!target) continue
+    // Merge and deduplicate
+    const allPaidOrders = [...(paidByDevice || []), ...paidByUser]
+    const seen = new Set<string>()
+    const uniqueOrders = allPaidOrders.filter((o) => {
+      const key = `${o.device_hash}:${o.updated_at}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
 
-        // Check if grant already has paid_until that covers this order
-        const grantPaid = toDateOrNull(target.paid_until)
-        const orderTime = toDateOrNull(ord.updated_at) || new Date()
-        const expectedPaid = new Date(orderTime)
-        expectedPaid.setUTCDate(expectedPaid.getUTCDate() + days)
+    for (const ord of uniqueOrders) {
+      const ordDh = String(ord.device_hash || "")
+      const planId = String(ord.plan_id || "monthly").toLowerCase()
+      const days = (planId === "yearly" || planId === "annual" || planId === "year") ? 365 : 30
 
-        // If grant has no paid_until or it's less than expected, extend it
-        if (!grantPaid || grantPaid.getTime() < expectedPaid.getTime()) {
-          const base = grantPaid && grantPaid.getTime() > Date.now() ? grantPaid : new Date()
-          const nextPaid = new Date(base)
-          nextPaid.setUTCDate(nextPaid.getUTCDate() + days)
-          const nextPaidIso = nextPaid.toISOString()
+      // Determine which grant to extend
+      let target: typeof guest | null = null
+      let targetKey: string | null = null
+      if (ordDh === deviceHash) {
+        target = guest
+        targetKey = "guest"
+      } else if (ordDh === accountKey) {
+        target = account
+        targetKey = "account"
+      } else if (userId && accountKey && account) {
+        // Order from a different device but same user — extend account grant
+        target = account
+        targetKey = "account"
+      }
+      if (!target || !targetKey) continue
 
-          await admin
-            .from("access_grants")
-            .update({ paid_until: nextPaidIso, trial_questions_left: 0, updated_at: nowIso } as any)
-            .eq("device_hash", ordDh)
+      const grantPaid = toDateOrNull(target.paid_until)
+      const orderTime = toDateOrNull(ord.updated_at) || new Date()
+      const expectedPaid = new Date(orderTime)
+      expectedPaid.setUTCDate(expectedPaid.getUTCDate() + days)
 
-          if (ordDh === deviceHash) {
-            guest = { ...guest, paid_until: nextPaidIso }
-          } else if (ordDh === accountKey && account) {
-            account = { ...account, paid_until: nextPaidIso }
-          }
+      // If grant has no paid_until or it's less than expected, extend it
+      if (!grantPaid || grantPaid.getTime() < expectedPaid.getTime()) {
+        const base = grantPaid && grantPaid.getTime() > Date.now() ? grantPaid : new Date()
+        const nextPaid = new Date(base)
+        nextPaid.setUTCDate(nextPaid.getUTCDate() + days)
+        const nextPaidIso = nextPaid.toISOString()
+
+        const updateKey = targetKey === "guest" ? deviceHash : accountKey!
+        await admin
+          .from("access_grants")
+          .update({ paid_until: nextPaidIso, trial_questions_left: 0, updated_at: nowIso } as any)
+          .eq("device_hash", updateKey)
+
+        if (targetKey === "guest") {
+          guest = { ...guest, paid_until: nextPaidIso }
+        } else if (account) {
+          account = { ...account, paid_until: nextPaidIso }
         }
       }
     }

@@ -617,6 +617,7 @@ export const en = {
   "Enter promo code": "Enter promo code",
   "Apply": "Apply",
   "Subscription": "Subscription",
+  "Promo": "Promo",
   "Manage": "Manage",
   "Monthly recurring subscription": "Monthly recurring subscription",
   "Access until": "Access until",

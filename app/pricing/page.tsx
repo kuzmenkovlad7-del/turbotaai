@@ -62,8 +62,8 @@ export default function PricingPage() {
         loggedIn: "Вхід виконано",
         access: "Доступ",
         accessFree: "Безкоштовно",
-        accessPromo: "Промокод",
-        accessUnlimited: "Безліміт",
+        accessPromo: "Промо доступ",
+        accessUnlimited: "Підписка активна",
         questionsLeft: "Залишилось запитань",
         unlimited: "Безлімітно",
         accessUntil: "Доступ до",
@@ -101,8 +101,8 @@ export default function PricingPage() {
         loggedIn: "Вход выполнен",
         access: "Доступ",
         accessFree: "Бесплатно",
-        accessPromo: "Промокод",
-        accessUnlimited: "Безлимит",
+        accessPromo: "Промо доступ",
+        accessUnlimited: "Подписка активна",
         questionsLeft: "Осталось вопросов",
         unlimited: "Безлимитно",
         accessUntil: "Доступ до",
@@ -140,8 +140,8 @@ export default function PricingPage() {
         loggedIn: "Logged in",
         access: "Access",
         accessFree: "Free",
-        accessPromo: "Promo code",
-        accessUnlimited: "Unlimited",
+        accessPromo: "Promo access",
+        accessUnlimited: "Subscription active",
         questionsLeft: "Questions left",
         unlimited: "Unlimited",
         accessUntil: "Access until",
@@ -363,10 +363,10 @@ export default function PricingPage() {
                   <span className="text-slate-900">{loadingSummary ? "…" : questionsLabel}</span>
                 </div>
 
-                {(summary?.accessUntil || summary?.access_until) && (
+                {accessUntilPretty && (
                   <div className="flex items-center justify-between">
                     <span>{copy.accessUntil}</span>
-                    <span className="text-slate-900">{loadingSummary ? "…" : accessUntilPretty || "—"}</span>
+                    <span className="text-slate-900">{loadingSummary ? "…" : accessUntilPretty}</span>
                   </div>
                 )}
               </div>

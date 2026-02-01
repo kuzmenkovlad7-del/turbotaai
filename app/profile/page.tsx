@@ -1,10 +1,12 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 
 type Summary = {
   isLoggedIn?: boolean
   email?: string | null
+  access?: string | null
   subscription_status?: string | null
   auto_renew?: boolean | null
   paid_until?: string | null
@@ -37,15 +39,8 @@ function laterIso(a: any, b: any): string | null {
   return (ta! >= tb! ? da! : db!).toISOString()
 }
 
-function subscriptionLabel(s: any) {
-  const v = String(s || "").toLowerCase()
-  if (v === "active" || v === "paid") return "Активна"
-  if (v === "canceled" || v === "cancelled") return "Скасована"
-  if (v === "paused") return "Призупинена"
-  return "—"
-}
-
 export default function ProfilePage() {
+  const router = useRouter()
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
@@ -115,7 +110,23 @@ export default function ProfilePage() {
   const isLoggedIn = Boolean(summary?.isLoggedIn)
   const email = summary?.email || null
 
-  const accessLabel = paidActive ? "Оплачено" : promoActive ? "Промо" : "Обмежено"
+  // Differentiated access label
+  const accessLabel = paidActive
+    ? "Підписка активна"
+    : promoActive
+    ? "Промо доступ"
+    : "Обмежено"
+
+  // Subscription status label
+  const subLabel = (() => {
+    const s = String(summary?.subscription_status || "").toLowerCase()
+    if (paidActive) {
+      if (s === "canceled" || s === "cancelled") return "Скасована (діє до кінця періоду)"
+      return "Активна"
+    }
+    if (promoActive) return "Промо"
+    return "—"
+  })()
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -160,7 +171,7 @@ export default function ProfilePage() {
 
                 <div className="flex items-center justify-between">
                   <div className="text-gray-500">Статус підписки:</div>
-                  <div className="font-medium">{subscriptionLabel(summary?.subscription_status)}</div>
+                  <div className="font-medium">{subLabel}</div>
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -170,6 +181,7 @@ export default function ProfilePage() {
               </div>
 
               <div className="mt-6 space-y-3">
+                {/* Subscription auto-renew button */}
                 {paidActive ? (
                   summary?.auto_renew ? (
                     <button
@@ -181,7 +193,7 @@ export default function ProfilePage() {
                     </button>
                   ) : (
                     <button
-                      className="w-full rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                      className="w-full rounded-xl border border-black bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-50"
                       disabled={busy === "sub"}
                       onClick={resumeAutoRenew}
                     >
@@ -192,11 +204,13 @@ export default function ProfilePage() {
                   <button
                     className="w-full rounded-xl border px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed"
                     disabled
+                    onClick={() => router.push("/pricing")}
                   >
                     Автопродовження доступне після оплати
                   </button>
                 )}
 
+                {/* Cancel promo button */}
                 {promoActive ? (
                   <button
                     className="w-full rounded-xl border border-black bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-50"
