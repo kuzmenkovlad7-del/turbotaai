@@ -1921,7 +1921,7 @@ if (res.status === 402) {
                           )}
                         </div>
                         <h4 className="font-semibold text-base sm:text-lg text-center mb-1 sm:mb-2">
-                          {character.name}
+                          {t(character.name)}
                         </h4>
                         <p className="text-xs sm:text-sm text-gray-600 text-center mb-3 sm:mb-4">
                           {t(character.description)}
@@ -2065,7 +2065,7 @@ if (res.status === 402) {
                   </div>
                   <div className="flex flex-col min-w-0">
                     <div className="text-xs font-semibold text-slate-800 truncate">
-                      {selectedCharacter.name}
+                      {t(selectedCharacter.name)}
                     </div>
                     <div className="text-[11px] text-slate-500 truncate">{statusText}</div>
                   </div>
@@ -2095,7 +2095,7 @@ if (res.status === 402) {
                       >
                         <p className="mb-1 flex items-center gap-1 text-[11px] font-medium text-emerald-800">
                           <Brain className="h-3.5 w-3.5" />
-                          {selectedCharacter.name}
+                          {t(selectedCharacter.name)}
                         </p>
                         <p>{msg.text}</p>
                       </div>

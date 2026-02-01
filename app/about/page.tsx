@@ -173,7 +173,7 @@ export default function AboutPage() {
                 </p>
                 <p className="mt-3 text-sm text-slate-100">
                   {t(
-                    "Your conversations stay between you and TurbotaAI. They are not used for advertising and you decide what to keep.",
+                    "Your conversations stay between you and TurbotaAI. They are not used for advertising, and you decide what to keep.",
                   )}
                 </p>
                 <p className="mt-3 text-xs text-slate-300">

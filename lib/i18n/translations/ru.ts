@@ -787,6 +787,10 @@ export const ru = {
   "A live interaction": "Живое общение",
   "Best for deeper conversations": "Лучше всего для глубоких разговоров",
   "Not sure where to start? Just begin": "Не знаете с чего начать? Просто начните",
+  // video avatar names
+  "Leo": "Лео",
+  "Mia": "Миа",
+  "Alex": "Алекс",
 } as const
 
 export default ru

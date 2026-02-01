@@ -18,7 +18,7 @@ export function middleware(req: NextRequest) {
     res.cookies.set({
       name: DEVICE_COOKIE,
       value: v,
-      httpOnly: true,
+      httpOnly: false,
       sameSite: "lax",
       secure: req.nextUrl.protocol === "https:",
       path: "/",

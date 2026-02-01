@@ -83,8 +83,7 @@ async function handler(req: Request) {
     499
   )
 
-  const forced = num(process.env.TA_FORCE_AMOUNT_UAH || "", 0)
-  const amountNumber = forced > 0 ? forced : planId === "monthly" ? monthlyPrice : monthlyPrice
+  const amountNumber = planId === "monthly" ? monthlyPrice : monthlyPrice
 
   const amount = Number(amountNumber || 0)
   const amountStr = amount.toFixed(2)
@@ -137,7 +136,7 @@ async function handler(req: Request) {
               productName,
               productCount,
               productPrice,
-              forcedAmount: forced > 0 ? forced : null,
+              forcedAmount: null,
             },
             updated_at: new Date().toISOString(),
           },
@@ -158,7 +157,7 @@ async function handler(req: Request) {
       currency,
       signString,
       merchantSignature,
-      forcedAmount: forced > 0 ? forced : null,
+      forcedAmount: null,
     })
   }
 

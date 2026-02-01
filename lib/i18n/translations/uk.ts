@@ -787,6 +787,10 @@ export const uk = {
   "A live interaction": "Живе спілкування",
   "Best for deeper conversations": "Найкраще для глибших розмов",
   "Not sure where to start? Just begin": "Не знаєте з чого почати? Просто почніть",
+  // video avatar names
+  "Leo": "Лео",
+  "Mia": "Мія",
+  "Alex": "Алекс",
 } as const
 
 export default uk

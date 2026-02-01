@@ -85,13 +85,7 @@ export async function POST(req: NextRequest) {
 
     const currency = String(body?.currency || env("WAYFORPAY_CURRENCY") || "UAH").trim() || "UAH"
 
-    let amountStr = formatAmount(body?.amount) || pickPriceFromEnv(planId)
-
-    const forcedTest =
-      formatAmount(env("WAYFORPAY_TEST_AMOUNT_UAH")) ||
-      formatAmount(env("WAYFORPAY_TEST_AMOUNT"))
-
-    if (forcedTest) amountStr = forcedTest
+    let amountStr = formatAmount(body?.amount) || pickPriceFromEnv(planId) || "499.00"
 
     if (!amountStr) {
       return NextResponse.json(

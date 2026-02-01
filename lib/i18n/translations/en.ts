@@ -790,6 +790,10 @@ export const en = {
   "A live interaction": "A live interaction",
   "Best for deeper conversations": "Best for deeper conversations",
   "Not sure where to start? Just begin": "Not sure where to start? Just begin",
+  // video avatar names
+  "Leo": "Leo",
+  "Mia": "Mia",
+  "Alex": "Alex",
 } as const
 
 export default en
