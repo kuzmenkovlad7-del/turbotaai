@@ -59,12 +59,15 @@ async function extendPaidUntil(sb: any, key: string, days: number, userId: strin
   const existing = Array.isArray(rows) ? rows[0] : null
   const cur = toDateOrNull(existing?.paid_until)
 
-  let base = now
-  if (cur && cur.getTime() > base.getTime()) base = cur
+  // IDEMPOTENT: target = now + days; only update if current < target
+  const target = new Date(now)
+  target.setUTCDate(target.getUTCDate() + days)
+  const paid_until = (cur && cur.getTime() >= target.getTime()) ? cur.toISOString() : target.toISOString()
 
-  const next = new Date(base)
-  next.setUTCDate(next.getUTCDate() + days)
-  const paid_until = next.toISOString()
+  // Skip DB write if grant already has sufficient paid_until
+  if (cur && cur.getTime() >= target.getTime() && existing?.id) {
+    return paid_until
+  }
 
   if (existing?.id) {
     // Update existing row by ID (most reliable)

@@ -132,8 +132,14 @@ async function extendPaidUntil(admin: any, key: string, days: number, userId: st
   const existing = Array.isArray(rows) ? rows[0] : null
 
   const current = toDateOrNull((existing as any)?.paid_until)
-  const base = current && current.getTime() > now.getTime() ? current : now
-  const nextPaid = addDays(base, days).toISOString()
+  // IDEMPOTENT: target = now + days; skip if current >= target
+  const target = addDays(now, days)
+  const nextPaid = (current && current.getTime() >= target.getTime()) ? current.toISOString() : target.toISOString()
+
+  // Skip DB write if grant already has sufficient paid_until
+  if (current && current.getTime() >= target.getTime() && (existing as any)?.id) {
+    return nextPaid
+  }
 
   if ((existing as any)?.id) {
     const up = await admin
@@ -261,7 +267,8 @@ export async function GET(req: NextRequest) {
 
     const keys: Array<{ key: string; userId: string | null }> = []
     if (orderDeviceHash) keys.push({ key: orderDeviceHash, userId: null })
-    if (deviceHash && deviceHash !== orderDeviceHash) keys.push({ key: deviceHash, userId: null })
+    // NOTE: Do NOT create grants for deviceHash if different from orderDeviceHash — avoid orphan rows.
+    // The cookie will be set to orderDeviceHash below.
     if (effectiveUserId) keys.push({ key: `${ACCOUNT_PREFIX}${effectiveUserId}`, userId: effectiveUserId })
 
     for (const k of keys) {

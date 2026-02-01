@@ -111,7 +111,8 @@ async function wfpCheckStatus(orderReference: string) {
 async function extendGrantForDevice(admin: any, deviceHash: string, planId: string, userId: string | null) {
   if (!deviceHash) return null
 
-  const nowIso = new Date().toISOString()
+  const now = new Date()
+  const nowIso = now.toISOString()
   const days = planDays(planId)
 
   // Find existing grant by device_hash
@@ -125,10 +126,15 @@ async function extendGrantForDevice(admin: any, deviceHash: string, planId: stri
   const existing = Array.isArray(rows) ? rows[0] : null
 
   const curPaid = toDateOrNull(existing?.paid_until)
-  const base = curPaid && curPaid.getTime() > Date.now() ? curPaid.getTime() : Date.now()
-  const next = new Date(base)
-  next.setUTCDate(next.getUTCDate() + days)
-  const nextIso = next.toISOString()
+  // IDEMPOTENT: target = now + days; skip if current >= target
+  const target = new Date(now)
+  target.setUTCDate(target.getUTCDate() + days)
+  const nextIso = (curPaid && curPaid.getTime() >= target.getTime()) ? curPaid.toISOString() : target.toISOString()
+
+  // Skip DB write if grant already has sufficient paid_until
+  if (curPaid && curPaid.getTime() >= target.getTime() && existing?.id) {
+    return nextIso
+  }
 
   if (existing?.id) {
     // Update existing row by ID (most reliable)
@@ -257,15 +263,8 @@ async function handle(req: NextRequest) {
         ensuredPaidUntil = await extendGrantForDevice(admin, orderDeviceHash, planId, null)
       }
 
-      // Also extend for current cookie's device_hash if different
-      if (currentDeviceHash && currentDeviceHash !== orderDeviceHash) {
-        const pu2 = await extendGrantForDevice(admin, currentDeviceHash, planId, null)
-        if (pu2) {
-          const a = toDateOrNull(ensuredPaidUntil)
-          const b = toDateOrNull(pu2)
-          if (a && b && b.getTime() > a.getTime()) ensuredPaidUntil = pu2
-        }
-      }
+      // NOTE: Do NOT create grants for currentDeviceHash if it differs from orderDeviceHash.
+      // The cookie will be set to orderDeviceHash below, avoiding orphan rows.
 
       // Extend for account key if user is logged in
       if (orderUserId) {

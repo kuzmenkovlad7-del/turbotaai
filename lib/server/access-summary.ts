@@ -317,16 +317,14 @@ export async function buildAccessSummary(req: NextRequest): Promise<{
       if (!target || !targetKey) continue
 
       const grantPaid = toDateOrNull(target.paid_until)
-      const orderTime = toDateOrNull(ord.updated_at) || new Date()
-      const expectedPaid = new Date(orderTime)
-      expectedPaid.setUTCDate(expectedPaid.getUTCDate() + days)
 
-      // If grant has no paid_until or it's less than expected, extend it
-      if (!grantPaid || grantPaid.getTime() < expectedPaid.getTime()) {
-        const base = grantPaid && grantPaid.getTime() > Date.now() ? grantPaid : new Date()
-        const nextPaid = new Date(base)
-        nextPaid.setUTCDate(nextPaid.getUTCDate() + days)
-        const nextPaidIso = nextPaid.toISOString()
+      // IDEMPOTENT: target paid_until = now + days (same as what webhook/callback would set)
+      const targetDate = new Date()
+      targetDate.setUTCDate(targetDate.getUTCDate() + days)
+
+      // Only heal if grant doesn't already have sufficient paid_until
+      if (!grantPaid || grantPaid.getTime() < targetDate.getTime()) {
+        const nextPaidIso = targetDate.toISOString()
 
         const updateKey = targetKey === "guest" ? deviceHash : accountKey!
         await admin
