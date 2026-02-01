@@ -98,11 +98,6 @@ export default function AboutPage() {
                       "• Responses adapt to your state during the conversation.",
                     )}
                   </li>
-                  <li>
-                    {t(
-                      "• Works in 10+ languages. You can switch language at any moment.",
-                    )}
-                  </li>
                 </ul>
               </div>
 

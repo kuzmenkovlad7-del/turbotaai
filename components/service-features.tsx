@@ -4,9 +4,10 @@
 import {
   CreditCard,
   UserCircle,
-  Globe,
+  MessageSquare,
   BarChart,
   Shield,
+  Zap,
 } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 
@@ -16,37 +17,44 @@ export default function ServiceFeatures() {
   const features = [
     {
       icon: UserCircle,
-      title: t("Feels like a calm conversation with someone nearby"),
+      title: t("Like a calm talk with someone nearby"),
       description: t(
-        "TurbotaAI listens carefully, asks gentle questions and helps you find next steps at your own pace.",
+        "TurbotaAI listens carefully, asks gentle questions, and helps you find the next steps at your pace.",
       ),
     },
     {
-      icon: Globe,
-      title: t("Supports 10+ languages"),
+      icon: MessageSquare,
+      title: t("Choose your format"),
       description: t(
-        "Choose the language you need and switch at any moment.",
+        "Type in chat, talk by voice, or use video. Pick what feels most comfortable right now.",
       ),
     },
     {
       icon: BarChart,
-      title: t("From conversation to personal support"),
+      title: t("From a conversation to personal support"),
       description: t(
-        "TurbotaAI can be an attentive companion when you are bored, feeling down, or just want to talk. Short conversations, gentle exercises and personal recommendations adapt to you during the conversation.",
+        "Short talks, gentle exercises, and simple suggestions adapt to you during the dialogue.",
       ),
     },
     {
       icon: Shield,
-      title: t("Private and protected space"),
+      title: t("Private and safe space"),
       description: t(
-        "Your conversations stay between you and TurbotaAI. They are not used for advertising and you decide what to keep.",
+        "Your conversations stay between you and TurbotaAI. They are not used for advertising, and you decide what to keep.",
       ),
     },
     {
       icon: CreditCard,
-      title: t("Start for free. Continue if it suits you"),
+      title: t("Start for free"),
       description: t(
-        "No hidden fees.",
+        "Try it at your pace. Continue if it fits, with no hidden charges.",
+      ),
+    },
+    {
+      icon: Zap,
+      title: t("Easy to begin"),
+      description: t(
+        "No waiting and no complex forms. Open TurbotaAI and choose chat, voice, or video.",
       ),
     },
   ]

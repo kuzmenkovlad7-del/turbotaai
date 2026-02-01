@@ -335,12 +335,7 @@ export default function PricingPage() {
 
             <div className="mt-6 py-4">
               <div role="button" tabIndex={0} onClick={handleSubscribe} className="cursor-pointer" title={copy.subscribe}>
-                <div className="hidden sm:block">
-                  <TurbotaHoloCard title="TurbotaAI" subtitle="TurbotaAI Monthly" height={260} />
-                </div>
-                <div className="block sm:hidden" style={{ aspectRatio: "1.586" }}>
-                  <TurbotaHoloCard title="TurbotaAI" subtitle="TurbotaAI Monthly" height="100%" />
-                </div>
+                <TurbotaHoloCard title="TurbotaAI" subtitle="TurbotaAI Monthly" height={260} />
               </div>
             </div>
 

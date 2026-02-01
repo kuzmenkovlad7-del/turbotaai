@@ -424,13 +424,14 @@ export default function VideoCallDialog({
   const activeLanguage =
     currentLanguage || ({ code: "en", name: "English", flag: "🇺��" } as any)
 
-  const languageDisplayName =
+  const languageDisplayName = t(
     activeLanguage.name ||
     (activeLanguage.code === "uk"
       ? "Ukrainian"
       : activeLanguage.code === "ru"
       ? "Russian"
-      : "English")
+      : "English"),
+  )
 
   const currentLocale = getLocaleForLanguage(activeLanguage.code)
   const nativeVoicePreferences = getNativeVoicePreferences()
@@ -1956,8 +1957,8 @@ if (res.status === 402) {
               </div>
             </div>
           ) : (
-            <div className="flex-1 min-h-0 grid grid-rows-[auto_minmax(0,1fr)] gap-3 sm:gap-4 sm:grid-rows-none sm:flex sm:flex-row">
-              {/* LEFT: VIDEO (mobile fixed height, never collapses) */}
+            <div className="flex-1 min-h-0 grid grid-rows-[minmax(200px,1.5fr)_minmax(0,1fr)] gap-3 sm:gap-4 sm:grid-rows-none sm:flex sm:flex-row">
+              {/* LEFT: VIDEO (mobile gets at least 200px via grid row, desktop uses flex) */}
               <div className="row-start-1 w-full sm:w-2/3 flex flex-col min-h-0">
                 <div className="relative w-full flex-1 bg-white rounded-lg overflow-hidden">
                   <div className="absolute inset-0 bg-white overflow-hidden">

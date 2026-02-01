@@ -187,7 +187,11 @@ export default function Header() {
 
   const scrollToAssistant = () => {
     const el = document.querySelector("#assistant")
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" })
+    } else if (pathname !== "/") {
+      window.location.assign("/#assistant")
+    }
   }
 
   const badgeText =

@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { MessageCircle, Phone, Video, Sparkles, ChevronDown, X } from "lucide-react"
+import { useLanguage } from "@/lib/i18n/language-context"
 
 type Lang = "uk" | "ru" | "en"
 type ControlledDialogProps = { open?: boolean; onOpenChange?: (v: boolean) => void }
@@ -23,7 +24,12 @@ const VideoCallDialog = dynamic<ControlledDialogProps>(
 )
 
 export default function AssistantFab() {
-  const [lang, setLang] = useState<Lang>("uk")
+  const { currentLanguage } = useLanguage()
+
+  const lang: Lang = useMemo(() => {
+    const code = String(currentLanguage?.code || "uk").toLowerCase()
+    return code.startsWith("ru") ? "ru" : code.startsWith("en") ? "en" : "uk"
+  }, [currentLanguage?.code])
 
   const [panelOpen, setPanelOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
@@ -31,12 +37,6 @@ export default function AssistantFab() {
   const [videoOpen, setVideoOpen] = useState(false)
 
   const anyDialogOpen = chatOpen || voiceOpen || videoOpen
-
-  useEffect(() => {
-    const raw = (document.documentElement.lang || "uk").toLowerCase()
-    const v: Lang = raw.startsWith("ru") ? "ru" : raw.startsWith("en") ? "en" : "uk"
-    setLang(v)
-  }, [])
 
   const copy = useMemo(() => {
     const c = {
