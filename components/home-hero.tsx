@@ -12,9 +12,9 @@ export function HomeHero() {
   const { t } = useLanguage()
 
   const chips = [
-    t("When it feels bad right now"),
-    t("Anxiety, stress & burnout"),
-    t("7–21 day support programs"),
+    t("For calm conversations"),
+    t("For inner balance"),
+    t("For moments when support matters"),
   ]
 
   return (
@@ -46,20 +46,18 @@ export function HomeHero() {
           </div>
 
           <h1 className="mb-5 text-3xl font-bold leading-tight text-slate-900 sm:text-4xl md:text-5xl">
-            {t("Support for everyday conversations, powered by AI")}
+            {t("AI companion that is always nearby")}
           </h1>
 
           <p className="mb-7 max-w-lg text-sm text-slate-600 sm:text-base">
-            {t(
-              t("TurbotaAI listens carefully, asks gentle clarifying questions and helps you take the next step at your own pace."),
-            )}
+            {t("A calm and safe space for conversation. Talk, calm down and feel support from AI designed for emotional care.")}
           </p>
 
           {/* Кнопки */}
           <div className="mb-6 flex flex-wrap items-center gap-3">
             <a href="#assistant">
               <RainbowButton className="h-12 rounded-full px-7 text-sm font-semibold text-white">
-                <span>{t("Start for free")}</span>
+                <span>{t("Talk to AI")}</span>
                 <ArrowRight className="h-4 w-4" />
               </RainbowButton>
             </a>
@@ -116,10 +114,10 @@ export function HomeHero() {
               </div>
               <div className="space-y-0.5">
                 <p className="text-xs font-semibold text-slate-900">
-                  {t("3 assistant modes · chat · voice · video")}
+                  {t("Your AI companion in any format — text, voice or video")}
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  {t("Choose how it's more comfortable for you to talk.")}
+                  {t("Just start")}
                 </p>
               </div>
             </div>

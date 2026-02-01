@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
+import { useLanguage } from "@/lib/i18n/language-context"
 
 type OrderStatus = "pending" | "paid" | "failed"
 
@@ -14,7 +15,6 @@ type StatusResp = {
   details?: string | null
 }
 
-const PAY_FAIL_PUBLIC_TEXT = "Оплату не підтверджено. Перевірте дані картки, ліміт або спробуйте іншу."
 const MAX_TRIES = 10
 const RETRY_MS = 2500
 
@@ -38,9 +38,63 @@ async function fetchStatus(orderReference: string): Promise<{ st: OrderStatus; d
 }
 
 export default function PaymentResultPage() {
+  const { currentLanguage } = useLanguage()
   const sp = useSearchParams()
   const orderReference = (sp.get("orderReference") || "").trim()
   const debug = sp.get("debug") === "1"
+
+  const lang = useMemo(() => {
+    const code = String(currentLanguage?.code || "uk").toLowerCase()
+    return code.startsWith("ru") ? "ru" : code.startsWith("en") ? "en" : "uk"
+  }, [currentLanguage?.code])
+
+  const copy = useMemo(() => {
+    const c = {
+      uk: {
+        title: "Результат оплати",
+        checkCode: "Чек-код",
+        paid: "Оплату підтверджено. Доступ активовано.",
+        pending: "Оплату поки не підтверджено. Якщо Ви оплатили, зачекайте або натисніть Перевірити знову.",
+        attempt: "Спроба",
+        failed: "Оплата не пройшла.",
+        failDetail: "Оплату не підтверджено. Перевірте дані картки, ліміт або спробуйте іншу.",
+        goProfile: "Перейти в профіль",
+        checking: "Перевіряємо...",
+        checkAgain: "Перевірити знову",
+        pricing: "Тарифи",
+        tip: "Порада: щоб не втратити доступ при очищенні cookie, увійдіть або зареєструйтесь і привʼяжіть доступ до аккаунта.",
+      },
+      ru: {
+        title: "Результат оплаты",
+        checkCode: "Чек-код",
+        paid: "Оплата подтверждена. Доступ активирован.",
+        pending: "Оплата пока не подтверждена. Если Вы оплатили, подождите или нажмите Проверить снова.",
+        attempt: "Попытка",
+        failed: "Оплата не прошла.",
+        failDetail: "Оплата не подтверждена. Проверьте данные карты, лимит или попробуйте другую.",
+        goProfile: "Перейти в профиль",
+        checking: "Проверяем...",
+        checkAgain: "Проверить снова",
+        pricing: "Тарифы",
+        tip: "Совет: чтобы не потерять доступ при очистке cookie, войдите или зарегистрируйтесь и привяжите доступ к аккаунту.",
+      },
+      en: {
+        title: "Payment result",
+        checkCode: "Reference",
+        paid: "Payment confirmed. Access activated.",
+        pending: "Payment not confirmed yet. If you paid, please wait or press Check again.",
+        attempt: "Attempt",
+        failed: "Payment failed.",
+        failDetail: "Payment not confirmed. Check your card details, limit or try another card.",
+        goProfile: "Go to profile",
+        checking: "Checking...",
+        checkAgain: "Check again",
+        pricing: "Pricing",
+        tip: "Tip: to keep access when clearing cookies, sign in or register and link access to your account.",
+      },
+    }
+    return c[lang as "uk" | "ru" | "en"]
+  }, [lang])
 
   const [status, setStatus] = useState<OrderStatus>("pending")
   const [details, setDetails] = useState<string | null>(null)
@@ -49,7 +103,7 @@ export default function PaymentResultPage() {
 
   const timerRef = useRef<any>(null)
 
-  const subtitle = orderReference ? `Чек-код: ${orderReference}` : "Чек-код: —"
+  const subtitle = orderReference ? `${copy.checkCode}: ${orderReference}` : `${copy.checkCode}: —`
 
   const checkOnce = async () => {
     if (!orderReference) return
@@ -112,28 +166,28 @@ export default function PaymentResultPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-16">
       <div className="mx-auto w-full max-w-xl rounded-2xl border bg-white p-8 shadow-sm">
-        <div className="text-2xl font-semibold">Результат оплати</div>
+        <div className="text-2xl font-semibold">{copy.title}</div>
         <div className="mt-2 text-sm text-gray-500">{subtitle}</div>
 
         {showPaid ? (
           <div className="mt-6 rounded-xl bg-green-50 p-4 text-sm text-green-900">
-            Оплату підтверджено. Доступ активовано.
+            {copy.paid}
           </div>
         ) : null}
 
         {showPending ? (
           <div className="mt-6 rounded-xl bg-gray-50 p-4 text-sm text-gray-900">
-            Оплату поки не підтверджено. Якщо Ви оплатили, зачекайте або натисніть Перевірити знову.
+            {copy.pending}
             <div className="mt-2 text-xs text-gray-500">
-              Спроба: {tries}/{MAX_TRIES}
+              {copy.attempt}: {tries}/{MAX_TRIES}
             </div>
           </div>
         ) : null}
 
         {showFailed ? (
           <div className="mt-6 rounded-xl bg-red-50 p-4 text-sm text-red-900">
-            Оплата не пройшла.
-            <div className="mt-2 text-red-700">{PAY_FAIL_PUBLIC_TEXT}</div>
+            {copy.failed}
+            <div className="mt-2 text-red-700">{copy.failDetail}</div>
             {debug && details ? <div className="mt-2 text-xs text-red-700">Debug: {details}</div> : null}
           </div>
         ) : null}
@@ -144,7 +198,7 @@ export default function PaymentResultPage() {
               className="w-full rounded-xl bg-black px-4 py-2 text-sm font-medium text-white"
               onClick={() => window.location.assign("/profile")}
             >
-              Перейти в профіль
+              {copy.goProfile}
             </button>
           ) : (
             <button
@@ -155,7 +209,7 @@ export default function PaymentResultPage() {
                 await checkOnce()
               }}
             >
-              {loading ? "Перевіряємо..." : "Перевірити знову"}
+              {loading ? copy.checking : copy.checkAgain}
             </button>
           )}
 
@@ -163,13 +217,13 @@ export default function PaymentResultPage() {
             className="w-full rounded-xl border px-4 py-2 text-sm font-medium"
             onClick={() => window.location.assign("/pricing")}
           >
-            Тарифи
+            {copy.pricing}
           </button>
         </div>
 
         {showPaid ? (
           <div className="mt-6 text-xs text-gray-500">
-            Порада: щоб не втратити доступ при очищенні cookie, увійдіть або зареєструйтесь і привʼяжіть доступ до аккаунта.
+            {copy.tip}
           </div>
         ) : null}
       </div>

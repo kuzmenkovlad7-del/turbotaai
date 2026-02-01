@@ -1805,7 +1805,13 @@ if (res.status === 402) {
     }
   }
 
-  if (!isOpen) return null
+  // Compatibility shim: support 'open' / 'onOpenChange' from AssistantFab
+  const __props: any = (typeof arguments !== "undefined" ? (arguments as any)[0] : undefined)
+  const controlledOpen: boolean | undefined = typeof __props?.open === "boolean" ? __props.open : undefined
+  const extOnOpenChange: ((v: boolean) => void) | undefined = typeof __props?.onOpenChange === "function" ? __props.onOpenChange : undefined
+
+  const effectiveOpen = controlledOpen ?? isOpen
+  if (!effectiveOpen) return null
 
   const micOn = isCallActive && !isMicMuted && isListening && !isAiSpeaking
 
@@ -1842,7 +1848,8 @@ if (res.status === 402) {
             size="icon"
             onClick={() => {
               endCall()
-              onClose()
+              if (typeof onClose === "function") onClose()
+              if (typeof extOnOpenChange === "function") extOnOpenChange(false)
             }}
             className="min-w-[44px] min-h-[44px] flex-shrink-0 rounded-full bg-black/20 hover:bg-black/30 text-white"
           >
