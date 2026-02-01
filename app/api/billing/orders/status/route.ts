@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { createClient } from "@supabase/supabase-js"
-import { createHmac } from "crypto"
+import { createHmac, randomUUID } from "crypto"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const WFP_API = "https://api.wayforpay.com/api"
 const DEVICE_COOKIE = "ta_device_hash"
+const ACCOUNT_PREFIX = "account:"
 
 function env(name: string) {
   return String(process.env[name] || "").trim()
@@ -67,6 +69,12 @@ function addDaysISO(fromISO: string, days: number) {
   return d.toISOString()
 }
 
+function cookieDomainFromHost(host: string | null) {
+  const h = String(host || "").toLowerCase()
+  if (h === "turbotaai.com" || h.endsWith(".turbotaai.com")) return ".turbotaai.com"
+  return undefined
+}
+
 async function wfpCheckStatus(orderReference: string) {
   const merchantAccount =
     env("WAYFORPAY_MERCHANT_ACCOUNT") || env("WFP_MERCHANT_ACCOUNT")
@@ -96,41 +104,62 @@ async function wfpCheckStatus(orderReference: string) {
   return { ok: r.ok, httpStatus: r.status, data }
 }
 
-async function ensureGrantForDevice(admin: any, deviceHash: string, planId: string) {
+/**
+ * Robust grant extension: find existing row by device_hash, update by ID.
+ * Falls back to insert if no row exists.
+ */
+async function extendGrantForDevice(admin: any, deviceHash: string, planId: string, userId: string | null) {
   if (!deviceHash) return null
 
-  const now = new Date().toISOString()
+  const nowIso = new Date().toISOString()
   const days = planDays(planId)
 
-  const cur = await admin
+  // Find existing grant by device_hash
+  const { data: rows } = await admin
     .from("access_grants")
-    .select("paid_until,user_id")
+    .select("id,paid_until,user_id,device_hash")
     .eq("device_hash", deviceHash)
     .order("updated_at", { ascending: false })
     .limit(1)
-    .maybeSingle()
 
-  const base =
-    cur.data?.paid_until && new Date(cur.data.paid_until).getTime() > Date.now()
-      ? cur.data.paid_until
-      : now
+  const existing = Array.isArray(rows) ? rows[0] : null
 
-  const next = addDaysISO(base, days)
+  const curPaid = toDateOrNull(existing?.paid_until)
+  const base = curPaid && curPaid.getTime() > Date.now() ? curPaid.getTime() : Date.now()
+  const next = new Date(base)
+  next.setUTCDate(next.getUTCDate() + days)
+  const nextIso = next.toISOString()
 
-  await admin
-    .from("access_grants")
-    .upsert(
-      {
+  if (existing?.id) {
+    // Update existing row by ID (most reliable)
+    const patch: Record<string, any> = {
+      paid_until: nextIso,
+      trial_questions_left: 0,
+      updated_at: nowIso,
+    }
+    if (userId && !existing.user_id) patch.user_id = userId
+
+    await admin
+      .from("access_grants")
+      .update(patch as any)
+      .eq("id", existing.id)
+  } else {
+    // No row exists — insert with all required fields
+    await admin
+      .from("access_grants")
+      .insert({
+        id: randomUUID(),
         device_hash: deviceHash,
-        user_id: cur.data?.user_id ?? null,
-        paid_until: next,
+        user_id: userId,
+        paid_until: nextIso,
+        promo_until: null,
         trial_questions_left: 0,
-        updated_at: now,
-      } as any,
-      { onConflict: "device_hash" }
-    )
+        created_at: nowIso,
+        updated_at: nowIso,
+      } as any)
+  }
 
-  return next
+  return nextIso
 }
 
 async function handle(req: NextRequest) {
@@ -141,6 +170,13 @@ async function handle(req: NextRequest) {
   if (!orderReference) {
     return NextResponse.json({ ok: false, error: "Missing orderReference" }, { status: 400, headers: noStore() })
   }
+
+  const host = req.headers.get("host")
+  const domain = cookieDomainFromHost(host)
+
+  // Read current device cookie
+  const jar = cookies()
+  let currentDeviceHash = String(jar.get(DEVICE_COOKIE)?.value || "").trim()
 
   try {
     const admin = sbAdmin()
@@ -210,22 +246,35 @@ async function handle(req: NextRequest) {
 
     // If paid, ensure access grants are extended
     let ensuredPaidUntil: string | null = null
+    const orderDeviceHash = String((data as any).device_hash || "").trim()
+    const orderUserId = String((data as any).user_id || "").trim() || null
+
     if (status === "paid") {
       const planId = String((data as any).plan_id || "monthly")
-      const dh = String((data as any).device_hash || "")
-      const uid = String((data as any).user_id || "").trim() || null
 
-      if (dh) {
-        ensuredPaidUntil = await ensureGrantForDevice(admin, dh, planId)
+      // Extend grant for the order's device_hash (primary)
+      if (orderDeviceHash) {
+        ensuredPaidUntil = await extendGrantForDevice(admin, orderDeviceHash, planId, null)
       }
 
-      if (uid) {
-        const accountKey = `account:${uid}`
-        const pu2 = await ensureGrantForDevice(admin, accountKey, planId)
+      // Also extend for current cookie's device_hash if different
+      if (currentDeviceHash && currentDeviceHash !== orderDeviceHash) {
+        const pu2 = await extendGrantForDevice(admin, currentDeviceHash, planId, null)
         if (pu2) {
           const a = toDateOrNull(ensuredPaidUntil)
           const b = toDateOrNull(pu2)
-          ensuredPaidUntil = a && b && b.getTime() > a.getTime() ? pu2 : (ensuredPaidUntil || pu2)
+          if (a && b && b.getTime() > a.getTime()) ensuredPaidUntil = pu2
+        }
+      }
+
+      // Extend for account key if user is logged in
+      if (orderUserId) {
+        const accountKey = `${ACCOUNT_PREFIX}${orderUserId}`
+        const pu3 = await extendGrantForDevice(admin, accountKey, planId, orderUserId)
+        if (pu3) {
+          const a = toDateOrNull(ensuredPaidUntil)
+          const b = toDateOrNull(pu3)
+          if (a && b && b.getTime() > a.getTime()) ensuredPaidUntil = pu3
         }
 
         // Sync profiles metadata
@@ -241,7 +290,7 @@ async function handle(req: NextRequest) {
                 canceled_at: null,
                 updated_at: new Date().toISOString(),
               } as any)
-              .eq("id", uid)
+              .eq("id", orderUserId)
           } catch {}
         }
       }
@@ -252,7 +301,7 @@ async function handle(req: NextRequest) {
     const reason = rawObj?.reason ?? rawObj?.message ?? null
     const reasonCode = rawObj?.reasonCode ?? rawObj?.reason_code ?? null
 
-    return NextResponse.json(
+    const res = NextResponse.json(
       {
         ok: true,
         found: true,
@@ -269,6 +318,20 @@ async function handle(req: NextRequest) {
       },
       { status: 200, headers: noStore() }
     )
+
+    // Set device cookie to match order's device_hash (ensures consistency)
+    if (orderDeviceHash && status === "paid") {
+      res.cookies.set(DEVICE_COOKIE, orderDeviceHash, {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 60 * 60 * 24 * 365,
+        domain,
+      })
+    }
+
+    return res
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "status failed", details: String(e?.message || e) },

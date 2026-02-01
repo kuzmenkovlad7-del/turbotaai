@@ -42,31 +42,48 @@ async function extendPaidUntil(sb: any, key: string, days: number, userId: strin
   const now = new Date()
   const nowIso = now.toISOString()
 
+  // Find existing grant by device_hash
+  const { data: rows } = await sb
+    .from("access_grants")
+    .select("id,paid_until,user_id")
+    .eq("device_hash", key)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+
+  const existing = Array.isArray(rows) ? rows[0] : null
+  const cur = toDateOrNull(existing?.paid_until)
+
   let base = now
-
-  const existing = await sb.from("access_grants").select("paid_until").eq("device_hash", key).maybeSingle()
-  const cur = toDateOrNull(existing?.data?.paid_until)
   if (cur && cur.getTime() > base.getTime()) base = cur
-
-  if (userId) {
-    const p = await sb.from("profiles").select("paid_until").eq("id", userId).maybeSingle()
-    const pu = toDateOrNull(p?.data?.paid_until)
-    if (pu && pu.getTime() > base.getTime()) base = pu
-  }
 
   const next = new Date(base)
   next.setUTCDate(next.getUTCDate() + days)
   const paid_until = next.toISOString()
 
-  const payload: any = {
-    device_hash: key,
-    paid_until,
-    trial_questions_left: 0,
-    updated_at: nowIso,
+  if (existing?.id) {
+    // Update existing row by ID (most reliable)
+    const patch: Record<string, any> = {
+      paid_until,
+      trial_questions_left: 0,
+      updated_at: nowIso,
+    }
+    if (userId && !existing.user_id) patch.user_id = userId
+    await sb.from("access_grants").update(patch).eq("id", existing.id)
+  } else {
+    // No row exists — insert with all fields
+    const { randomUUID } = await import("crypto")
+    await sb.from("access_grants").insert({
+      id: randomUUID(),
+      device_hash: key,
+      user_id: userId,
+      paid_until,
+      promo_until: null,
+      trial_questions_left: 0,
+      created_at: nowIso,
+      updated_at: nowIso,
+    } as any)
   }
-  if (userId) payload.user_id = userId
 
-  await sb.from("access_grants").upsert(payload, { onConflict: "device_hash" })
   return paid_until
 }
 

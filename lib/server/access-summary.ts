@@ -255,8 +255,59 @@ export async function buildAccessSummary(req: NextRequest): Promise<{
     return { summary: s, pendingCookies: pending, needSetDeviceCookie, deviceHash, cookieDomain }
   }
 
-  const guest = await ensureGrant(admin, deviceHash, null, trial, nowIso)
+  let guest = await ensureGrant(admin, deviceHash, null, trial, nowIso)
   let account = accountKey ? await ensureGrant(admin, accountKey, userId!, 0, nowIso) : null
+
+  // ── Self-healing: check billing_orders for paid orders not yet synced to grants ──
+  {
+    const keysToCheck = [deviceHash]
+    if (accountKey) keysToCheck.push(accountKey)
+
+    const { data: paidOrders } = await admin
+      .from("billing_orders")
+      .select("device_hash,user_id,plan_id,status,updated_at")
+      .in("device_hash", keysToCheck)
+      .eq("status", "paid")
+      .order("updated_at", { ascending: false })
+      .limit(5)
+
+    if (paidOrders && paidOrders.length > 0) {
+      for (const ord of paidOrders) {
+        const ordDh = String(ord.device_hash || "")
+        const planId = String(ord.plan_id || "monthly").toLowerCase()
+        const days = (planId === "yearly" || planId === "annual" || planId === "year") ? 365 : 30
+
+        // Find the grant this order belongs to
+        const target = ordDh === deviceHash ? guest : (ordDh === accountKey ? account : null)
+        if (!target) continue
+
+        // Check if grant already has paid_until that covers this order
+        const grantPaid = toDateOrNull(target.paid_until)
+        const orderTime = toDateOrNull(ord.updated_at) || new Date()
+        const expectedPaid = new Date(orderTime)
+        expectedPaid.setUTCDate(expectedPaid.getUTCDate() + days)
+
+        // If grant has no paid_until or it's less than expected, extend it
+        if (!grantPaid || grantPaid.getTime() < expectedPaid.getTime()) {
+          const base = grantPaid && grantPaid.getTime() > Date.now() ? grantPaid : new Date()
+          const nextPaid = new Date(base)
+          nextPaid.setUTCDate(nextPaid.getUTCDate() + days)
+          const nextPaidIso = nextPaid.toISOString()
+
+          await admin
+            .from("access_grants")
+            .update({ paid_until: nextPaidIso, trial_questions_left: 0, updated_at: nowIso } as any)
+            .eq("device_hash", ordDh)
+
+          if (ordDh === deviceHash) {
+            guest = { ...guest, paid_until: nextPaidIso }
+          } else if (ordDh === accountKey && account) {
+            account = { ...account, paid_until: nextPaidIso }
+          }
+        }
+      }
+    }
+  }
 
   // ── Auto-claim: persist guest dates into account grant ───────────
   if (userId && account) {

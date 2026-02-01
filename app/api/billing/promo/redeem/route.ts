@@ -234,12 +234,16 @@ export async function POST(req: NextRequest) {
     )
 
     if (needSetDeviceCookie) {
+      const host = req.headers.get("host")
+      const h = String(host || "").toLowerCase()
+      const ckDomain = (h === "turbotaai.com" || h.endsWith(".turbotaai.com")) ? ".turbotaai.com" : undefined
       res.cookies.set(DEVICE_COOKIE, deviceUuid, {
         path: "/",
         httpOnly: true,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 365,
+        domain: ckDomain,
       })
     }
 

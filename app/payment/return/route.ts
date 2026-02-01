@@ -41,29 +41,26 @@ async function readAnyBody(req: NextRequest): Promise<any> {
   return out
 }
 
-async function triggerCheck(origin: string, orderReference: string) {
+async function triggerSync(origin: string, orderReference: string) {
+  // Try sync endpoint (GET with orderReference param)
   try {
-    const url = new URL("/api/billing/wayforpay/check", origin)
-    const r = await fetch(url.toString(), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ orderReference }),
-      cache: "no-store",
-    })
-    console.log("[PAYMENT RETURN] check POST status:", r.status)
-    return
-  } catch (e: any) {
-    console.log("[PAYMENT RETURN] check POST failed:", String(e?.message || e))
-  }
-
-  // fallback GET
-  try {
-    const url = new URL("/api/billing/wayforpay/check", origin)
+    const url = new URL("/api/billing/wayforpay/sync", origin)
     url.searchParams.set("orderReference", orderReference)
     const r = await fetch(url.toString(), { method: "GET", cache: "no-store" })
-    console.log("[PAYMENT RETURN] check GET status:", r.status)
+    console.log("[PAYMENT RETURN] sync GET status:", r.status)
+    return
   } catch (e: any) {
-    console.log("[PAYMENT RETURN] check GET failed:", String(e?.message || e))
+    console.log("[PAYMENT RETURN] sync GET failed:", String(e?.message || e))
+  }
+
+  // Fallback: orders/status (also does self-healing)
+  try {
+    const url = new URL("/api/billing/orders/status", origin)
+    url.searchParams.set("orderReference", orderReference)
+    const r = await fetch(url.toString(), { method: "GET", cache: "no-store" })
+    console.log("[PAYMENT RETURN] orders/status GET status:", r.status)
+  } catch (e: any) {
+    console.log("[PAYMENT RETURN] orders/status GET failed:", String(e?.message || e))
   }
 }
 
@@ -91,7 +88,7 @@ function redirectToResult(req: NextRequest, payload: any) {
 
   // запускаем проверку статуса (не ломает редирект)
   if (orderReference) {
-    triggerCheck(origin, orderReference).catch(() => {})
+    triggerSync(origin, orderReference).catch(() => {})
   }
 
   return NextResponse.redirect(url, 303)

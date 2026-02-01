@@ -102,11 +102,15 @@ export async function POST(req: NextRequest) {
 
     const { summary, pendingCookies, needSetDeviceCookie, deviceHash, cookieDomain } = await buildAccessSummary(req)
 
-    if (summary.hasPaid && summary.paidUntil) {
-      return NextResponse.json(
-        { ok: false, error: "already_active", paidUntil: summary.paidUntil },
-        { status: 409, headers: { "cache-control": "no-store" } }
-      )
+    // Block payment if user already has active access (paid OR promo) with >3 days left
+    if (summary.unlimited && summary.accessUntil) {
+      const daysLeft = (new Date(summary.accessUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      if (daysLeft > 3) {
+        return NextResponse.json(
+          { ok: false, error: "already_active", accessUntil: summary.accessUntil },
+          { status: 409, headers: { "cache-control": "no-store" } }
+        )
+      }
     }
 
     const merchantAccount = mustEnv("WAYFORPAY_MERCHANT_ACCOUNT")
