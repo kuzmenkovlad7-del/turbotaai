@@ -41,11 +41,13 @@ export function middleware(req: NextRequest) {
   // 2. Region detection — set once, never overwrite
   let region = req.cookies.get(REGION_COOKIE)?.value || null
 
-  // Allow debug override via ?ta_region=UA or ?ta_region=INTL
-  const debugRegion = req.nextUrl.searchParams.get("ta_region")
-  if (debugRegion === "UA" || debugRegion === "INTL") {
-    region = debugRegion
-    res.cookies.set({ name: REGION_COOKIE, value: region, ...cookieOpts })
+  // Debug override: only active when TA_DEBUG_REGION=1 env is set
+  if (process.env.TA_DEBUG_REGION === "1") {
+    const debugRegion = req.nextUrl.searchParams.get("ta_region")
+    if (debugRegion === "UA" || debugRegion === "INTL") {
+      region = debugRegion
+      res.cookies.set({ name: REGION_COOKIE, value: region, ...cookieOpts })
+    }
   }
 
   if (!region) {

@@ -86,6 +86,13 @@ const detectInitialLanguage = () => {
     if (supportedLang) return supportedLang.code
   }
 
+  // Fallback: use region cookie to pick a sensible default
+  const regionCookie = readCookie("ta_region")
+  if (regionCookie === "INTL") {
+    const enLang = languages.find((lang) => lang.code === "en")
+    if (enLang) return enLang.code
+  }
+
   return resolvedDefaultLanguage.code
 }
 
