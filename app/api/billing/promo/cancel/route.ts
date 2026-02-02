@@ -151,7 +151,7 @@ export async function POST(_req: NextRequest) {
     if (needSetDeviceCookie) {
       res.cookies.set(DEVICE_COOKIE, deviceUuid, {
         path: "/",
-        httpOnly: true,
+        httpOnly: false,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 365,

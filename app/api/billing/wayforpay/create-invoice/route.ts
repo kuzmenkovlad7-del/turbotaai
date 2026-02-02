@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { createHmac, randomUUID } from "crypto"
 import { buildAccessSummary } from "@/lib/server/access-summary"
+import { getRegionPrice } from "@/lib/billing/plans"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -43,35 +44,6 @@ function formatAmount(v: any): string | null {
   return n.toFixed(2)
 }
 
-function pickPriceFromEnv(planId: string): string | null {
-  const p = String(planId || "monthly").toLowerCase()
-
-  const candidates =
-    p === "yearly" || p === "annual" || p === "year"
-      ? [
-          env("PRICE_UAH_YEARLY"),
-          env("PRICE_YEARLY_UAH"),
-          env("WAYFORPAY_PRICE_YEARLY"),
-          env("WAYFORPAY_AMOUNT_YEARLY"),
-          env("WAYFORPAY_YEARLY_AMOUNT"),
-        ]
-      : [
-          env("PRICE_UAH_MONTHLY"),
-          env("PRICE_MONTHLY_UAH"),
-          env("WAYFORPAY_PRICE_MONTHLY"),
-          env("WAYFORPAY_AMOUNT_MONTHLY"),
-          env("WAYFORPAY_MONTHLY_AMOUNT"),
-        ]
-
-  for (const c of candidates) {
-    const a = formatAmount(c)
-    if (a) return a
-  }
-
-  const fallback = formatAmount(env("WAYFORPAY_TEST_AMOUNT")) || formatAmount(env("WAYFORPAY_AMOUNT"))
-  return fallback || null
-}
-
 function sbAdmin() {
   const url = mustEnv("NEXT_PUBLIC_SUPABASE_URL")
   const key = mustEnv("SUPABASE_SERVICE_ROLE_KEY")
@@ -83,22 +55,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({} as any))
     const planId = String(body?.planId || "monthly").trim() || "monthly"
 
-    const currency = String(body?.currency || env("WAYFORPAY_CURRENCY") || "UAH").trim() || "UAH"
-
-    let amountStr = formatAmount(body?.amount) || pickPriceFromEnv(planId)
-
-    const forcedTest =
-      formatAmount(env("WAYFORPAY_TEST_AMOUNT_UAH")) ||
-      formatAmount(env("WAYFORPAY_TEST_AMOUNT"))
-
-    if (forcedTest) amountStr = forcedTest
-
-    if (!amountStr) {
-      return NextResponse.json(
-        { ok: false, error: "missing_amount" },
-        { status: 500, headers: { "cache-control": "no-store" } }
-      )
-    }
+    // Server-authoritative pricing: derive amount + currency from ta_region cookie
+    const region = req.cookies.get("ta_region")?.value || "INTL"
+    const regionPrice = getRegionPrice(planId, region)
+    const currency = regionPrice.currency
+    const amountStr = formatAmount(regionPrice.amount) || "499.00"
 
     const { summary, pendingCookies, needSetDeviceCookie, deviceHash, cookieDomain } = await buildAccessSummary(req)
 
@@ -237,7 +198,7 @@ export async function POST(req: NextRequest) {
     if (needSetDeviceCookie) {
       res.cookies.set(DEVICE_COOKIE, deviceHash, {
         path: "/",
-        httpOnly: true,
+        httpOnly: false,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 365,

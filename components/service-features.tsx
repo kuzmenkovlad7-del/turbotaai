@@ -2,12 +2,12 @@
 "use client"
 
 import {
-  Clock,
   CreditCard,
   UserCircle,
-  Globe,
+  MessageSquare,
   BarChart,
   Shield,
+  Zap,
 } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 
@@ -16,45 +16,45 @@ export default function ServiceFeatures() {
 
   const features = [
     {
-      icon: Clock,
-      title: t("Support in minutes when it feels really bad"),
-      description: t(
-        "Open chat, voice or video exactly when it feels bad right now — без очередей, анкет и ожидания записи.",
-      ),
-    },
-    {
       icon: UserCircle,
-      title: t("Feels like a calm, respectful human conversation"),
+      title: t("Like a calm talk with someone nearby"),
       description: t(
-        "Ассистент сначала слушает и задаёт мягкие уточняющие вопросы, а уже потом предлагает короткие упражнения и шаги.",
+        "TurbotaAI listens carefully, asks gentle questions, and helps you find the next steps at your pace.",
       ),
     },
     {
-      icon: Globe,
-      title: t("Works in 10+ languages"),
+      icon: MessageSquare,
+      title: t("Choose your format"),
       description: t(
-        "Украинский, русский, английский и другие популярные языки. Язык можно менять прямо во время диалога.",
+        "Type in chat, talk by voice, or use video. Pick what feels most comfortable right now.",
       ),
     },
     {
       icon: BarChart,
-      title: t("From quick help to 7–21 day programs"),
+      title: t("From a conversation to personal support"),
       description: t(
-        "Готовые сценарии: «когда плохо прямо сейчас», работа с тревогой и стрессом, а также мягкие программы на 7–21 день с регулярными чек-инами.",
+        "Short talks, gentle exercises, and simple suggestions adapt to you during the dialogue.",
       ),
     },
     {
       icon: Shield,
-      title: t("Safe and confidential space"),
+      title: t("Private and safe space"),
       description: t(
-        "Разговоры шифруются и не используются для рекламы. Вы сами решаете, что рассказывать и когда удалять историю.",
+        "Your conversations stay between you and TurbotaAI. They are not used for advertising, and you decide what to keep.",
       ),
     },
     {
       icon: CreditCard,
-      title: t("Simple pricing with a free start"),
+      title: t("Start for free"),
       description: t(
-        "На запуске: тестовый период и несколько бесплатных вопросов. Затем — прозрачные тарифы без скрытых платежей: разовый доступ и помесячная подписка.",
+        "Try it at your pace. Continue if it fits, with no hidden charges.",
+      ),
+    },
+    {
+      icon: Zap,
+      title: t("Easy to begin"),
+      description: t(
+        "No waiting and no complex forms. Open TurbotaAI and choose chat, voice, or video.",
       ),
     },
   ]
@@ -64,11 +64,16 @@ export default function ServiceFeatures() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-10 text-center sm:mb-14">
           <h2 className="mb-3 text-2xl font-bold text-slate-900 sm:text-3xl md:text-4xl">
-            {t("Why people choose TurbotaAI")}
+            {t("TurbotaAI — when you need a conversation")}
           </h2>
           <p className="mx-auto max-w-3xl px-2 text-sm text-slate-600 sm:text-base">
             {t(
-              "TurbotaAI is built for moments when you have no strength to search for a therapist or wait for an appointment, but really need someone to talk to right now.",
+              "TurbotaAI is made for moments when it matters to know you are not alone. This is a space where you can feel real support.",
+            )}
+          </p>
+          <p className="mx-auto mt-2 max-w-3xl px-2 text-sm text-slate-600 sm:text-base">
+            {t(
+              "Start a conversation when you truly need it, without waiting and complicated forms.",
             )}
           </p>
         </div>

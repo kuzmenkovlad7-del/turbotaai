@@ -59,12 +59,15 @@ async function extendPaidUntil(sb: any, key: string, days: number, userId: strin
   const existing = Array.isArray(rows) ? rows[0] : null
   const cur = toDateOrNull(existing?.paid_until)
 
-  let base = now
-  if (cur && cur.getTime() > base.getTime()) base = cur
+  // IDEMPOTENT: target = now + days; only update if current < target
+  const target = new Date(now)
+  target.setUTCDate(target.getUTCDate() + days)
+  const paid_until = (cur && cur.getTime() >= target.getTime()) ? cur.toISOString() : target.toISOString()
 
-  const next = new Date(base)
-  next.setUTCDate(next.getUTCDate() + days)
-  const paid_until = next.toISOString()
+  // Skip DB write if grant already has sufficient paid_until
+  if (cur && cur.getTime() >= target.getTime() && existing?.id) {
+    return paid_until
+  }
 
   if (existing?.id) {
     // Update existing row by ID (most reliable)
@@ -166,6 +169,12 @@ export async function POST(req: NextRequest) {
           { status: 400, headers: { "cache-control": "no-store" } }
         )
       }
+    } else if (mapTxToStatus(transactionStatus) === "paid") {
+      // Signature is required for paid status to prevent spoofing
+      return NextResponse.json(
+        { ok: false, error: "missing_signature", orderReference },
+        { status: 400, headers: { "cache-control": "no-store" } }
+      )
     }
 
     const sb = createClient(mustEnv("NEXT_PUBLIC_SUPABASE_URL"), mustEnv("SUPABASE_SERVICE_ROLE_KEY"), {

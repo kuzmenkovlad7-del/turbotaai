@@ -1,10 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { useLanguage } from "@/lib/i18n/language-context"
 
 type Summary = {
   isLoggedIn?: boolean
   email?: string | null
+  access?: string | null
   subscription_status?: string | null
   auto_renew?: boolean | null
   paid_until?: string | null
@@ -37,19 +41,140 @@ function laterIso(a: any, b: any): string | null {
   return (ta! >= tb! ? da! : db!).toISOString()
 }
 
-function subscriptionLabel(s: any) {
-  const v = String(s || "").toLowerCase()
-  if (v === "active" || v === "paid") return "Активна"
-  if (v === "canceled" || v === "cancelled") return "Скасована"
-  if (v === "paused") return "Призупинена"
-  return "—"
-}
-
 export default function ProfilePage() {
+  const router = useRouter()
+  const { currentLanguage } = useLanguage()
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<Array<{ id: string; title: string | null; mode: string; updated_at: string }>>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  const lang = useMemo(() => {
+    const code = String(currentLanguage?.code || "uk").toLowerCase()
+    return code.startsWith("ru") ? "ru" : code.startsWith("en") ? "en" : "uk"
+  }, [currentLanguage?.code])
+
+  const copy = useMemo(() => {
+    const c = {
+      uk: {
+        profile: "Профіль",
+        profileDesc: "Доступ, підписка, промокод",
+        loading: "Завантаження...",
+        email: "Email:",
+        access: "Доступ:",
+        paidUntil: "Оплачено до:",
+        promoUntil: "Промо до:",
+        accessUntil: "Доступ активний до:",
+        subStatus: "Статус підписки:",
+        autoRenew: "Автопродовження:",
+        enabled: "Увімкнено",
+        disabled: "Вимкнено",
+        processing: "Обробка...",
+        disableAutoRenew: "Вимкнути автопродовження",
+        enableAutoRenew: "Увімкнути автопродовження",
+        autoAfterPay: "Автопродовження доступне після оплати",
+        cancelPromo: "Скасувати промокод",
+        tip: "Порада: щоб не втратити доступ при очищенні cookie, увійдіть або зареєструйтесь і привʼяжіть доступ до аккаунта.",
+        history: "Історія",
+        savedSessions: "Збережені сесії",
+        historyLoading: "Завантаження історії...",
+        historyEmpty: "Ще немає збережених сесій.",
+        historyUntitled: "Без назви",
+        loginToSeeHistory: "Увійдіть, щоб бачити історію.",
+        subActive: "Підписка активна",
+        promoAccess: "Промо доступ",
+        limited: "Обмежено",
+        cancelledActive: "Скасована (діє до кінця періоду)",
+        active: "Активна",
+        promo: "Промо",
+        promoCancelled: "Промокод скасовано",
+        promoCancelFail: "Не вдалося скасувати промокод",
+        autoRenewOff: "Автопродовження вимкнено",
+        autoRenewOffFail: "Не вдалося вимкнути автопродовження",
+        autoRenewOn: "Автопродовження увімкнено",
+        autoRenewOnFail: "Не вдалося увімкнути автопродовження",
+      },
+      ru: {
+        profile: "Профиль",
+        profileDesc: "Доступ, подписка, промокод",
+        loading: "Загрузка...",
+        email: "Email:",
+        access: "Доступ:",
+        paidUntil: "Оплачено до:",
+        promoUntil: "Промо до:",
+        accessUntil: "Доступ активен до:",
+        subStatus: "Статус подписки:",
+        autoRenew: "Автопродление:",
+        enabled: "Включено",
+        disabled: "Выключено",
+        processing: "Обработка...",
+        disableAutoRenew: "Выключить автопродление",
+        enableAutoRenew: "Включить автопродление",
+        autoAfterPay: "Автопродление доступно после оплаты",
+        cancelPromo: "Отменить промокод",
+        tip: "Совет: чтобы не потерять доступ при очистке cookie, войдите или зарегистрируйтесь и привяжите доступ к аккаунту.",
+        history: "История",
+        savedSessions: "Сохранённые сессии",
+        historyLoading: "Загрузка истории...",
+        historyEmpty: "Ещё нет сохранённых сессий.",
+        historyUntitled: "Без названия",
+        loginToSeeHistory: "Войдите, чтобы видеть историю.",
+        subActive: "Подписка активна",
+        promoAccess: "Промо доступ",
+        limited: "Ограничено",
+        cancelledActive: "Отменена (действует до конца периода)",
+        active: "Активна",
+        promo: "Промо",
+        promoCancelled: "Промокод отменён",
+        promoCancelFail: "Не удалось отменить промокод",
+        autoRenewOff: "Автопродление выключено",
+        autoRenewOffFail: "Не удалось выключить автопродление",
+        autoRenewOn: "Автопродление включено",
+        autoRenewOnFail: "Не удалось включить автопродление",
+      },
+      en: {
+        profile: "Profile",
+        profileDesc: "Access, subscription, promo code",
+        loading: "Loading...",
+        email: "Email:",
+        access: "Access:",
+        paidUntil: "Paid until:",
+        promoUntil: "Promo until:",
+        accessUntil: "Access active until:",
+        subStatus: "Subscription status:",
+        autoRenew: "Auto-renew:",
+        enabled: "Enabled",
+        disabled: "Disabled",
+        processing: "Processing...",
+        disableAutoRenew: "Disable auto-renew",
+        enableAutoRenew: "Enable auto-renew",
+        autoAfterPay: "Auto-renew available after payment",
+        cancelPromo: "Cancel promo code",
+        tip: "Tip: to keep access when clearing cookies, sign in or register and link access to your account.",
+        history: "History",
+        savedSessions: "Saved sessions",
+        historyLoading: "Loading history...",
+        historyEmpty: "No saved sessions yet.",
+        historyUntitled: "Untitled",
+        loginToSeeHistory: "Sign in to see history.",
+        subActive: "Subscription active",
+        promoAccess: "Promo access",
+        limited: "Limited",
+        cancelledActive: "Cancelled (active until end of period)",
+        active: "Active",
+        promo: "Promo",
+        promoCancelled: "Promo code cancelled",
+        promoCancelFail: "Failed to cancel promo code",
+        autoRenewOff: "Auto-renew disabled",
+        autoRenewOffFail: "Failed to disable auto-renew",
+        autoRenewOn: "Auto-renew enabled",
+        autoRenewOnFail: "Failed to enable auto-renew",
+      },
+    }
+    return c[lang as "uk" | "ru" | "en"]
+  }, [lang])
 
   const paidActive = isActiveDate(summary?.paid_until)
   const promoActive = isActiveDate(summary?.promo_until)
@@ -76,9 +201,9 @@ export default function ProfilePage() {
     try {
       await fetch("/api/billing/promo/cancel", { method: "POST", cache: "no-store" })
       await refresh()
-      setMsg("Промокод скасовано")
+      setMsg(copy.promoCancelled)
     } catch {
-      setMsg("Не вдалося скасувати промокод")
+      setMsg(copy.promoCancelFail)
     } finally {
       setBusy(null)
     }
@@ -90,9 +215,9 @@ export default function ProfilePage() {
     try {
       await fetch("/api/billing/subscription/cancel", { method: "POST", cache: "no-store" })
       await refresh()
-      setMsg("Автопродовження вимкнено")
+      setMsg(copy.autoRenewOff)
     } catch {
-      setMsg("Не вдалося вимкнути автопродовження")
+      setMsg(copy.autoRenewOffFail)
     } finally {
       setBusy(null)
     }
@@ -104,9 +229,9 @@ export default function ProfilePage() {
     try {
       await fetch("/api/billing/subscription/resume", { method: "POST", cache: "no-store" })
       await refresh()
-      setMsg("Автопродовження увімкнено")
+      setMsg(copy.autoRenewOn)
     } catch {
-      setMsg("Не вдалося увімкнути автопродовження")
+      setMsg(copy.autoRenewOnFail)
     } finally {
       setBusy(null)
     }
@@ -115,57 +240,90 @@ export default function ProfilePage() {
   const isLoggedIn = Boolean(summary?.isLoggedIn)
   const email = summary?.email || null
 
-  const accessLabel = paidActive ? "Оплачено" : promoActive ? "Промо" : "Обмежено"
+  useEffect(() => {
+    if (!isLoggedIn) return
+    let alive = true
+    const fetchHistory = async () => {
+      setHistoryLoading(true)
+      try {
+        const r = await fetch("/api/history/list", { cache: "no-store", credentials: "include" })
+        const data = await r.json().catch(() => ({} as any))
+        if (alive) setConversations(Array.isArray(data?.conversations) ? data.conversations : [])
+      } catch {
+        if (alive) setConversations([])
+      } finally {
+        if (alive) setHistoryLoading(false)
+      }
+    }
+    fetchHistory()
+    return () => { alive = false }
+  }, [isLoggedIn])
+
+  const accessLabel = paidActive
+    ? copy.subActive
+    : promoActive
+    ? copy.promoAccess
+    : copy.limited
+
+  const subLabel = (() => {
+    const s = String(summary?.subscription_status || "").toLowerCase()
+    if (paidActive) {
+      if (s === "canceled" || s === "cancelled") return copy.cancelledActive
+      return copy.active
+    }
+    if (promoActive) return copy.promo
+    return "—"
+  })()
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="mb-6">
-            <div className="text-xl font-semibold">Профіль</div>
-            <div className="text-sm text-gray-500">Доступ, підписка, промокод</div>
+            <div className="text-xl font-semibold">{copy.profile}</div>
+            <div className="text-sm text-gray-500">{copy.profileDesc}</div>
           </div>
 
           {loading ? (
-            <div className="text-sm text-gray-500">Завантаження...</div>
+            <div className="text-sm text-gray-500">{copy.loading}</div>
           ) : (
             <>
               <div className="space-y-3 text-sm">
                 {isLoggedIn && email ? (
                   <div className="flex items-center justify-between">
-                    <div className="text-gray-500">Email:</div>
+                    <div className="text-gray-500">{copy.email}</div>
                     <div className="font-medium">{email}</div>
                   </div>
                 ) : null}
 
                 <div className="flex items-center justify-between">
-                  <div className="text-gray-500">Доступ:</div>
+                  <div className="text-gray-500">{copy.access}</div>
                   <div className="font-medium">{accessLabel}</div>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <div className="text-gray-500">Оплачено до:</div>
+                  <div className="text-gray-500">{copy.paidUntil}</div>
                   <div className="font-medium">{fmtDate(summary?.paid_until)}</div>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <div className="text-gray-500">Промо до:</div>
+                  <div className="text-gray-500">{copy.promoUntil}</div>
                   <div className="font-medium">{fmtDate(summary?.promo_until)}</div>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <div className="text-gray-500">Доступ активний до:</div>
+                  <div className="text-gray-500">{copy.accessUntil}</div>
                   <div className="font-medium">{fmtDate(accessUntil)}</div>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <div className="text-gray-500">Статус підписки:</div>
-                  <div className="font-medium">{subscriptionLabel(summary?.subscription_status)}</div>
+                  <div className="text-gray-500">{copy.subStatus}</div>
+                  <div className="font-medium">{subLabel}</div>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <div className="text-gray-500">Автопродовження:</div>
-                  <div className="font-medium">{summary?.auto_renew ? "Увімкнено" : "Вимкнено"}</div>
+                  <div className="text-gray-500">{copy.autoRenew}</div>
+                  <div className="font-medium">{summary?.auto_renew ? copy.enabled : copy.disabled}</div>
                 </div>
               </div>
 
@@ -177,23 +335,24 @@ export default function ProfilePage() {
                       disabled={busy === "sub"}
                       onClick={cancelAutoRenew}
                     >
-                      {busy === "sub" ? "Обробка..." : "Вимкнути автопродовження"}
+                      {busy === "sub" ? copy.processing : copy.disableAutoRenew}
                     </button>
                   ) : (
                     <button
-                      className="w-full rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                      className="w-full rounded-xl border border-black bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-50"
                       disabled={busy === "sub"}
                       onClick={resumeAutoRenew}
                     >
-                      {busy === "sub" ? "Обробка..." : "Увімкнути автопродовження"}
+                      {busy === "sub" ? copy.processing : copy.enableAutoRenew}
                     </button>
                   )
                 ) : (
                   <button
                     className="w-full rounded-xl border px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed"
                     disabled
+                    onClick={() => router.push("/pricing")}
                   >
-                    Автопродовження доступне після оплати
+                    {copy.autoAfterPay}
                   </button>
                 )}
 
@@ -203,14 +362,14 @@ export default function ProfilePage() {
                     disabled={busy === "promo"}
                     onClick={cancelPromo}
                   >
-                    {busy === "promo" ? "Обробка..." : "Скасувати промокод"}
+                    {busy === "promo" ? copy.processing : copy.cancelPromo}
                   </button>
                 ) : (
                   <button
                     className="w-full rounded-xl border px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed"
                     disabled
                   >
-                    Скасувати промокод
+                    {copy.cancelPromo}
                   </button>
                 )}
 
@@ -219,7 +378,7 @@ export default function ProfilePage() {
 
               {!isLoggedIn ? (
                 <div className="mt-6 text-xs text-gray-500">
-                  Порада: щоб не втратити доступ при очищенні cookie, увійдіть або зареєструйтесь і привʼяжіть доступ до аккаунта.
+                  {copy.tip}
                 </div>
               ) : null}
             </>
@@ -227,13 +386,32 @@ export default function ProfilePage() {
         </div>
 
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <div className="mb-2 text-xl font-semibold">Історія</div>
-          <div className="text-sm text-gray-500">Збережені сесії</div>
+          <div className="mb-2 text-xl font-semibold">{copy.history}</div>
+          <div className="text-sm text-gray-500">{copy.savedSessions}</div>
 
-          {isLoggedIn ? (
-            <div className="mt-4 text-sm text-gray-500">Історія відображається для увійшовших користувачів</div>
+          {!isLoggedIn ? (
+            <div className="mt-4 text-sm text-gray-500">{copy.loginToSeeHistory}</div>
+          ) : historyLoading ? (
+            <div className="mt-4 text-sm text-gray-500">{copy.historyLoading}</div>
+          ) : conversations.length === 0 ? (
+            <div className="mt-4 text-sm text-gray-500">{copy.historyEmpty}</div>
           ) : (
-            <div className="mt-4 text-sm text-gray-500">Увійдіть, щоб бачити історію.</div>
+            <div className="mt-4 space-y-2 max-h-[400px] overflow-y-auto">
+              {conversations.map((conv) => (
+                <Link
+                  key={conv.id}
+                  href={`/history/${conv.id}`}
+                  className="block rounded-lg border p-3 transition-colors hover:bg-gray-50"
+                >
+                  <div className="font-medium text-sm truncate">
+                    {conv.title || copy.historyUntitled}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {new Date(conv.updated_at).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </Link>
+              ))}
+            </div>
           )}
         </div>
       </div>

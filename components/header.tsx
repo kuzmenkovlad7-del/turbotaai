@@ -78,6 +78,7 @@ export default function Header() {
 
   const [trialLeft, setTrialLeft] = useState<number | null>(null)
   const [trialText, setTrialText] = useState<string | null>(null)
+  const [accessType, setAccessType] = useState<"paid" | "promo" | "trial" | "none" | null>(null)
   const [hasAccess, setHasAccess] = useState<boolean | null>(null)
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null)
 
@@ -131,11 +132,20 @@ export default function Header() {
             ? d.trialLeft
             : null
 
-        // для безлимита в бейдже всегда Access Active
+        // для безлимита в бейдже показываем тип доступа
         setTrialLeft(unlimited ? 0 : left)
 
-        // используем существующий перевод Active
-        setTrialText(unlimited ? "Active" : null)
+        // differentiate: paid → "Підписка", promo → "Промо", else null
+        if (access === "paid") {
+          setTrialText("Subscription")
+          setAccessType("paid")
+        } else if (access === "promo") {
+          setTrialText("Promo")
+          setAccessType("promo")
+        } else {
+          setTrialText(null)
+          setAccessType(left != null && left > 0 ? "trial" : "none")
+        }
 
         // hasAccess в хедере используем строго как признак безлимита
         setHasAccess(unlimited)
@@ -177,16 +187,18 @@ export default function Header() {
 
   const scrollToAssistant = () => {
     const el = document.querySelector("#assistant")
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" })
+    } else if (pathname !== "/") {
+      window.location.assign("/#assistant")
+    }
   }
 
   const badgeText =
     trialText
       ? `${t("Access")}: ${t(trialText)}`
-      : typeof trialLeft === "number"
+      : typeof trialLeft === "number" && trialLeft > 0
       ? `${t("Trial left")}: ${trialLeft}`
-      : hasAccess
-      ? `${t("Access")}: ${t("Active")}`
       : null
 
   // turbota_global_fetch_interceptor

@@ -5,8 +5,10 @@ import { useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { BrandMark } from "@/components/brand/BrandMark"
 
 export default function LoginPage() {
   const { currentLanguage } = useLanguage()
@@ -85,7 +87,6 @@ export default function LoginPage() {
         throw new Error(d?.error || copy.error)
       }
 
-      // если есть pending promo/purchase — обработка будет на странице назначения
       router.refresh()
       router.push(next)
     } catch (e: any) {
@@ -96,59 +97,74 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-xl px-4 py-12 sm:px-6 lg:px-10">
-      <Card className="rounded-2xl">
-        <CardHeader>
+    <div className="mx-auto flex min-h-[70vh] w-full max-w-md items-center justify-center px-4 py-10">
+      <Card className="w-full">
+        <CardHeader className="items-center text-center">
+          <div className="mb-2 flex items-center justify-center">
+            <BrandMark size={36} />
+          </div>
           <CardTitle className="text-3xl">{copy.title}</CardTitle>
-          <CardDescription>{copy.desc}</CardDescription>
+          <p className="text-sm text-muted-foreground">{copy.desc}</p>
         </CardHeader>
 
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <div className="text-sm text-slate-600">{copy.email}</div>
-            <Input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@email.com"
-              className="rounded-xl"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="text-sm text-slate-600">{copy.password}</div>
-            <Input
-              value={password}
-              type="password"
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="rounded-xl"
-            />
-          </div>
-
-          <Button
-            className="w-full rounded-full"
-            disabled={busy || !email || !password}
-            onClick={doLogin}
+        <CardContent>
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              doLogin()
+            }}
           >
-            {busy ? copy.loading : copy.login}
-          </Button>
-
-          {msg ? <p className="text-sm text-red-600">{msg}</p> : null}
-
-          <div className="flex items-center justify-between text-sm text-slate-600">
-            <Link href={next ? `/pricing` : "/pricing"} className="underline">
-              {copy.back}
-            </Link>
-
-            <div className="flex items-center gap-2">
-              <span>{copy.noAcc}</span>
-              <Link href={`/register?next=${encodeURIComponent(next)}`} className="underline">
-                {copy.reg}
-              </Link>
+            <div className="space-y-2">
+              <Label htmlFor="email">{copy.email}</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                placeholder="name@email.com"
+              />
             </div>
-          </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password">{copy.password}</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                placeholder="••••••••"
+              />
+            </div>
+
+            {msg ? <p className="text-sm text-red-600">{msg}</p> : null}
+
+            <Button
+              type="submit"
+              variant="outline"
+              className="w-full"
+              disabled={busy || !email || !password}
+            >
+              {busy ? copy.loading : copy.login}
+            </Button>
+
+            <div className="flex items-center justify-center gap-2 pt-2 text-sm text-muted-foreground">
+              <span>{copy.noAcc}</span>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  router.push(`/register?next=${encodeURIComponent(next)}`)
+                }
+              >
+                {copy.reg}
+              </Button>
+            </div>
+          </form>
         </CardContent>
       </Card>
-    </main>
+    </div>
   )
 }

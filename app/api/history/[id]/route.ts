@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 function routeSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -34,7 +35,7 @@ function routeSupabase() {
       value: created,
       options: {
         path: "/",
-        httpOnly: true,
+        httpOnly: false,
         sameSite: "lax",
         maxAge: 60 * 60 * 24 * 365,
       },
@@ -62,7 +63,7 @@ export async function GET(_: Request, ctx: any) {
   const { data: userData } = await sb.auth.getUser();
   const user = userData?.user ?? null;
 
-  const { data: conv } = await sb.from("conversations").select("*").eq("id", id).maybeSingle();
+  const { data: conv } = await supabaseAdmin.from("conversations").select("*").eq("id", id).maybeSingle();
   if (!conv) return json({ ok: false, error: "Not found" }, 404);
 
   const allowed =
@@ -73,7 +74,7 @@ export async function GET(_: Request, ctx: any) {
   if (!allowed) return json({ ok: false, error: "Forbidden" }, 403);
 
   // ВАЖНО: в твоей БД колонка называется text, НЕ content
-  const { data: msgs, error } = await sb
+  const { data: msgs, error } = await supabaseAdmin
     .from("messages")
     .select("id,role,text,created_at")
     .eq("conversation_id", id)

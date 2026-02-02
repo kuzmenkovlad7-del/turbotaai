@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
-const DEVICE_COOKIE = "device_hash"
+const DEVICE_COOKIE = "ta_device_hash"
 
 export async function GET() {
   const cookieStore = cookies()

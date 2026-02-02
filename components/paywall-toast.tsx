@@ -55,13 +55,13 @@ export function PaywallToast() {
           href="/pricing"
           className="flex-1 rounded-xl bg-slate-900 px-3 py-2 text-center text-sm font-semibold text-white"
         >
-          Open pricing
+          {t("Open pricing")}
         </a>
         <button
           className="rounded-xl border px-3 py-2 text-sm font-semibold"
           onClick={() => setOpen(false)}
         >
-          Later
+          {t("Later")}
         </button>
       </div>
     </div>

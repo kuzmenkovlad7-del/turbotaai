@@ -20,18 +20,18 @@ export default function AboutPage() {
             </p>
             <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
               {t(
-                "TurbotaAI — AI companion that stays nearby when it feels hard",
+                "TurbotaAI — a digital companion for moments when it matters to feel support",
               )}
             </h1>
             <p className="mt-4 max-w-2xl text-sm text-slate-600 md:text-base">
               {t(
-                "TurbotaAI is a digital assistant built on psychological literature and modern AI. It does not replace a live therapist, but gives gentle, structured support when it is difficult to reach someone or when you need to talk right now — in chat, voice or video.",
+                "TurbotaAI is an AI companion built on modern technology and approaches to emotional support. It does not replace professional help, but creates a calm space where you can talk, calm down and take the next step — in chat, voice or video.",
               )}
             </p>
           </div>
         </section>
 
-        {/* 3 колонки: кому, как работает, чем не является */}
+        {/* 3 columns */}
         <section className="border-b border-slate-100 bg-slate-50/60">
           <div className="mx-auto max-w-5xl px-4 py-10 md:px-6 lg:px-8">
             <div className="grid gap-8 md:grid-cols-3">
@@ -41,28 +41,28 @@ export default function AboutPage() {
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
                   {t(
-                    "On the first versions we focus on people who need emotional support in everyday life — without stigma and without long waiting.",
+                    "TurbotaAI is created for people who need support in everyday life — without complicated forms and long waiting.",
                   )}
                 </p>
                 <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
                   <li>
                     {t(
-                      "• Women who feel stress, anxiety, burnout or loneliness.",
+                      "• Anyone who feels stress, anxiety, burnout or loneliness.",
                     )}
                   </li>
                   <li>
                     {t(
-                      "• Teenagers 12–18 who need a safe space to talk about emotions and self-esteem.",
+                      "• People who want a safe space to talk about what is happening.",
                     )}
                   </li>
                   <li>
                     {t(
-                      "• People who are alone or feel isolated and want to be heard.",
+                      "• Those who are alone or feel isolated and want to be heard.",
                     )}
                   </li>
                   <li>
                     {t(
-                      "• Later — veterans and their families as a separate module.",
+                      "• Anyone who needs support right now — without waiting for an appointment.",
                     )}
                   </li>
                 </ul>
@@ -70,11 +70,11 @@ export default function AboutPage() {
 
               <div>
                 <h2 className="text-sm font-semibold text-slate-900">
-                  {t("How the assistant works")}
+                  {t("How the companion works")}
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
                   {t(
-                    "The assistant listens first, asks clarifying questions and only then offers recommendations — step by step, without pressure.",
+                    "The companion listens first, asks gentle questions and only then suggests small steps — without pressure and at your pace.",
                   )}
                 </p>
                 <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
@@ -85,22 +85,17 @@ export default function AboutPage() {
                   </li>
                   <li>
                     {t(
-                      "• Clarifying questions instead of 20 tips at once — the assistant tries to understand your state.",
+                      "• Gentle questions instead of a list of tips — the companion tries to understand you.",
                     )}
                   </li>
                   <li>
                     {t(
-                      "• Breathing, grounding, short exercises, diary of emotions, small daily steps.",
+                      "• Breathing, grounding, short exercises and small daily steps.",
                     )}
                   </li>
                   <li>
                     {t(
-                      "• Short programs for 7–21 days to gently change habits and support you regularly.",
-                    )}
-                  </li>
-                  <li>
-                    {t(
-                      "• Answers are based on selected psychological books and materials that were tested with a psychologist.",
+                      "• Responses adapt to your state during the conversation.",
                     )}
                   </li>
                 </ul>
@@ -112,13 +107,13 @@ export default function AboutPage() {
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
                   {t(
-                    "It is important to be honest about the limits of technology.",
+                    "It is important to be honest about the limits of the service.",
                   )}
                 </p>
                 <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
                   <li>
                     {t(
-                      "• TurbotaAI is not a doctor and not a psychiatrist.",
+                      "• TurbotaAI is a support tool, not medical or psychiatric care.",
                     )}
                   </li>
                   <li>
@@ -128,12 +123,12 @@ export default function AboutPage() {
                   </li>
                   <li>
                     {t(
-                      "• In crisis or risk of harm to yourself or others, you should contact emergency services or a human specialist.",
+                      "• In crisis or risk of harm, contact local emergency services or a specialist.",
                     )}
                   </li>
                   <li>
                     {t(
-                      "• The assistant is a supportive tool that can live alongside individual or group therapy.",
+                      "• The companion can complement personal support, but is not a substitute for it.",
                     )}
                   </li>
                 </ul>
@@ -142,43 +137,48 @@ export default function AboutPage() {
           </div>
         </section>
 
-        {/* Как работают сессии и оплата */}
+        {/* Sessions and payment */}
         <section className="bg-white">
           <div className="mx-auto max-w-5xl px-4 py-10 md:px-6 lg:px-8">
             <div className="grid items-start gap-8 md:grid-cols-[1.4fr,1fr]">
               <div>
                 <h2 className="text-sm font-semibold text-slate-900">
-                  {t("Sessions, test period and subscription")}
+                  {t("Access and subscription")}
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
                   {t(
-                    "On the first launch we plan to test the service with a free period, so that users can safely try the assistant and we can see how people really use TurbotaAI.",
+                    "You can start for free with several trial questions to feel how the companion works.",
                   )}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
                   {t(
-                    "After testing you can keep a small free part (for example, a few questions) and then switch to a simple paid model: a monthly subscription for regular support and a one-time access option for those who want to try a single extended session.",
+                    "After the trial you can continue with a monthly subscription for unlimited access to chat, voice and video.",
                   )}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
                   {t(
-                    "All payments will be processed through a certified payment provider, and refunds will be handled manually through support e-mail if something goes wrong.",
+                    "All payments are processed through a certified payment provider. Cancellation is available at any time — access stays active until the end of the paid period.",
+                  )}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  {t(
+                    "If something goes wrong with a payment, contact us at support@turbotaai.com and we will help.",
                   )}
                 </p>
               </div>
 
               <div className="rounded-3xl bg-slate-900 px-6 py-6 text-slate-50 shadow-lg">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">
-                  {t("On launch in Ukraine")}
+                  {t("Privacy and safety")}
                 </p>
                 <p className="mt-3 text-sm text-slate-100">
                   {t(
-                    "The first versions of TurbotaAI will be tested on the Ukrainian market with support for several languages. This will allow us to refine the quality of answers, tone of communication and scenarios before scaling to other countries.",
+                    "Your conversations stay between you and TurbotaAI. They are not used for advertising, and you decide what to keep.",
                   )}
                 </p>
                 <p className="mt-3 text-xs text-slate-300">
                   {t(
-                    "The goal is a safe, respectful assistant that you can open at any moment when you need to talk — without stigma and overcomplicated interfaces.",
+                    "TurbotaAI is designed for support but does not replace professional help. In emergency situations, contact local emergency services.",
                   )}
                 </p>
 

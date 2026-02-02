@@ -27,7 +27,7 @@ export default function ContactSection() {
     title: t("Email us"),
     details: "support@turbotaai.com",
     description: t(
-      "All questions about the service, payments, access to the assistant or cooperation — please write to this address.",
+      "For any questions about the service, payment or cooperation, write to this address.",
     ),
   }
 
@@ -46,7 +46,9 @@ export default function ContactSection() {
             <h2 className="mb-3 text-3xl font-bold text-slate-900 sm:text-4xl md:text-5xl">
               {t("Contact TurbotaAI team")}
             </h2>
-            <p className="mx-auto max-w-3xl text-sm text-slate-600 sm:text-base">{t("Contact page subtitle")}</p>
+            <p className="mx-auto max-w-3xl text-sm text-slate-600 sm:text-base">
+              {t("Have a question about TurbotaAI, partnership or your account? Write to us and we will reply as soon as possible.")}
+            </p>
           </div>
 
           <div className="grid items-start gap-10 md:grid-cols-[minmax(0,1.05fr)_minmax(0,1.2fr)]">
@@ -69,7 +71,7 @@ export default function ContactSection() {
 
               <div className="rounded-2xl bg-slate-50/70 p-5 text-sm text-slate-600 ring-1 ring-slate-200">
                 {t(
-                  "For urgent situations, please contact local emergency services or a crisis line in your country. TurbotaAI is not a substitute for emergency medical help.",
+                  "In emergency situations, contact local or crisis services. TurbotaAI is designed for support but does not replace professional help.",
                 )}
               </div>
 

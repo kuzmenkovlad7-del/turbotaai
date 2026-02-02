@@ -84,14 +84,14 @@ export default function Home() {
             <div className="rounded-[28px] bg-white/95 px-6 py-8 md:px-10 md:py-10 lg:px-12 lg:py-12">
               <div className="mb-10 text-center">
                 <p className="mb-3 inline-flex items-center rounded-full bg-slate-50 px-4 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
-                  {t("Choose how you want to talk")}
+                  {t("Not sure where to start? Just start")}
                 </p>
                 <h2 className="mb-3 text-3xl font-semibold text-slate-900 md:text-4xl">
-                  {t("How would you like to contact us?")}
+                  {t("How would you prefer to start a conversation?")}
                 </h2>
                 <p className="mx-auto max-w-2xl text-sm text-slate-600 md:text-base">
                   {t(
-                    "Start with a quick chat, a voice call or a video session with our AI companion — choose the format that feels safest right now.",
+                    "You can write, talk or see your AI companion — choose what feels calmest for you right now.",
                   )}
                 </p>
               </div>
@@ -101,15 +101,12 @@ export default function Home() {
                   icon={MessageSquare}
                   title={t("Chat with AI companion")}
                   description={t(
-                    "Write what is happening in your own words and get structured support in a few minutes.",
+                    "Describe in your own words what is happening — and get gentle, clear support in a few minutes.",
                   )}
                   benefits={[
-                    t(
-                      "Best when you need privacy and want to stay silent around other people.",
-                    ),
-                    t(
-                      "You can return to the conversation history and exercises at any time.",
-                    ),
+                    t("Private and without cameras"),
+                    t("You can write at your own pace"),
+                    t("AI will help structure your thoughts"),
                   ]}
                   buttonText={t("Start chat")}
                   onClick={openChat}
@@ -119,13 +116,11 @@ export default function Home() {
                   icon={PhoneCall}
                   title={t("Call AI companion")}
                   description={t(
-                    "Voice format for more lively support when you want to hear a calm voice.",
+                    "When you want to hear a calm voice and feel someone nearby.",
                   )}
                   benefits={[
-                    t("Helps reduce the feeling of loneliness in difficult moments."),
-                    t(
-                      "Suitable when emotions are strong and you need to speak out quickly.",
-                    ),
+                    t("A feeling of real presence"),
+                    t("You can just talk and be heard"),
                   ]}
                   buttonText={t("Start voice call")}
                   onClick={openVoice}
@@ -135,15 +130,11 @@ export default function Home() {
                   icon={Video}
                   title={t("Video session with AI")}
                   description={t(
-                    "Face-to-face session with a 3D-avatar when you want to feel presence and eye contact.",
+                    "A format when it matters to see and feel someone nearby.",
                   )}
                   benefits={[
-                    t(
-                      "Gives a stronger feeling that someone is really next to you.",
-                    ),
-                    t(
-                      "Best for deeper work, body reactions and long-term processes.",
-                    ),
+                    t("A live interaction"),
+                    t("Best for deeper conversations"),
                   ]}
                   buttonText={t("Start video call")}
                   onClick={openVideo}
@@ -156,7 +147,7 @@ export default function Home() {
                   onClick={openChat}
                   className="h-11 px-8 shadow-xl shadow-indigo-500/30"
                 >
-                  {t("Not sure which format? Start with a safe chat")}
+                  {t("Not sure where to start? Just begin")}
                   <ArrowRight className="h-4 w-4" />
                 </RainbowButton>
               </div>

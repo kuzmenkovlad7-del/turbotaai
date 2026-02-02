@@ -57,14 +57,40 @@ interface LanguageProviderProps {
   children: ReactNode
 }
 
-// всегда: либо сохранённый язык, либо uk
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null
+  const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))
+  return m ? decodeURIComponent(m[1]).trim() || null : null
+}
+
+function writeCookie(name: string, value: string) {
+  if (typeof document === "undefined") return
+  document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=31536000; SameSite=Lax`
+}
+
+// Priority: 1) localStorage (manual user choice), 2) ta_lang cookie (set by middleware), 3) uk
 const detectInitialLanguage = () => {
   if (typeof window === "undefined") return resolvedDefaultLanguage.code
 
+  // User's explicit choice persists across sessions
   const savedLanguage = localStorage.getItem("preferredLanguage")
   if (savedLanguage) {
     const supportedLang = languages.find((lang) => lang.code === savedLanguage)
     if (supportedLang) return supportedLang.code
+  }
+
+  // Middleware-set default based on region
+  const cookieLang = readCookie("ta_lang")
+  if (cookieLang) {
+    const supportedLang = languages.find((lang) => lang.code === cookieLang)
+    if (supportedLang) return supportedLang.code
+  }
+
+  // Fallback: use region cookie to pick a sensible default
+  const regionCookie = readCookie("ta_region")
+  if (regionCookie === "INTL") {
+    const enLang = languages.find((lang) => lang.code === "en")
+    if (enLang) return enLang.code
   }
 
   return resolvedDefaultLanguage.code
@@ -244,6 +270,7 @@ export const LanguageProvider = ({ children }: LanguageProviderProps) => {
 
       if (typeof window !== "undefined") {
         localStorage.setItem("preferredLanguage", newLanguage.code)
+        writeCookie("ta_lang", newLanguage.code)
       }
 
       if (typeof document !== "undefined") {

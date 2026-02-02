@@ -424,13 +424,14 @@ export default function VideoCallDialog({
   const activeLanguage =
     currentLanguage || ({ code: "en", name: "English", flag: "🇺��" } as any)
 
-  const languageDisplayName =
+  const languageDisplayName = t(
     activeLanguage.name ||
     (activeLanguage.code === "uk"
       ? "Ukrainian"
       : activeLanguage.code === "ru"
       ? "Russian"
-      : "English")
+      : "English"),
+  )
 
   const currentLocale = getLocaleForLanguage(activeLanguage.code)
   const nativeVoicePreferences = getNativeVoicePreferences()
@@ -1805,7 +1806,13 @@ if (res.status === 402) {
     }
   }
 
-  if (!isOpen) return null
+  // Compatibility shim: support 'open' / 'onOpenChange' from AssistantFab
+  const __props: any = (typeof arguments !== "undefined" ? (arguments as any)[0] : undefined)
+  const controlledOpen: boolean | undefined = typeof __props?.open === "boolean" ? __props.open : undefined
+  const extOnOpenChange: ((v: boolean) => void) | undefined = typeof __props?.onOpenChange === "function" ? __props.onOpenChange : undefined
+
+  const effectiveOpen = controlledOpen ?? isOpen
+  if (!effectiveOpen) return null
 
   const micOn = isCallActive && !isMicMuted && isListening && !isAiSpeaking
 
@@ -1842,7 +1849,8 @@ if (res.status === 402) {
             size="icon"
             onClick={() => {
               endCall()
-              onClose()
+              if (typeof onClose === "function") onClose()
+              if (typeof extOnOpenChange === "function") extOnOpenChange(false)
             }}
             className="min-w-[44px] min-h-[44px] flex-shrink-0 rounded-full bg-black/20 hover:bg-black/30 text-white"
           >
@@ -1913,7 +1921,7 @@ if (res.status === 402) {
                           )}
                         </div>
                         <h4 className="font-semibold text-base sm:text-lg text-center mb-1 sm:mb-2">
-                          {character.name}
+                          {t(character.name)}
                         </h4>
                         <p className="text-xs sm:text-sm text-gray-600 text-center mb-3 sm:mb-4">
                           {t(character.description)}
@@ -1949,8 +1957,8 @@ if (res.status === 402) {
               </div>
             </div>
           ) : (
-            <div className="flex-1 min-h-0 grid grid-rows-[auto_minmax(0,1fr)] gap-3 sm:gap-4 sm:grid-rows-none sm:flex sm:flex-row">
-              {/* LEFT: VIDEO (mobile fixed height, never collapses) */}
+            <div className="flex-1 min-h-0 grid grid-rows-[minmax(200px,1.5fr)_minmax(0,1fr)] gap-3 sm:gap-4 sm:grid-rows-none sm:flex sm:flex-row">
+              {/* LEFT: VIDEO (mobile gets at least 200px via grid row, desktop uses flex) */}
               <div className="row-start-1 w-full sm:w-2/3 flex flex-col min-h-0">
                 <div className="relative w-full flex-1 bg-white rounded-lg overflow-hidden">
                   <div className="absolute inset-0 bg-white overflow-hidden">
@@ -2057,7 +2065,7 @@ if (res.status === 402) {
                   </div>
                   <div className="flex flex-col min-w-0">
                     <div className="text-xs font-semibold text-slate-800 truncate">
-                      {selectedCharacter.name}
+                      {t(selectedCharacter.name)}
                     </div>
                     <div className="text-[11px] text-slate-500 truncate">{statusText}</div>
                   </div>
@@ -2087,7 +2095,7 @@ if (res.status === 402) {
                       >
                         <p className="mb-1 flex items-center gap-1 text-[11px] font-medium text-emerald-800">
                           <Brain className="h-3.5 w-3.5" />
-                          {selectedCharacter.name}
+                          {t(selectedCharacter.name)}
                         </p>
                         <p>{msg.text}</p>
                       </div>

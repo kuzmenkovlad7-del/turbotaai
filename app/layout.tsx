@@ -20,7 +20,7 @@ const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
   "https://turbotaai.com"
 
-const fullTitle = `${APP_NAME} — AI companion nearby 24/7`
+const fullTitle = `${APP_NAME} — AI-компаньйон, який завжди поруч`
 
 export const metadata: Metadata = {
   title: {
@@ -28,7 +28,18 @@ export const metadata: Metadata = {
     template: "%s | TurbotaAI",
   },
   description:
-    "TurbotaAI — always-on AI companion. Talk in chat, voice or video when you need calm support.",
+    "TurbotaAI — AI-компаньйон для спокійних розмов. Чат, голос або відео — коли потрібна підтримка.",
+  keywords: [
+    "TurbotaAI",
+    "AI companion",
+    "AI компаньйон",
+    "підтримка",
+    "чат",
+    "голос",
+    "відео",
+    "emotional support",
+    "психологічна підтримка",
+  ],
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.ico",
@@ -37,16 +48,18 @@ export const metadata: Metadata = {
   openGraph: {
     title: fullTitle,
     description:
-      "Talk to an AI companion in chat, voice or video. Gentle, always-on support when it feels hard.",
+      "Спокійний та безпечний простір для розмови. Поговоріть з AI-компаньйоном у чаті, голосом або відео.",
     url: siteUrl,
     siteName: "TurbotaAI",
     type: "website",
+    locale: "uk_UA",
+    alternateLocale: ["ru_RU", "en_US"],
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "TurbotaAI — AI companion",
+        alt: "TurbotaAI — AI-компаньйон поруч 24/7",
       },
     ],
   },
@@ -54,12 +67,15 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: fullTitle,
     description:
-      "AI companion nearby 24/7. Talk in chat, voice or video when you need support.",
+      "AI-компаньйон поруч 24/7. Чат, голос або відео — коли потрібна підтримка.",
     images: ["/og-image.png"],
   },
   robots: {
     index: true,
     follow: true,
+  },
+  alternates: {
+    canonical: siteUrl,
   },
 }
 

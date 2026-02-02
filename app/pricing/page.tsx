@@ -12,7 +12,13 @@ import { useLanguage } from "@/lib/i18n/language-context"
 type AnyObj = Record<string, any>
 
 const PRICE_UAH = Number(process.env.NEXT_PUBLIC_PRICE_UAH || "499")
-const CURRENCY = String(process.env.NEXT_PUBLIC_CURRENCY || "UAH")
+const PRICE_USD = Number(process.env.NEXT_PUBLIC_PRICE_USD || "12")
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null
+  const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))
+  return m ? decodeURIComponent(m[1]).trim() || null : null
+}
 
 function isActiveDate(v: any) {
   if (!v) return false
@@ -47,7 +53,8 @@ export default function PricingPage() {
         subtitle: "Безлімітний доступ до чату, голосу та відео. Пробний режим має 5 запитань.",
         planTitle: "Щомісяця",
         planDesc: "Безлімітний доступ до чату, голосу і відео",
-        uah: "UAH",
+
+        perMonth: "на місяць",
         p1: "Безлімітна кількість запитів",
         p2: "Чат, голос і відео",
         p3: "Історія зберігається у профілі",
@@ -62,8 +69,8 @@ export default function PricingPage() {
         loggedIn: "Вхід виконано",
         access: "Доступ",
         accessFree: "Безкоштовно",
-        accessPromo: "Промокод",
-        accessUnlimited: "Безліміт",
+        accessPromo: "Промо доступ",
+        accessUnlimited: "Підписка активна",
         questionsLeft: "Залишилось запитань",
         unlimited: "Безлімітно",
         accessUntil: "Доступ до",
@@ -80,13 +87,19 @@ export default function PricingPage() {
         manageDesc: "Підписка та промо в профілі",
         openManage: "Відкрити керування",
         manageNeedLogin: "Щоб керувати доступом, потрібно увійти.",
+        signIn: "Увійти",
+        alreadyActive: "Доступ вже активний. Перейдіть у профіль.",
+        invalidPromo: "Недійсний промокод",
+        enterPromo: "Введіть промокод",
+        promoFailed: "Не вдалося активувати промокод",
       },
       ru: {
         title: "Тарифы",
         subtitle: "Безлимитный доступ к чату, голосу и видео. Пробный режим включает 5 вопросов.",
         planTitle: "Ежемесячно",
         planDesc: "Безлимитный доступ к чату, голосу и видео",
-        uah: "UAH",
+
+        perMonth: "в месяц",
         p1: "Безлимитное количество запросов",
         p2: "Чат, голос и видео",
         p3: "История сохраняется в профиле",
@@ -101,8 +114,8 @@ export default function PricingPage() {
         loggedIn: "Вход выполнен",
         access: "Доступ",
         accessFree: "Бесплатно",
-        accessPromo: "Промокод",
-        accessUnlimited: "Безлимит",
+        accessPromo: "Промо доступ",
+        accessUnlimited: "Подписка активна",
         questionsLeft: "Осталось вопросов",
         unlimited: "Безлимитно",
         accessUntil: "Доступ до",
@@ -119,13 +132,19 @@ export default function PricingPage() {
         manageDesc: "Подписка и промо в профиле",
         openManage: "Открыть управление",
         manageNeedLogin: "Чтобы управлять доступом, нужно войти.",
+        signIn: "Войти",
+        alreadyActive: "Доступ уже активен. Перейдите в профиль.",
+        invalidPromo: "Недействительный промокод",
+        enterPromo: "Введите промокод",
+        promoFailed: "Не удалось активировать промокод",
       },
       en: {
         title: "Pricing",
         subtitle: "Unlimited access to chat, voice and video. Trial includes 5 questions.",
         planTitle: "Monthly",
         planDesc: "Unlimited chat, voice and video access",
-        uah: "UAH",
+
+        perMonth: "per month",
         p1: "Unlimited questions",
         p2: "Chat, voice and video",
         p3: "History saved in your profile",
@@ -140,8 +159,8 @@ export default function PricingPage() {
         loggedIn: "Logged in",
         access: "Access",
         accessFree: "Free",
-        accessPromo: "Promo code",
-        accessUnlimited: "Unlimited",
+        accessPromo: "Promo access",
+        accessUnlimited: "Subscription active",
         questionsLeft: "Questions left",
         unlimited: "Unlimited",
         accessUntil: "Access until",
@@ -158,6 +177,11 @@ export default function PricingPage() {
         manageDesc: "Subscription & promo in profile",
         openManage: "Open management",
         manageNeedLogin: "Please sign in to manage access.",
+        signIn: "Sign in",
+        alreadyActive: "Access already active. Go to profile.",
+        invalidPromo: "Invalid promo code",
+        enterPromo: "Enter promo code",
+        promoFailed: "Promo activation failed",
       },
     }
     return c[lang as "uk" | "ru" | "en"]
@@ -228,21 +252,32 @@ export default function PricingPage() {
     window.location.assign("/api/auth/logout?next=/pricing")
   }
 
+  // Region determines price, NOT language
+  const region = useMemo(() => {
+    if (typeof window === "undefined") return "INTL"
+    return readCookie("ta_region") || "INTL"
+  }, [])
+
+  const isUA = region === "UA"
+  const displayPrice = isUA ? PRICE_UAH : PRICE_USD
+  const displaySymbol = isUA ? "₴" : "$"
+
   async function handleSubscribe() {
     setPayMsg(null)
     setPayLoading(true)
 
     try {
+      // Server determines amount + currency from ta_region cookie — we only send planId
       const r = await fetch("/api/billing/wayforpay/create-invoice", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ planId: "monthly", amount: PRICE_UAH, currency: CURRENCY }),
+        body: JSON.stringify({ planId: "monthly" }),
       })
 
       const d = await r.json().catch(() => ({}))
       if (d?.error === "already_active") {
-        setPayMsg("Доступ вже активний. Перейдіть у профіль.")
+        setPayMsg(copy.alreadyActive)
         setPayLoading(false)
         return
       }
@@ -275,9 +310,9 @@ export default function PricingPage() {
       const d = await r.json().catch(() => ({}))
       if (!r.ok || d?.ok === false) {
         const ec = String(d?.errorCode || "").toUpperCase()
-        const msg = ec === "INVALID_PROMO" ? "Недійсний промокод"
-          : ec === "EMPTY_CODE" ? "Введіть промокод"
-          : d?.error || "Promo activation failed"
+        const msg = ec === "INVALID_PROMO" ? copy.invalidPromo
+          : ec === "EMPTY_CODE" ? copy.enterPromo
+          : d?.error || copy.promoFailed
         throw new Error(msg)
       }
 
@@ -288,7 +323,7 @@ export default function PricingPage() {
       const s = await fetch("/api/account/summary", { cache: "no-store", credentials: "include" }).then((x) => x.json())
       setSummary(s)
     } catch (e: any) {
-      setPromoMsg(e?.message || "Promo activation failed")
+      setPromoMsg(e?.message || copy.promoFailed)
     } finally {
       setPromoLoading(false)
     }
@@ -307,10 +342,11 @@ export default function PricingPage() {
           </CardHeader>
 
           <CardContent className="pb-8">
-            <div className="flex items-end gap-3">
-              <div className="text-6xl font-bold leading-none">{Number.isFinite(PRICE_UAH) ? PRICE_UAH : 499}</div>
-              <div className="pb-1 text-muted-foreground">{copy.uah}</div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-bold leading-none">{displaySymbol}</span>
+              <span className="text-6xl font-bold leading-none">{displayPrice}</span>
             </div>
+            <div className="mt-1 text-sm text-muted-foreground">{copy.perMonth}</div>
 
             <ul className="mt-5 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
               <li>{copy.p1}</li>
@@ -320,7 +356,12 @@ export default function PricingPage() {
 
             <div className="mt-6 py-4">
               <div role="button" tabIndex={0} onClick={handleSubscribe} className="cursor-pointer" title={copy.subscribe}>
-                <TurbotaHoloCard title="TurbotaAI" subtitle="TurbotaAI Monthly" height={260} />
+                <div className="hidden sm:block">
+                  <TurbotaHoloCard title="TurbotaAI" subtitle="TurbotaAI Monthly" height={260} />
+                </div>
+                <div className="block sm:hidden">
+                  <TurbotaHoloCard title="TurbotaAI" subtitle="TurbotaAI Monthly" height={190} />
+                </div>
               </div>
             </div>
 
@@ -363,10 +404,10 @@ export default function PricingPage() {
                   <span className="text-slate-900">{loadingSummary ? "…" : questionsLabel}</span>
                 </div>
 
-                {(summary?.accessUntil || summary?.access_until) && (
+                {accessUntilPretty && (
                   <div className="flex items-center justify-between">
                     <span>{copy.accessUntil}</span>
-                    <span className="text-slate-900">{loadingSummary ? "…" : accessUntilPretty || "—"}</span>
+                    <span className="text-slate-900">{loadingSummary ? "…" : accessUntilPretty}</span>
                   </div>
                 )}
               </div>
@@ -385,7 +426,7 @@ export default function PricingPage() {
                     variant="outline"
                     className="border border-slate-200"
                     onClick={() => router.push("/login?next=/pricing")}
-                  >Увійти</Button>
+                  >{copy.signIn}</Button>
                 )}
               </div>
             </CardContent>
