@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 type IncomingMsg = {
   role?: string;
@@ -135,8 +136,8 @@ export async function POST(req: Request) {
 
   let convId = requestedId || crypto.randomUUID();
 
-  // проверяем доступ к беседе если она уже есть
-  const { data: existingConv } = await sb
+  // проверяем доступ к беседе если она уже есть (admin bypasses RLS)
+  const { data: existingConv } = await supabaseAdmin
     .from("conversations")
     .select("id,user_id,device_hash,title")
     .eq("id", convId)
@@ -177,7 +178,7 @@ export async function POST(req: Request) {
   Object.keys(convRow).forEach((k) => convRow[k] === undefined && delete convRow[k]);
   if (!convRow.title) delete convRow.title;
 
-  const { error: convErr } = await sb.from("conversations").upsert(convRow, { onConflict: "id" });
+  const { error: convErr } = await supabaseAdmin.from("conversations").upsert(convRow, { onConflict: "id" });
   if (convErr) return json({ ok: false, error: convErr.message }, 400);
 
   if (!incoming.length) {
@@ -205,7 +206,7 @@ export async function POST(req: Request) {
     return json({ ok: true, id: convId, conversationId: convId });
   }
 
-  const { error: msgErr } = await sb.from("messages").insert(rows);
+  const { error: msgErr } = await supabaseAdmin.from("messages").insert(rows);
   if (msgErr) return json({ ok: false, error: msgErr.message }, 400);
 
   return json({ ok: true, id: convId, conversationId: convId });

@@ -47,11 +47,11 @@ export default function PricingPage() {
         subtitle: "Безлімітний доступ до чату, голосу та відео. Пробний режим має 5 запитань.",
         planTitle: "Щомісяця",
         planDesc: "Безлімітний доступ до чату, голосу і відео",
-        uah: "UAH",
+        uah: "₴ / міс",
         p1: "Безлімітна кількість запитів",
         p2: "Чат, голос і відео",
         p3: "Історія зберігається у профілі",
-        subscribe: "Підписатися",
+        subscribe: "Підписатися — 499 ₴/міс",
         opening: "Відкриваємо оплату...",
         invoiceOpened: "Оплата відкрита. Завершіть оплату у WayForPay.",
         payFailed: "Не вдалося створити оплату",
@@ -91,11 +91,11 @@ export default function PricingPage() {
         subtitle: "Безлимитный доступ к чату, голосу и видео. Пробный режим включает 5 вопросов.",
         planTitle: "Ежемесячно",
         planDesc: "Безлимитный доступ к чату, голосу и видео",
-        uah: "UAH",
+        uah: "₴ / мес",
         p1: "Безлимитное количество запросов",
         p2: "Чат, голос и видео",
         p3: "История сохраняется в профиле",
-        subscribe: "Подписаться",
+        subscribe: "Подписаться — 499 ₴/мес",
         opening: "Открываем оплату...",
         invoiceOpened: "Оплата открыта. Завершите оплату в WayForPay.",
         payFailed: "Не удалось создать оплату",
@@ -135,11 +135,11 @@ export default function PricingPage() {
         subtitle: "Unlimited access to chat, voice and video. Trial includes 5 questions.",
         planTitle: "Monthly",
         planDesc: "Unlimited chat, voice and video access",
-        uah: "UAH",
+        uah: "UAH / mo",
         p1: "Unlimited questions",
         p2: "Chat, voice and video",
         p3: "History saved in your profile",
-        subscribe: "Subscribe",
+        subscribe: "Subscribe — 499 UAH/mo",
         opening: "Opening...",
         invoiceOpened: "Payment opened. Complete it in WayForPay.",
         payFailed: "Payment init failed",
@@ -322,9 +322,9 @@ export default function PricingPage() {
           </CardHeader>
 
           <CardContent className="pb-8">
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-2">
               <div className="text-6xl font-bold leading-none">{Number.isFinite(PRICE_UAH) ? PRICE_UAH : 499}</div>
-              <div className="pb-1 text-muted-foreground">{CURRENCY}</div>
+              <div className="pb-1 text-lg font-medium text-slate-600">{copy.uah}</div>
             </div>
 
             <ul className="mt-5 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
