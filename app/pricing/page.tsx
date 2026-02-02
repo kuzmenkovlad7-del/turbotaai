@@ -12,7 +12,7 @@ import { useLanguage } from "@/lib/i18n/language-context"
 type AnyObj = Record<string, any>
 
 const PRICE_UAH = Number(process.env.NEXT_PUBLIC_PRICE_UAH || "499")
-const PRICE_USD = Number(process.env.NEXT_PUBLIC_PRICE_USD || "13")
+const PRICE_USD = Number(process.env.NEXT_PUBLIC_PRICE_USD || "12")
 
 function isActiveDate(v: any) {
   if (!v) return false
