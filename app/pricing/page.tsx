@@ -12,7 +12,7 @@ import { useLanguage } from "@/lib/i18n/language-context"
 type AnyObj = Record<string, any>
 
 const PRICE_UAH = Number(process.env.NEXT_PUBLIC_PRICE_UAH || "499")
-const CURRENCY = String(process.env.NEXT_PUBLIC_CURRENCY || "UAH")
+const PRICE_USD = Number(process.env.NEXT_PUBLIC_PRICE_USD || "13")
 
 function isActiveDate(v: any) {
   if (!v) return false
@@ -47,12 +47,12 @@ export default function PricingPage() {
         subtitle: "Безлімітний доступ до чату, голосу та відео. Пробний режим має 5 запитань.",
         planTitle: "Щомісяця",
         planDesc: "Безлімітний доступ до чату, голосу і відео",
-        uah: "₴ / міс",
-        approx: "",
+        currencySymbol: "₴",
+        perMonth: "на місяць",
         p1: "Безлімітна кількість запитів",
         p2: "Чат, голос і відео",
         p3: "Історія зберігається у профілі",
-        subscribe: "Підписатися — 499 ₴/міс",
+        subscribe: "Підписатися",
         opening: "Відкриваємо оплату...",
         invoiceOpened: "Оплата відкрита. Завершіть оплату у WayForPay.",
         payFailed: "Не вдалося створити оплату",
@@ -92,12 +92,12 @@ export default function PricingPage() {
         subtitle: "Безлимитный доступ к чату, голосу и видео. Пробный режим включает 5 вопросов.",
         planTitle: "Ежемесячно",
         planDesc: "Безлимитный доступ к чату, голосу и видео",
-        uah: "₴ / мес",
-        approx: "",
+        currencySymbol: "₴",
+        perMonth: "в месяц",
         p1: "Безлимитное количество запросов",
         p2: "Чат, голос и видео",
         p3: "История сохраняется в профиле",
-        subscribe: "Подписаться — 499 ₴/мес",
+        subscribe: "Подписаться",
         opening: "Открываем оплату...",
         invoiceOpened: "Оплата открыта. Завершите оплату в WayForPay.",
         payFailed: "Не удалось создать оплату",
@@ -137,12 +137,12 @@ export default function PricingPage() {
         subtitle: "Unlimited access to chat, voice and video. Trial includes 5 questions.",
         planTitle: "Monthly",
         planDesc: "Unlimited chat, voice and video access",
-        uah: "UAH per month",
-        approx: "≈ €12 / $13",
+        currencySymbol: "$",
+        perMonth: "per month",
         p1: "Unlimited questions",
         p2: "Chat, voice and video",
         p3: "History saved in your profile",
-        subscribe: "Subscribe — 499 UAH per month",
+        subscribe: "Subscribe",
         opening: "Opening...",
         invoiceOpened: "Payment opened. Complete it in WayForPay.",
         payFailed: "Payment init failed",
@@ -246,6 +246,11 @@ export default function PricingPage() {
     window.location.assign("/api/auth/logout?next=/pricing")
   }
 
+  const isEN = lang === "en"
+  const displayPrice = isEN ? PRICE_USD : PRICE_UAH
+  const invoiceCurrency = isEN ? "USD" : "UAH"
+  const invoiceAmount = isEN ? PRICE_USD : PRICE_UAH
+
   async function handleSubscribe() {
     setPayMsg(null)
     setPayLoading(true)
@@ -255,7 +260,7 @@ export default function PricingPage() {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ planId: "monthly", amount: PRICE_UAH, currency: CURRENCY }),
+        body: JSON.stringify({ planId: "monthly", amount: invoiceAmount, currency: invoiceCurrency }),
       })
 
       const d = await r.json().catch(() => ({}))
@@ -325,13 +330,11 @@ export default function PricingPage() {
           </CardHeader>
 
           <CardContent className="pb-8">
-            <div className="flex items-end gap-2">
-              <div className="text-6xl font-bold leading-none">{Number.isFinite(PRICE_UAH) ? PRICE_UAH : 499}</div>
-              <div className="pb-1 text-lg font-medium text-slate-600">{copy.uah}</div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-bold leading-none">{copy.currencySymbol}</span>
+              <span className="text-6xl font-bold leading-none">{displayPrice}</span>
             </div>
-            {copy.approx ? (
-              <div className="mt-1 text-sm text-muted-foreground">{copy.approx}</div>
-            ) : null}
+            <div className="mt-1 text-sm text-muted-foreground">{copy.perMonth}</div>
 
             <ul className="mt-5 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
               <li>{copy.p1}</li>
