@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { MessageCircle, Phone, Video, Sparkles, ChevronDown, X } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
@@ -37,6 +37,14 @@ export default function AssistantFab() {
   const [videoOpen, setVideoOpen] = useState(false)
 
   const anyDialogOpen = chatOpen || voiceOpen || videoOpen
+
+  // Lock body scroll when panel or any dialog is open
+  useEffect(() => {
+    if (panelOpen || anyDialogOpen) {
+      document.body.style.overflow = "hidden"
+      return () => { document.body.style.overflow = "" }
+    }
+  }, [panelOpen, anyDialogOpen])
 
   const copy = useMemo(() => {
     const c = {
@@ -101,7 +109,7 @@ export default function AssistantFab() {
         <>
           {/* Panel */}
           {panelOpen && (
-            <div className="fixed inset-0 z-[60] pointer-events-none z-40">
+            <div className="fixed inset-0 z-[60] pointer-events-none">
               <div
                 className="absolute inset-0 bg-black/20 pointer-events-auto"
                 onClick={() => setPanelOpen(false)}

@@ -442,6 +442,7 @@ export default function VideoCallDialog({
 
   const [isCallActive, setIsCallActive] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
+  const [isVideoReady, setIsVideoReady] = useState(false)
 
   const [isMicMuted, setIsMicMuted] = useState(false)
   const [isCameraOff, setIsCameraOff] = useState(false)
@@ -1093,6 +1094,7 @@ export default function VideoCallDialog({
       isSttBusyRef.current = true
       setActivityStatus("thinking")
 
+      const _sttStart = performance.now()
       const res = await fetch("/api/stt", {
         method: "POST",
         headers: {
@@ -1122,7 +1124,9 @@ export default function VideoCallDialog({
       audioChunksRef.current = keep ? [keep] : []
       sentIdxRef.current = keep ? 1 : 0
 
+      const _sttMs = Math.round(performance.now() - _sttStart)
       const fullText = (data.text || "").toString().trim()
+      if (fullText) console.log(`[perf] STT: ${_sttMs}ms — "${fullText.slice(0, 40)}"`)
       if (!fullText) {
         setActivityStatus("listening")
         return
@@ -1304,6 +1308,7 @@ export default function VideoCallDialog({
     const ttsGender = gender === "male" ? "MALE" : "FEMALE"
     const langCode = computeLangCode()
 
+    const _ttsStart = performance.now()
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1318,6 +1323,8 @@ export default function VideoCallDialog({
       throw new Error(json?.error || `TTS error: ${res.status}`)
     }
 
+    const _ttsMs = Math.round(performance.now() - _ttsStart)
+    console.log(`[perf] TTS: ${_ttsMs}ms`)
     const contentType = (json.contentType || "audio/mpeg").toString()
     const audioB64 = String(json.audioContent || "")
 
@@ -1554,6 +1561,7 @@ export default function VideoCallDialog({
         throw new Error("VIDEO_ASSISTANT_WEBHOOK_URL is not configured")
       }
 
+      const _agentStart = performance.now()
       const res = await fetch(VIDEO_ASSISTANT_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1580,9 +1588,12 @@ if (res.status === 402) {
         data = JSON.parse(raw)
       } catch {}
 
+      const _agentMs = Math.round(performance.now() - _agentStart)
       let aiRaw = extractAnswer(data)
       aiRaw = cleanResponseText(aiRaw)
       aiRaw = sanitizeAssistantText(aiRaw)
+      if (aiRaw) console.log(`[perf] Agent: ${_agentMs}ms — "${aiRaw.slice(0, 40)}"`)
+
 
       if (!aiRaw) throw new Error("Empty response received")
 
@@ -1674,7 +1685,14 @@ if (res.status === 402) {
 
       if (hasEnhancedVideo && idleVideoRef.current && selectedCharacter.idleVideo) {
         try {
-          idleVideoRef.current.play().catch(() => {})
+          const idle = idleVideoRef.current
+          idle.load()
+          await idle.play().catch(() => {})
+        } catch {}
+      }
+      if (hasEnhancedVideo && speakingVideoRef.current && selectedCharacter.speakingVideo) {
+        try {
+          speakingVideoRef.current.load()
         } catch {}
       }
 
@@ -1715,6 +1733,7 @@ if (res.status === 402) {
     setInterimTranscript("")
     setMessages([])
     setSpeechError(null)
+    setIsVideoReady(false)
 
     if (idleVideoRef.current) {
       try {
@@ -1817,7 +1836,9 @@ if (res.status === 402) {
   const micOn = isCallActive && !isMicMuted && isListening && !isAiSpeaking
 
   const statusText = (() => {
-    if (!isCallActive) return t("Choose an AI specialist and press “Start video call” to begin.")
+    if (isConnecting) return t("Connecting...")
+    if (!isCallActive) return t("Choose an AI specialist and press "Start video call" to begin.")
+    if (speechError) return t("An error occurred. Check the chat panel for details.")
     if (isAvatarSpeaking) return t("Assistant is speaking. Please wait a moment.")
     if (activityStatus === "thinking") return t("Thinking...")
     if (micOn) return t("Listening… you can speak.")
@@ -1828,8 +1849,8 @@ if (res.status === 402) {
   const bodyClass = "flex-1 min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col touch-pan-y"
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 sm:p-6">
-      <div className="bg-white rounded-3xl shadow-xl w-[calc(100vw-1.5rem)] max-w-[540px] flex flex-col h-[600px] overflow-hidden md:w-[calc(100vw-4rem)] md:max-w-4xl md:h-[720px]">
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-6" style={{ minHeight: "100dvh" }}>
+      <div className="bg-white rounded-3xl shadow-xl w-[calc(100vw-1.5rem)] max-w-[540px] flex flex-col h-[min(600px,calc(100dvh-2rem))] overflow-hidden md:w-[calc(100vw-4rem)] md:max-w-4xl md:h-[min(720px,calc(100dvh-3rem))]">
         <div className="p-3 sm:p-4 border-b flex items-center justify-between rounded-t-xl relative bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 text-white">
           <div className="flex flex-col flex-1 min-w-0 pr-2">
             <h3 className="font-semibold text-base sm:text-lg truncate flex items-center gap-2">
@@ -1889,7 +1910,7 @@ if (res.status === 402) {
                     <button
                       key={character.id}
                       type="button"
-                      onClick={() => setSelectedCharacter(character)}
+                      onClick={() => { setIsVideoReady(false); setSelectedCharacter(character) }}
                       className={`relative bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border-2 ${
                         selectedCharacter.id === character.id
                           ? "border-primary-600"
@@ -1897,7 +1918,7 @@ if (res.status === 402) {
                       }`}
                     >
                       <div className="p-4 sm:p-5 flex flex-col h-full">
-                        <div className="relative w-full aspect-square mb-3 sm:mb-4 overflow-hidden rounded-lg bg-black">
+                        <div className="relative w-full aspect-square mb-3 sm:mb-4 overflow-hidden rounded-lg bg-gradient-to-br from-slate-100 to-slate-200">
                           {character.idleVideo ? (
                             <video
                               className="absolute inset-0 w-full h-full object-cover scale-[1.08]"
@@ -1905,7 +1926,7 @@ if (res.status === 402) {
                               loop
                               playsInline
                               autoPlay
-                              preload="metadata"
+                              preload="auto"
                             >
                               <source src={character.idleVideo} type="video/mp4" />
                             </video>
@@ -1961,7 +1982,16 @@ if (res.status === 402) {
               {/* LEFT: VIDEO (mobile gets at least 200px via grid row, desktop uses flex) */}
               <div className="row-start-1 w-full sm:w-2/3 flex flex-col min-h-0">
                 <div className="relative w-full flex-1 bg-white rounded-lg overflow-hidden">
-                  <div className="absolute inset-0 bg-white overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+                    {/* Loading skeleton — visible until video is ready */}
+                    {!isVideoReady && hasEnhancedVideo && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 z-[1]">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-slate-200 animate-pulse" />
+                          <div className="h-3 w-24 bg-slate-200 rounded animate-pulse" />
+                        </div>
+                      </div>
+                    )}
                     {hasEnhancedVideo ? (
                       <>
                         {selectedCharacter.idleVideo && (
@@ -1972,7 +2002,10 @@ if (res.status === 402) {
                             loop
                             playsInline
                             autoPlay
-                            preload="metadata"
+                            preload="auto"
+                            poster={selectedCharacter.avatar}
+                            onCanPlay={() => setIsVideoReady(true)}
+                            onError={() => setIsVideoReady(true)}
                           >
                             <source src={selectedCharacter.idleVideo} type="video/mp4" />
                           </video>
@@ -1987,7 +2020,7 @@ if (res.status === 402) {
                             muted
                             loop
                             playsInline
-                            preload="metadata"
+                            preload="auto"
                           >
                             <source src={selectedCharacter.speakingVideo} type="video/mp4" />
                           </video>
@@ -1996,7 +2029,7 @@ if (res.status === 402) {
                     ) : (
                       <>
                         {selectedCharacter && !isAvatarSpeaking && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-white">
+                          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
                             <div className="w-40 h-40 sm:w-56 sm:h-56 relative">
                               <Image
                                 src={selectedCharacter.avatar || "/placeholder.svg"}
@@ -2018,7 +2051,7 @@ if (res.status === 402) {
                             muted
                             loop
                             playsInline
-                            preload="metadata"
+                            preload="auto"
                           >
                             <source src={selectedCharacter.speakingVideo} type="video/mp4" />
                           </video>
@@ -2028,19 +2061,37 @@ if (res.status === 402) {
                   </div>
 
                   <div
-                    className={`absolute top-2 sm:top-4 right-2 sm:right-4 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${
-                      activityStatus === "listening"
+                    className={`absolute top-2 sm:top-4 right-2 sm:right-4 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1.5 ${
+                      speechError
+                        ? "bg-rose-100 text-rose-800"
+                        : activityStatus === "listening"
                         ? "bg-green-100 text-green-800"
                         : activityStatus === "thinking"
                         ? "bg-blue-100 text-blue-800"
                         : "bg-purple-100 text-purple-800"
                     }`}
                   >
-                    {activityStatus === "listening"
-                      ? t("Listening...")
-                      : activityStatus === "thinking"
-                      ? t("Thinking...")
-                      : t("Speaking...")}
+                    {speechError ? (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-500" />
+                        {t("Error")}
+                      </>
+                    ) : activityStatus === "listening" ? (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        {t("Listening...")}
+                      </>
+                    ) : activityStatus === "thinking" ? (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                        {t("Thinking...")}
+                      </>
+                    ) : (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                        {t("Speaking...")}
+                      </>
+                    )}
                   </div>
 
                   {!isCameraOff && (
@@ -2110,7 +2161,14 @@ if (res.status === 402) {
 
                   {speechError && (
                     <div className="bg-rose-50 rounded-lg p-3 text-xs sm:text-sm text-rose-700 break-words">
-                      {speechError}
+                      <p>{speechError}</p>
+                      <button
+                        type="button"
+                        onClick={() => { setSpeechError(null); resetVadState(); safeStartListening() }}
+                        className="mt-2 text-xs font-medium text-rose-800 underline underline-offset-2 hover:text-rose-900"
+                      >
+                        {t("Try again")}
+                      </button>
                     </div>
                   )}
                 </div>
