@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { useLanguage } from "@/lib/i18n/language-context"
 
 type Summary = {
@@ -47,6 +48,8 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<Array<{ id: string; title: string | null; mode: string; updated_at: string }>>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   const lang = useMemo(() => {
     const code = String(currentLanguage?.code || "uk").toLowerCase()
@@ -76,7 +79,9 @@ export default function ProfilePage() {
         tip: "Порада: щоб не втратити доступ при очищенні cookie, увійдіть або зареєструйтесь і привʼяжіть доступ до аккаунта.",
         history: "Історія",
         savedSessions: "Збережені сесії",
-        historyShown: "Історія відображається для увійшовших користувачів",
+        historyLoading: "Завантаження історії...",
+        historyEmpty: "Ще немає збережених сесій.",
+        historyUntitled: "Без назви",
         loginToSeeHistory: "Увійдіть, щоб бачити історію.",
         subActive: "Підписка активна",
         promoAccess: "Промо доступ",
@@ -112,7 +117,9 @@ export default function ProfilePage() {
         tip: "Совет: чтобы не потерять доступ при очистке cookie, войдите или зарегистрируйтесь и привяжите доступ к аккаунту.",
         history: "История",
         savedSessions: "Сохранённые сессии",
-        historyShown: "История отображается для вошедших пользователей",
+        historyLoading: "Загрузка истории...",
+        historyEmpty: "Ещё нет сохранённых сессий.",
+        historyUntitled: "Без названия",
         loginToSeeHistory: "Войдите, чтобы видеть историю.",
         subActive: "Подписка активна",
         promoAccess: "Промо доступ",
@@ -148,7 +155,9 @@ export default function ProfilePage() {
         tip: "Tip: to keep access when clearing cookies, sign in or register and link access to your account.",
         history: "History",
         savedSessions: "Saved sessions",
-        historyShown: "History is shown for signed-in users",
+        historyLoading: "Loading history...",
+        historyEmpty: "No saved sessions yet.",
+        historyUntitled: "Untitled",
         loginToSeeHistory: "Sign in to see history.",
         subActive: "Subscription active",
         promoAccess: "Promo access",
@@ -230,6 +239,25 @@ export default function ProfilePage() {
 
   const isLoggedIn = Boolean(summary?.isLoggedIn)
   const email = summary?.email || null
+
+  useEffect(() => {
+    if (!isLoggedIn) return
+    let alive = true
+    const fetchHistory = async () => {
+      setHistoryLoading(true)
+      try {
+        const r = await fetch("/api/history/list", { cache: "no-store", credentials: "include" })
+        const data = await r.json().catch(() => ({} as any))
+        if (alive) setConversations(Array.isArray(data?.conversations) ? data.conversations : [])
+      } catch {
+        if (alive) setConversations([])
+      } finally {
+        if (alive) setHistoryLoading(false)
+      }
+    }
+    fetchHistory()
+    return () => { alive = false }
+  }, [isLoggedIn])
 
   const accessLabel = paidActive
     ? copy.subActive
@@ -361,10 +389,29 @@ export default function ProfilePage() {
           <div className="mb-2 text-xl font-semibold">{copy.history}</div>
           <div className="text-sm text-gray-500">{copy.savedSessions}</div>
 
-          {isLoggedIn ? (
-            <div className="mt-4 text-sm text-gray-500">{copy.historyShown}</div>
-          ) : (
+          {!isLoggedIn ? (
             <div className="mt-4 text-sm text-gray-500">{copy.loginToSeeHistory}</div>
+          ) : historyLoading ? (
+            <div className="mt-4 text-sm text-gray-500">{copy.historyLoading}</div>
+          ) : conversations.length === 0 ? (
+            <div className="mt-4 text-sm text-gray-500">{copy.historyEmpty}</div>
+          ) : (
+            <div className="mt-4 space-y-2 max-h-[400px] overflow-y-auto">
+              {conversations.map((conv) => (
+                <Link
+                  key={conv.id}
+                  href={`/history/${conv.id}`}
+                  className="block rounded-lg border p-3 transition-colors hover:bg-gray-50"
+                >
+                  <div className="font-medium text-sm truncate">
+                    {conv.title || copy.historyUntitled}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {new Date(conv.updated_at).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </Link>
+              ))}
+            </div>
           )}
         </div>
       </div>

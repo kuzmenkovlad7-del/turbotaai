@@ -48,6 +48,7 @@ export default function PricingPage() {
         planTitle: "Щомісяця",
         planDesc: "Безлімітний доступ до чату, голосу і відео",
         uah: "₴ / міс",
+        approx: "",
         p1: "Безлімітна кількість запитів",
         p2: "Чат, голос і відео",
         p3: "Історія зберігається у профілі",
@@ -92,6 +93,7 @@ export default function PricingPage() {
         planTitle: "Ежемесячно",
         planDesc: "Безлимитный доступ к чату, голосу и видео",
         uah: "₴ / мес",
+        approx: "",
         p1: "Безлимитное количество запросов",
         p2: "Чат, голос и видео",
         p3: "История сохраняется в профиле",
@@ -135,11 +137,12 @@ export default function PricingPage() {
         subtitle: "Unlimited access to chat, voice and video. Trial includes 5 questions.",
         planTitle: "Monthly",
         planDesc: "Unlimited chat, voice and video access",
-        uah: "UAH / mo",
+        uah: "UAH per month",
+        approx: "≈ €12 / $13",
         p1: "Unlimited questions",
         p2: "Chat, voice and video",
         p3: "History saved in your profile",
-        subscribe: "Subscribe — 499 UAH/mo",
+        subscribe: "Subscribe — 499 UAH per month",
         opening: "Opening...",
         invoiceOpened: "Payment opened. Complete it in WayForPay.",
         payFailed: "Payment init failed",
@@ -326,6 +329,9 @@ export default function PricingPage() {
               <div className="text-6xl font-bold leading-none">{Number.isFinite(PRICE_UAH) ? PRICE_UAH : 499}</div>
               <div className="pb-1 text-lg font-medium text-slate-600">{copy.uah}</div>
             </div>
+            {copy.approx ? (
+              <div className="mt-1 text-sm text-muted-foreground">{copy.approx}</div>
+            ) : null}
 
             <ul className="mt-5 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
               <li>{copy.p1}</li>
