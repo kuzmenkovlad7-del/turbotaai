@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { createHmac, randomUUID } from "crypto"
 import { buildAccessSummary } from "@/lib/server/access-summary"
+import { getRegionPrice } from "@/lib/billing/plans"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -83,16 +84,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({} as any))
     const planId = String(body?.planId || "monthly").trim() || "monthly"
 
-    const currency = String(body?.currency || env("WAYFORPAY_CURRENCY") || "UAH").trim() || "UAH"
-
-    let amountStr = formatAmount(body?.amount) || pickPriceFromEnv(planId) || "499.00"
-
-    if (!amountStr) {
-      return NextResponse.json(
-        { ok: false, error: "missing_amount" },
-        { status: 500, headers: { "cache-control": "no-store" } }
-      )
-    }
+    // Server-authoritative pricing: derive amount + currency from ta_region cookie
+    const region = req.cookies.get("ta_region")?.value || "INTL"
+    const regionPrice = getRegionPrice(planId, region)
+    const currency = regionPrice.currency
+    const amountStr = formatAmount(regionPrice.amount) || "499.00"
 
     const { summary, pendingCookies, needSetDeviceCookie, deviceHash, cookieDomain } = await buildAccessSummary(req)
 

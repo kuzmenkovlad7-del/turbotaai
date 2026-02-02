@@ -14,6 +14,12 @@ type AnyObj = Record<string, any>
 const PRICE_UAH = Number(process.env.NEXT_PUBLIC_PRICE_UAH || "499")
 const PRICE_USD = Number(process.env.NEXT_PUBLIC_PRICE_USD || "12")
 
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null
+  const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))
+  return m ? decodeURIComponent(m[1]).trim() || null : null
+}
+
 function isActiveDate(v: any) {
   if (!v) return false
   const d = new Date(String(v))
@@ -47,7 +53,7 @@ export default function PricingPage() {
         subtitle: "Безлімітний доступ до чату, голосу та відео. Пробний режим має 5 запитань.",
         planTitle: "Щомісяця",
         planDesc: "Безлімітний доступ до чату, голосу і відео",
-        currencySymbol: "₴",
+
         perMonth: "на місяць",
         p1: "Безлімітна кількість запитів",
         p2: "Чат, голос і відео",
@@ -92,7 +98,7 @@ export default function PricingPage() {
         subtitle: "Безлимитный доступ к чату, голосу и видео. Пробный режим включает 5 вопросов.",
         planTitle: "Ежемесячно",
         planDesc: "Безлимитный доступ к чату, голосу и видео",
-        currencySymbol: "₴",
+
         perMonth: "в месяц",
         p1: "Безлимитное количество запросов",
         p2: "Чат, голос и видео",
@@ -137,7 +143,7 @@ export default function PricingPage() {
         subtitle: "Unlimited access to chat, voice and video. Trial includes 5 questions.",
         planTitle: "Monthly",
         planDesc: "Unlimited chat, voice and video access",
-        currencySymbol: "$",
+
         perMonth: "per month",
         p1: "Unlimited questions",
         p2: "Chat, voice and video",
@@ -246,21 +252,27 @@ export default function PricingPage() {
     window.location.assign("/api/auth/logout?next=/pricing")
   }
 
-  const isEN = lang === "en"
-  const displayPrice = isEN ? PRICE_USD : PRICE_UAH
-  const invoiceCurrency = isEN ? "USD" : "UAH"
-  const invoiceAmount = isEN ? PRICE_USD : PRICE_UAH
+  // Region determines price, NOT language
+  const region = useMemo(() => {
+    if (typeof window === "undefined") return "INTL"
+    return readCookie("ta_region") || "INTL"
+  }, [])
+
+  const isUA = region === "UA"
+  const displayPrice = isUA ? PRICE_UAH : PRICE_USD
+  const displaySymbol = isUA ? "₴" : "$"
 
   async function handleSubscribe() {
     setPayMsg(null)
     setPayLoading(true)
 
     try {
+      // Server determines amount + currency from ta_region cookie — we only send planId
       const r = await fetch("/api/billing/wayforpay/create-invoice", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ planId: "monthly", amount: invoiceAmount, currency: invoiceCurrency }),
+        body: JSON.stringify({ planId: "monthly" }),
       })
 
       const d = await r.json().catch(() => ({}))
@@ -331,7 +343,7 @@ export default function PricingPage() {
 
           <CardContent className="pb-8">
             <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold leading-none">{copy.currencySymbol}</span>
+              <span className="text-3xl font-bold leading-none">{displaySymbol}</span>
               <span className="text-6xl font-bold leading-none">{displayPrice}</span>
             </div>
             <div className="mt-1 text-sm text-muted-foreground">{copy.perMonth}</div>
