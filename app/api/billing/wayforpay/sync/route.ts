@@ -287,7 +287,7 @@ export async function GET(req: NextRequest) {
       try {
         await admin
           .from("profiles")
-          .update({ paid_until: paidUntil, subscription_status: "active", updated_at: new Date().toISOString() } as any)
+          .update({ paid_until: paidUntil, subscription_status: "active", auto_renew: true, updated_at: new Date().toISOString() } as any)
           .eq("id", effectiveUserId)
       } catch {}
     }
@@ -319,7 +319,7 @@ export async function GET(req: NextRequest) {
   if (needSetDeviceCookie) {
     res.cookies.set(DEVICE_COOKIE, deviceHash, {
       path: "/",
-      httpOnly: true,
+      httpOnly: false,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       maxAge: 60 * 60 * 24 * 365,

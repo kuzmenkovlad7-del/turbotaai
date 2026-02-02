@@ -146,18 +146,21 @@ async function ensureGrant(admin: any, key: string, userId: string | null, trial
   let g = await findGrant(admin, key)
 
   if (!g) {
+    // Use upsert to prevent duplicates from concurrent requests
     await admin
       .from("access_grants")
-      .insert({
-        id: randomUUID(),
-        user_id: userId,
-        device_hash: key,
-        trial_questions_left: trial,
-        paid_until: null,
-        promo_until: null,
-        created_at: nowIso,
-        updated_at: nowIso,
-      } as any)
+      .upsert(
+        {
+          device_hash: key,
+          user_id: userId,
+          trial_questions_left: trial,
+          paid_until: null,
+          promo_until: null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        } as any,
+        { onConflict: "device_hash", ignoreDuplicates: true },
+      )
   }
 
   g = await findGrant(admin, key)

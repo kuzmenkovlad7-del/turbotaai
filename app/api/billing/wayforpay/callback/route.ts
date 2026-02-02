@@ -169,6 +169,12 @@ export async function POST(req: NextRequest) {
           { status: 400, headers: { "cache-control": "no-store" } }
         )
       }
+    } else if (mapTxToStatus(transactionStatus) === "paid") {
+      // Signature is required for paid status to prevent spoofing
+      return NextResponse.json(
+        { ok: false, error: "missing_signature", orderReference },
+        { status: 400, headers: { "cache-control": "no-store" } }
+      )
     }
 
     const sb = createClient(mustEnv("NEXT_PUBLIC_SUPABASE_URL"), mustEnv("SUPABASE_SERVICE_ROLE_KEY"), {

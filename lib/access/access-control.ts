@@ -85,19 +85,32 @@ export async function getOrCreateGrant(deviceHash: string, trialOverride?: numbe
   const existing = Array.isArray(existingArr) ? existingArr[0] : null
   if (existing) return existing as AccessGrant
 
-  const { data: created, error: insErr } = await supabase
+  // Use upsert to prevent duplicates from concurrent requests
+  const { error: upsErr } = await supabase
     .from(TABLE)
-    .insert({
-      device_hash: deviceHash,
-      trial_questions_left: trialDefault,
-      paid_until: null,
-      promo_until: null,
-    })
+    .upsert(
+      {
+        device_hash: deviceHash,
+        trial_questions_left: trialDefault,
+        paid_until: null,
+        promo_until: null,
+      },
+      { onConflict: "device_hash", ignoreDuplicates: true },
+    )
+
+  if (upsErr) throw upsErr
+
+  // Re-read to get the row (whether just inserted or already existed)
+  const { data: row, error: selErr2 } = await supabase
+    .from(TABLE)
     .select("id,device_hash,trial_questions_left,paid_until,promo_until")
+    .eq("device_hash", deviceHash)
+    .order("updated_at", { ascending: false })
+    .limit(1)
     .single()
 
-  if (insErr) throw insErr
-  return created as AccessGrant
+  if (selErr2) throw selErr2
+  return row as AccessGrant
 }
 
 export async function requireAccessByDeviceHash(args: {

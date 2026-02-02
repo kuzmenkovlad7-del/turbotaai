@@ -239,7 +239,7 @@ export async function POST(req: NextRequest) {
       const ckDomain = (h === "turbotaai.com" || h.endsWith(".turbotaai.com")) ? ".turbotaai.com" : undefined
       res.cookies.set(DEVICE_COOKIE, deviceUuid, {
         path: "/",
-        httpOnly: true,
+        httpOnly: false,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 365,

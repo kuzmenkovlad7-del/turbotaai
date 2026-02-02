@@ -41,7 +41,7 @@ function routeSupabase() {
       value: created,
       options: {
         path: "/",
-        httpOnly: true,
+        httpOnly: false,
         sameSite: "lax",
         maxAge: 60 * 60 * 24 * 365,
       },

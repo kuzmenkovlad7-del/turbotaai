@@ -322,7 +322,7 @@ async function handle(req: NextRequest) {
     if (orderDeviceHash && status === "paid") {
       res.cookies.set(DEVICE_COOKIE, orderDeviceHash, {
         path: "/",
-        httpOnly: true,
+        httpOnly: false,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         maxAge: 60 * 60 * 24 * 365,
