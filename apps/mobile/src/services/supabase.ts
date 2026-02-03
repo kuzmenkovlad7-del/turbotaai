@@ -1,5 +1,4 @@
 import { createClient } from "@supabase/supabase-js"
-import { API_BASE_URL } from "@/constants/config"
 import {
   getAuthToken,
   setAuthToken,

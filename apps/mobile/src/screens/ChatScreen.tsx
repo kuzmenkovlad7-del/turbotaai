@@ -19,6 +19,7 @@ type Message = {
   id: string
   role: "user" | "assistant"
   text: string
+  isError?: boolean
 }
 
 export default function ChatScreen() {
@@ -28,50 +29,81 @@ export default function ChatScreen() {
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
   const flatListRef = useRef<FlatList>(null)
+  const conversationIdRef = useRef<string | null>(null)
+  const sendingRef = useRef(false)
 
   const sendMessage = useCallback(async () => {
     const text = input.trim()
-    if (!text || sending) return
+    if (!text || sendingRef.current) return
+
+    sendingRef.current = true
+    setSending(true)
 
     const userMsg: Message = { id: `u-${Date.now()}`, role: "user", text }
     setMessages((prev) => [...prev, userMsg])
     setInput("")
-    setSending(true)
 
     try {
       const data = await api.sendMessage(text, "uk", user?.email)
-      const reply = data?.text || data?.response || data?.[0]?.text || "..."
+      const reply = api.extractReplyText(data)
+      const isError = data?.ok === false
+
       const aiMsg: Message = {
         id: `a-${Date.now()}`,
         role: "assistant",
-        text: String(reply).trim(),
+        text: reply,
+        isError,
       }
       setMessages((prev) => [...prev, aiMsg])
-    } catch {
+
+      // Save to history (fire-and-forget, don't block UI)
+      if (!isError) {
+        const convId = conversationIdRef.current || `mobile-${Date.now()}`
+        conversationIdRef.current = convId
+        api
+          .saveConversation({
+            conversationId: convId,
+            messages: [
+              { role: "user", content: text },
+              { role: "assistant", content: reply },
+            ],
+            title: messages.length === 0 ? text.slice(0, 64) : undefined,
+          })
+          .catch(() => {})
+      }
+    } catch (e: any) {
+      const errText =
+        e?.message === "Network request failed"
+          ? "No internet connection. Check your network and try again."
+          : "Something went wrong. Please try again."
       setMessages((prev) => [
         ...prev,
-        { id: `e-${Date.now()}`, role: "assistant", text: "Something went wrong. Please try again." },
+        { id: `e-${Date.now()}`, role: "assistant", text: errText, isError: true },
       ])
     } finally {
+      sendingRef.current = false
       setSending(false)
     }
-  }, [input, sending, user])
+  }, [input, user, messages.length])
 
-  const renderMessage = useCallback(({ item }: { item: Message }) => (
-    <View
-      style={[
-        styles.bubble,
-        item.role === "user" ? styles.userBubble : styles.aiBubble,
-      ]}
-    >
-      {item.role === "assistant" && (
-        <Text style={styles.aiLabel}>TurbotaAI</Text>
-      )}
-      <Text style={item.role === "user" ? styles.userText : styles.aiText}>
-        {item.text}
-      </Text>
-    </View>
-  ), [])
+  const renderMessage = useCallback(
+    ({ item }: { item: Message }) => (
+      <View
+        style={[
+          styles.bubble,
+          item.role === "user" ? styles.userBubble : styles.aiBubble,
+          item.isError && styles.errorBubble,
+        ]}
+      >
+        {item.role === "assistant" && !item.isError && (
+          <Text style={styles.aiLabel}>TurbotaAI</Text>
+        )}
+        {item.isError && <Text style={styles.errorLabel}>Error</Text>}
+        <Text style={item.role === "user" ? styles.userText : styles.aiText}>{item.text}</Text>
+      </View>
+    ),
+    [],
+  )
 
   return (
     <View style={[styles.root, { paddingBottom: insets.bottom }]}>
@@ -85,10 +117,7 @@ export default function ChatScreen() {
           data={messages}
           renderItem={renderMessage}
           keyExtractor={(m) => m.id}
-          contentContainerStyle={[
-            styles.list,
-            messages.length === 0 && styles.listEmpty,
-          ]}
+          contentContainerStyle={[styles.list, messages.length === 0 && styles.listEmpty]}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
@@ -138,7 +167,12 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   list: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   listEmpty: { flexGrow: 1 },
-  bubble: { maxWidth: "82%", borderRadius: radii.lg, padding: spacing.md, marginBottom: spacing.sm },
+  bubble: {
+    maxWidth: "82%",
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
   userBubble: { alignSelf: "flex-end", backgroundColor: colors.userBubble },
   aiBubble: {
     alignSelf: "flex-start",
@@ -146,15 +180,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.aiBubbleBorder,
   },
+  errorBubble: {
+    backgroundColor: colors.errorLight,
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
   aiLabel: {
     fontSize: fontSize.xs,
     fontWeight: "600",
     color: colors.success,
     marginBottom: 4,
   },
+  errorLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: "600",
+    color: colors.error,
+    marginBottom: 4,
+  },
   userText: { color: "#fff", fontSize: fontSize.md, lineHeight: 22 },
   aiText: { color: colors.text, fontSize: fontSize.md, lineHeight: 22 },
-  emptyWrap: { flex: 1, justifyContent: "center", alignItems: "center", padding: spacing.xxl },
+  emptyWrap: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: spacing.xxl,
+  },
   emptyIcon: { fontSize: 48, marginBottom: spacing.md },
   emptyTitle: { fontSize: fontSize.lg, fontWeight: "600", color: colors.textSecondary },
   emptySubtitle: {

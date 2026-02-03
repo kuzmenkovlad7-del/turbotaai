@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import { View, Text, FlatList, StyleSheet, ActivityIndicator } from "react-native"
 import ScreenWrapper from "@/components/ScreenWrapper"
+import Button from "@/components/Button"
 import * as api from "@/services/api"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
-
-type Msg = { id: string; role: string; content: string; created_at?: string }
 
 type Props = {
   route: { params: { id: string; title?: string } }
@@ -12,26 +11,49 @@ type Props = {
 
 export default function ConversationDetailScreen({ route }: Props) {
   const { id } = route.params
-  const [messages, setMessages] = useState<Msg[]>([])
+  const [messages, setMessages] = useState<api.HistoryMessage[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await api.getConversation(id)
+      if (!data.ok && data.error) {
+        setError(data.error)
+      }
+      setMessages(data.messages)
+    } catch (e: any) {
+      setError(
+        e?.message === "Network request failed"
+          ? "No internet connection."
+          : "Could not load conversation.",
+      )
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
 
   useEffect(() => {
-    ;(async () => {
-      try {
-        const data = await api.getConversation(id)
-        setMessages(data?.messages || [])
-      } catch {
-        // silent
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [id])
+    load()
+  }, [load])
 
   if (loading) {
     return (
       <ScreenWrapper>
         <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+      </ScreenWrapper>
+    )
+  }
+
+  if (error && messages.length === 0) {
+    return (
+      <ScreenWrapper>
+        <View style={styles.errorWrap}>
+          <Text style={styles.errorText}>{error}</Text>
+          <Button title="Retry" variant="outline" onPress={load} style={{ marginTop: spacing.md }} />
+        </View>
       </ScreenWrapper>
     )
   }
@@ -67,7 +89,12 @@ export default function ConversationDetailScreen({ route }: Props) {
 
 const styles = StyleSheet.create({
   list: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  bubble: { maxWidth: "82%", borderRadius: radii.lg, padding: spacing.md, marginBottom: spacing.sm },
+  bubble: {
+    maxWidth: "82%",
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
   userBubble: { alignSelf: "flex-end", backgroundColor: colors.userBubble },
   aiBubble: {
     alignSelf: "flex-start",
@@ -75,9 +102,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.aiBubbleBorder,
   },
-  aiLabel: { fontSize: fontSize.xs, fontWeight: "600", color: colors.success, marginBottom: 4 },
+  aiLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: "600",
+    color: colors.success,
+    marginBottom: 4,
+  },
   userText: { color: "#fff", fontSize: fontSize.md, lineHeight: 22 },
   aiText: { color: colors.text, fontSize: fontSize.md, lineHeight: 22 },
   empty: { alignItems: "center", paddingTop: 60 },
   emptyText: { color: colors.textMuted, fontSize: fontSize.md },
+  errorWrap: { alignItems: "center", paddingTop: 60, paddingHorizontal: spacing.xxl },
+  errorText: { fontSize: fontSize.md, color: colors.error, textAlign: "center" },
 })
