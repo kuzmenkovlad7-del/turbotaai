@@ -1,5 +1,27 @@
 # TurbotaAI Mobile App — Architecture, Testing & Release
 
+## Quick Start (3 commands)
+
+```bash
+cd apps/mobile
+cp .env.example .env        # then edit .env with real Supabase values (see below)
+npm install
+npx expo start              # scan QR with Expo Go on your phone
+```
+
+**Where to create `.env`**: `apps/mobile/.env` (same directory as `package.json`).
+
+**Required values** — get from your Supabase project dashboard (Settings → API):
+
+| Variable | Where to find | Example |
+|----------|--------------|---------|
+| `EXPO_PUBLIC_API_URL` | Your deployed web app URL | `https://turbotaai.com` |
+| `EXPO_PUBLIC_SUPABASE_URL` | Supabase → Settings → API → Project URL | `https://abc123.supabase.co` |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API → anon/public key | `eyJhbGci...` |
+| `EXPO_PUBLIC_IAP_ENABLED` | Keep `false` until store accounts ready | `false` |
+
+---
+
 ## Architecture Overview
 
 ```
@@ -206,6 +228,61 @@ eas submit --platform ios
 # Android: build + submit to internal track
 eas build --platform android --profile production
 eas submit --platform android
+```
+
+---
+
+## TODO: IAP Implementation (When Store Accounts Are Ready)
+
+Currently `EXPO_PUBLIC_IAP_ENABLED=false` — purchase buttons are hidden and the app runs in Expo Go. Here is the exact sequence of code changes needed later:
+
+### Step 1: Switch from Expo Go to Dev Build
+```bash
+npx expo install react-native-iap expo-dev-client
+eas build --platform ios --profile development
+eas build --platform android --profile development
+# After build completes, install .app/.apk on device
+npx expo start --dev-client
+```
+
+### Step 2: Create Store Products
+- **iOS**: App Store Connect → In-App Purchases → create `com.turbotaai.monthly` and `com.turbotaai.yearly` as auto-renewable subscriptions
+- **Android**: Google Play Console → Monetize → Subscriptions → create matching product IDs
+
+### Step 3: Implement Purchase Flow in `useSubscription.ts`
+Replace the TODO block in `purchase()` with:
+```typescript
+import { requestSubscription, getSubscriptions } from "react-native-iap"
+
+// In purchase():
+const subscription = await requestSubscription({ sku: productId })
+const receipt = Platform.OS === "ios"
+  ? subscription.transactionReceipt
+  : subscription.purchaseToken
+await api.validateReceipt({ platform, productId, transactionReceipt: receipt })
+// Then call refreshAccess() from useAuth to update access status
+```
+
+### Step 4: Implement Backend Receipt Validation
+File: `app/api/billing/iap/validate/route.ts` (already scaffolded, returns 501)
+
+**iOS** — use [App Store Server API v2](https://developer.apple.com/documentation/appstoreserverapi):
+- Verify receipt with Apple servers
+- On success: update `access_grants` row — set `paid_until` to subscription expiry date
+
+**Android** — use [Google Play Developer API](https://developers.google.com/android-publisher):
+- Verify purchase token with Google servers
+- On success: update `access_grants` row — set `paid_until` to subscription expiry date
+
+### Step 5: Server-to-Server Notifications
+- **iOS**: Configure App Store Server Notifications (v2) → point to a new endpoint like `POST /api/billing/iap/apple-webhook`
+- **Android**: Configure Real-time Developer Notifications → point to `POST /api/billing/iap/google-webhook`
+- Handle: renewal, cancellation, refund, billing retry
+
+### Step 6: Enable IAP
+```bash
+# In apps/mobile/.env:
+EXPO_PUBLIC_IAP_ENABLED=true
 ```
 
 ---
