@@ -1,5 +1,5 @@
 import React from "react"
-import { View, Text, StyleSheet, ScrollView, Alert } from "react-native"
+import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator } from "react-native"
 import ScreenWrapper from "@/components/ScreenWrapper"
 import Button from "@/components/Button"
 import { useAuth } from "@/hooks/useAuth"
@@ -8,7 +8,7 @@ import { IAP_PRODUCTS } from "@/constants/config"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 export default function AccountScreen() {
-  const { user, accessInfo, logout } = useAuth()
+  const { user, accessInfo, logout, refreshAccess } = useAuth()
   const { purchasing, purchase, iapEnabled, error } = useSubscription()
 
   const handleLogout = () => {
@@ -27,7 +27,7 @@ export default function AccountScreen() {
         <View style={styles.card}>
           <View style={styles.avatarCircle}>
             <Text style={styles.avatarLetter}>
-              {user ? user.email[0].toUpperCase() : "?"}
+              {user?.email ? user.email[0].toUpperCase() : "?"}
             </Text>
           </View>
           <Text style={styles.email}>{user?.email ?? "Guest"}</Text>
@@ -45,7 +45,9 @@ export default function AccountScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Subscription</Text>
 
-          {accessInfo?.unlimited ? (
+          {!accessInfo ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
+          ) : accessInfo.unlimited ? (
             <View style={styles.activeBox}>
               <Text style={styles.activeLabel}>
                 {accessInfo.access === "paid" ? "Premium Active" : "Promo Active"}

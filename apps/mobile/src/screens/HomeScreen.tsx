@@ -61,7 +61,7 @@ export default function HomeScreen({ navigation }: Props) {
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.greeting}>
-                {user ? `Hello, ${user.email.split("@")[0]}` : "Welcome"}
+                {user?.email ? `Hello, ${user.email.split("@")[0]}` : "Welcome"}
               </Text>
               <Text style={styles.subtitle}>TurbotaAI</Text>
             </View>
