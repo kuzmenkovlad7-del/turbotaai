@@ -1837,7 +1837,7 @@ if (res.status === 402) {
 
   const statusText = (() => {
     if (isConnecting) return t("Connecting...")
-    if (!isCallActive) return t("Choose an AI specialist and press "Start video call" to begin.")
+    if (!isCallActive) return t('Choose an AI specialist and press "Start video call" to begin.')
     if (speechError) return t("An error occurred. Check the chat panel for details.")
     if (isAvatarSpeaking) return t("Assistant is speaking. Please wait a moment.")
     if (activityStatus === "thinking") return t("Thinking...")
