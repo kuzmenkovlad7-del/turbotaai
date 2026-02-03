@@ -7,6 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "turbotaai",
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -15,7 +16,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.turbotaai.app",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "TurbotaAI needs microphone access for voice conversations with your AI companion."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,14 +27,12 @@
         "backgroundColor": "#7c3aed"
       },
       "package": "com.turbotaai.app",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": ["RECORD_AUDIO"]
     },
     "plugins": [
-      "expo-router",
-      "expo-secure-store"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    }
+      "expo-secure-store",
+      "expo-font"
+    ]
   }
 }

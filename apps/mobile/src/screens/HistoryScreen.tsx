@@ -1,96 +1,134 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native"
+import ScreenWrapper from "@/components/ScreenWrapper"
+import EmptyState from "@/components/EmptyState"
 import * as api from "@/services/api"
+import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 type Conversation = {
   id: string
   title: string | null
+  mode?: string
   created_at: string
-  message_count?: number
+  updated_at?: string
 }
 
 type Props = {
-  onSelectConversation: (id: string) => void
+  navigation: any
 }
 
-export default function HistoryScreen({ onSelectConversation }: Props) {
+export default function HistoryScreen({ navigation }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    ;(async () => {
-      try {
-        const data = await api.getHistory()
-        setConversations(data?.conversations || [])
-      } catch {
-        // silent
-      } finally {
-        setLoading(false)
-      }
-    })()
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
+    try {
+      const data = await api.getHistory()
+      setConversations(data?.conversations || [])
+    } catch {
+      // silent
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
   }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const formatDate = (iso: string) => {
+    const d = new Date(iso)
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffH = diffMs / (1000 * 60 * 60)
+    if (diffH < 1) return "Just now"
+    if (diffH < 24) return `${Math.floor(diffH)}h ago`
+    if (diffH < 48) return "Yesterday"
+    return d.toLocaleDateString()
+  }
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#7c3aed" style={{ marginTop: 40 }} />
-      </SafeAreaView>
+      <ScreenWrapper>
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+      </ScreenWrapper>
     )
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ScreenWrapper padBottom={false}>
+      <View style={styles.header}>
+        <Text style={styles.title}>History</Text>
+      </View>
       <FlatList
         data={conversations}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, conversations.length === 0 && styles.listEmpty]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => load(true)}
+            tintColor={colors.primary}
+          />
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
-            onPress={() => onSelectConversation(item.id)}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate("ConversationDetail", { id: item.id, title: item.title })}
           >
-            <Text style={styles.cardTitle} numberOfLines={1}>
-              {item.title || "Untitled conversation"}
-            </Text>
-            <Text style={styles.cardDate}>
-              {new Date(item.created_at).toLocaleDateString()}
-            </Text>
+            <View style={styles.cardRow}>
+              <View style={styles.cardBody}>
+                <Text style={styles.cardTitle} numberOfLines={2}>
+                  {item.title || "Untitled conversation"}
+                </Text>
+                <Text style={styles.cardDate}>{formatDate(item.updated_at || item.created_at)}</Text>
+              </View>
+              <Text style={styles.chevron}>{"\u203A"}</Text>
+            </View>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>No conversations yet</Text>
-          </View>
+          <EmptyState
+            icon={"\uD83D\uDCDD"}
+            title="No conversations yet"
+            subtitle="Start chatting and your history will appear here."
+          />
         }
       />
-    </SafeAreaView>
+    </ScreenWrapper>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8f9fa" },
-  list: { padding: 16 },
+  header: { paddingHorizontal: spacing.xxl, paddingTop: spacing.lg, paddingBottom: spacing.md },
+  title: { fontSize: fontSize.xl, fontWeight: "700", color: colors.text },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl },
+  listEmpty: { flexGrow: 1 },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.03,
     shadowRadius: 4,
     elevation: 1,
   },
-  cardTitle: { fontSize: 16, fontWeight: "600", color: "#1e293b" },
-  cardDate: { fontSize: 13, color: "#94a3b8", marginTop: 4 },
-  empty: { alignItems: "center", paddingTop: 60 },
-  emptyText: { color: "#94a3b8", fontSize: 16 },
+  cardRow: { flexDirection: "row", alignItems: "center" },
+  cardBody: { flex: 1 },
+  cardTitle: { fontSize: fontSize.md, fontWeight: "600", color: colors.text },
+  cardDate: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 4 },
+  chevron: { fontSize: 24, color: colors.textMuted, marginLeft: spacing.sm },
 })

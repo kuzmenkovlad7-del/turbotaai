@@ -1,99 +1,119 @@
-import { useState, useEffect, useCallback } from "react"
-import { getAuthToken, setAuthToken, clearAuthToken, getDeviceHash, setDeviceHash } from "@/services/storage"
-import * as api from "@/services/api"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { ensureDeviceHash } from "@/services/storage"
+import { signIn, signUp, signOut, refreshSession, type AuthResult } from "@/services/supabase"
+import { bootstrap, type BootstrapData } from "@/services/api"
 
-type User = {
-  id: string
-  email: string
+export type AccessInfo = {
+  access: "paid" | "promo" | "trial" | "none"
+  hasAccess: boolean
+  unlimited: boolean
+  trialLeft: number
+  paidUntil: string | null
+  subscriptionStatus: string | null
 }
 
 type AuthState = {
-  user: User | null
-  loading: boolean
+  ready: boolean          // bootstrap completed (show splash until true)
+  user: { id: string; email: string } | null
+  accessInfo: AccessInfo | null
   error: string | null
+  loading: boolean
+}
+
+const EMPTY_ACCESS: AccessInfo = {
+  access: "none",
+  hasAccess: false,
+  unlimited: false,
+  trialLeft: 0,
+  paidUntil: null,
+  subscriptionStatus: null,
 }
 
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
+    ready: false,
     user: null,
-    loading: true,
+    accessInfo: null,
     error: null,
+    loading: false,
   })
+  const mounted = useRef(true)
 
-  // Restore session on mount
   useEffect(() => {
-    ;(async () => {
-      try {
-        const token = await getAuthToken()
-        if (!token) {
-          setState({ user: null, loading: false, error: null })
-          return
-        }
-        const data = await api.getAccessStatus()
-        if (data?.user) {
-          setState({ user: data.user, loading: false, error: null })
-        } else {
-          await clearAuthToken()
-          setState({ user: null, loading: false, error: null })
-        }
-      } catch {
-        setState({ user: null, loading: false, error: null })
-      }
-    })()
+    mounted.current = true
+    return () => { mounted.current = false }
   }, [])
 
-  // Ensure device hash exists
-  useEffect(() => {
-    ;(async () => {
-      const existing = await getDeviceHash()
-      if (!existing) {
-        const uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-          const r = (Math.random() * 16) | 0
-          return (c === "x" ? r : (r & 0x3) | 0x8).toString(16)
-        })
-        await setDeviceHash(uuid)
-      }
-    })()
-  }, [])
-
-  const login = useCallback(async (email: string, password: string) => {
-    setState((s) => ({ ...s, loading: true, error: null }))
+  const runBootstrap = useCallback(async () => {
     try {
-      const data = await api.login(email, password)
-      if (data?.token) {
-        await setAuthToken(data.token)
-        setState({ user: data.user, loading: false, error: null })
-        return true
+      await ensureDeviceHash()
+      const data = await bootstrap()
+      if (!mounted.current) return
+      const user = data.isLoggedIn && data.userId && data.email
+        ? { id: data.userId, email: data.email }
+        : null
+      const accessInfo: AccessInfo = {
+        access: data.access ?? "none",
+        hasAccess: data.hasAccess ?? false,
+        unlimited: data.unlimited ?? false,
+        trialLeft: data.trial_questions_left ?? 0,
+        paidUntil: data.paid_until ?? null,
+        subscriptionStatus: data.subscription_status ?? null,
       }
-      setState((s) => ({ ...s, loading: false, error: data?.error || "Login failed" }))
-      return false
+      setState(s => ({ ...s, ready: true, user, accessInfo, error: null }))
     } catch (e: any) {
-      setState((s) => ({ ...s, loading: false, error: e?.message || "Login failed" }))
-      return false
+      if (!mounted.current) return
+      setState(s => ({ ...s, ready: true, error: e?.message }))
     }
   }, [])
 
-  const register = useCallback(async (email: string, password: string) => {
-    setState((s) => ({ ...s, loading: true, error: null }))
-    try {
-      const data = await api.register(email, password)
-      if (data?.token) {
-        await setAuthToken(data.token)
-        setState({ user: data.user, loading: false, error: null })
-        return true
-      }
-      setState((s) => ({ ...s, loading: false, error: data?.error || "Registration failed" }))
-      return false
-    } catch (e: any) {
-      setState((s) => ({ ...s, loading: false, error: e?.message || "Registration failed" }))
-      return false
+  // On mount: try refresh then bootstrap
+  useEffect(() => {
+    ;(async () => {
+      await ensureDeviceHash()
+      // Try to refresh existing session silently
+      await refreshSession().catch(() => {})
+      await runBootstrap()
+    })()
+  }, [runBootstrap])
+
+  const login = useCallback(async (email: string, password: string): Promise<AuthResult> => {
+    setState(s => ({ ...s, loading: true, error: null }))
+    const result = await signIn(email, password)
+    if (result.ok) {
+      await runBootstrap()
     }
-  }, [])
+    if (mounted.current) {
+      setState(s => ({ ...s, loading: false, error: result.ok ? null : (result.error ?? null) }))
+    }
+    return result
+  }, [runBootstrap])
+
+  const register = useCallback(async (email: string, password: string): Promise<AuthResult> => {
+    setState(s => ({ ...s, loading: true, error: null }))
+    const result = await signUp(email, password)
+    if (result.ok && !result.error) {
+      // Session created — bootstrap
+      await runBootstrap()
+    }
+    if (mounted.current) {
+      setState(s => ({ ...s, loading: false, error: result.error ?? null }))
+    }
+    return result
+  }, [runBootstrap])
 
   const logout = useCallback(async () => {
-    await clearAuthToken()
-    setState({ user: null, loading: false, error: null })
+    await signOut()
+    if (mounted.current) {
+      setState({ ready: true, user: null, accessInfo: EMPTY_ACCESS, error: null, loading: false })
+    }
   }, [])
 
-  return { ...state, login, register, logout }
+  return {
+    ...state,
+    login,
+    register,
+    logout,
+    refreshAccess: runBootstrap,
+  }
 }
