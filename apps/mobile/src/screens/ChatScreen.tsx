@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import * as api from "@/services/api"
+import { generateUUID } from "@/services/storage"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 type Message = {
@@ -58,7 +59,7 @@ export default function ChatScreen() {
 
       // Save to history (fire-and-forget, don't block UI)
       if (!isError) {
-        const convId = conversationIdRef.current || `mobile-${Date.now()}`
+        const convId = conversationIdRef.current || generateUUID()
         conversationIdRef.current = convId
         api
           .saveConversation({

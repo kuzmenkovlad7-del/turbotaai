@@ -78,13 +78,13 @@ function MainTabs() {
         name="HomeTab"
         options={{ tabBarLabel: "Home" }}
       >
-        {(props) => <HomeScreen navigation={props.navigation.getParent()} />}
+        {(props) => <HomeScreen navigation={props.navigation.getParent() ?? props.navigation} />}
       </Tab.Screen>
       <Tab.Screen
         name="HistoryTab"
         options={{ tabBarLabel: "History" }}
       >
-        {(props) => <HistoryScreen navigation={props.navigation.getParent()} />}
+        {(props) => <HistoryScreen navigation={props.navigation.getParent() ?? props.navigation} />}
       </Tab.Screen>
       <Tab.Screen
         name="AccountTab"
