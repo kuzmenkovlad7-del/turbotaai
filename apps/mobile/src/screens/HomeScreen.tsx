@@ -2,6 +2,7 @@ import React from "react"
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native"
 import ScreenWrapper from "@/components/ScreenWrapper"
 import { useAuth, type AccessInfo } from "@/hooks/useAuth"
+import { useT } from "@/hooks/useLanguage"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 type Props = {
@@ -9,12 +10,13 @@ type Props = {
 }
 
 function AccessBadge({ info }: { info: AccessInfo | null }) {
+  const { t } = useT()
   if (!info) return null
   const map = {
-    paid: { bg: colors.successLight, fg: colors.success, label: "Premium" },
-    promo: { bg: "#fef3c7", fg: "#d97706", label: "Promo" },
-    trial: { bg: colors.primaryLight, fg: colors.primary, label: `Trial (${info.trialLeft} left)` },
-    none: { bg: colors.errorLight, fg: colors.error, label: "No access" },
+    paid: { bg: colors.successLight, fg: colors.success, label: t.badgePremium },
+    promo: { bg: "#fef3c7", fg: "#d97706", label: t.badgePromo },
+    trial: { bg: colors.primaryLight, fg: colors.primary, label: t.badgeTrial(info.trialLeft) },
+    none: { bg: colors.errorLight, fg: colors.error, label: t.badgeNone },
   }
   const badge = map[info.access]
   return (
@@ -26,29 +28,30 @@ function AccessBadge({ info }: { info: AccessInfo | null }) {
 
 export default function HomeScreen({ navigation }: Props) {
   const { user, accessInfo } = useAuth()
+  const { t } = useT()
 
   const cards = [
     {
       key: "chat",
       icon: "\uD83D\uDCAC",
-      title: "Chat with AI",
-      desc: "Start a conversation with your companion",
+      title: t.homeChat,
+      desc: t.homeChatDesc,
       onPress: () => navigation.navigate("Chat"),
       accent: colors.primary,
     },
     {
       key: "history",
       icon: "\uD83D\uDCCB",
-      title: "History",
-      desc: "View your past conversations",
+      title: t.homeHistory,
+      desc: t.homeHistoryDesc,
       onPress: () => navigation.navigate("MainTabs", { screen: "HistoryTab" }),
       accent: "#0ea5e9",
     },
     {
       key: "account",
       icon: "\uD83D\uDC64",
-      title: "Account",
-      desc: "Manage your profile and subscription",
+      title: t.homeAccount,
+      desc: t.homeAccountDesc,
       onPress: () => navigation.navigate("MainTabs", { screen: "AccountTab" }),
       accent: "#f59e0b",
     },
@@ -61,9 +64,9 @@ export default function HomeScreen({ navigation }: Props) {
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.greeting}>
-                {user?.email ? `Hello, ${user.email.split("@")[0]}` : "Welcome"}
+                {user?.email ? t.homeGreeting(user.email.split("@")[0]) : t.homeWelcome}
               </Text>
-              <Text style={styles.subtitle}>TurbotaAI</Text>
+              <Text style={styles.subtitle}>{t.appName}</Text>
             </View>
             <AccessBadge info={accessInfo} />
           </View>

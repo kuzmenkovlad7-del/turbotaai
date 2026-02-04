@@ -4,6 +4,7 @@ import { NavigationContainer } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { useAuth } from "@/hooks/useAuth"
+import { useT } from "@/hooks/useLanguage"
 import { colors, fontSize } from "@/constants/theme"
 
 import LoginScreen from "@/screens/LoginScreen"
@@ -55,6 +56,7 @@ function TabIcon({ label, focused }: { label: string; focused: boolean }) {
 /* ── Main tab navigator ── */
 
 function MainTabs() {
+  const { t } = useT()
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -76,20 +78,20 @@ function MainTabs() {
     >
       <Tab.Screen
         name="HomeTab"
-        options={{ tabBarLabel: "Home" }}
+        options={{ tabBarLabel: t.homeWelcome }}
       >
         {(props) => <HomeScreen navigation={props.navigation.getParent() ?? props.navigation} />}
       </Tab.Screen>
       <Tab.Screen
         name="HistoryTab"
-        options={{ tabBarLabel: "History" }}
+        options={{ tabBarLabel: t.historyTitle }}
       >
         {(props) => <HistoryScreen navigation={props.navigation.getParent() ?? props.navigation} />}
       </Tab.Screen>
       <Tab.Screen
         name="AccountTab"
         component={AccountScreen}
-        options={{ tabBarLabel: "Account" }}
+        options={{ tabBarLabel: t.accountTitle }}
       />
     </Tab.Navigator>
   )

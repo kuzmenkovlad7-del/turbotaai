@@ -12,6 +12,7 @@ import {
 import ScreenWrapper from "@/components/ScreenWrapper"
 import Button from "@/components/Button"
 import Input from "@/components/Input"
+import { useT } from "@/hooks/useLanguage"
 import { colors, fontSize, spacing } from "@/constants/theme"
 
 type Props = {
@@ -22,6 +23,7 @@ type Props = {
 }
 
 export default function RegisterScreen({ onRegister, onGoToLogin, loading, error }: Props) {
+  const { t } = useT()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
@@ -31,14 +33,14 @@ export default function RegisterScreen({ onRegister, onGoToLogin, loading, error
 
   const handleSubmit = async () => {
     setLocalError("")
-    if (!email.trim()) return setLocalError("Please enter your email")
-    if (password.length < 6) return setLocalError("Password must be at least 6 characters")
-    if (password !== confirm) return setLocalError("Passwords do not match")
+    if (!email.trim()) return setLocalError(t.registerErrEmail)
+    if (password.length < 6) return setLocalError(t.registerErrPasswordLen)
+    if (password !== confirm) return setLocalError(t.registerErrPasswordMatch)
     try {
       const result = await onRegister(email.trim().toLowerCase(), password)
-      if (result.error) setLocalError(result.error) // covers both ok+error ("Check email") and !ok+error
+      if (result.error) setLocalError(result.error)
     } catch (e: any) {
-      setLocalError(e?.message || "Registration failed. Check your connection.")
+      setLocalError(e?.message || t.registerErrFailed)
     }
   }
 
@@ -56,14 +58,14 @@ export default function RegisterScreen({ onRegister, onGoToLogin, loading, error
           bounces={false}
         >
           <View style={styles.header}>
-            <Text style={styles.logo}>TurbotaAI</Text>
-            <Text style={styles.tagline}>Create your account</Text>
+            <Text style={styles.logo}>{t.appName}</Text>
+            <Text style={styles.tagline}>{t.registerTagline}</Text>
           </View>
 
           <View>
             <Input
-              label="Email"
-              placeholder="you@example.com"
+              label={t.loginEmail}
+              placeholder={t.loginEmailPlaceholder}
               keyboardType="email-address"
               autoCapitalize="none"
               value={email}
@@ -73,8 +75,8 @@ export default function RegisterScreen({ onRegister, onGoToLogin, loading, error
             />
             <Input
               ref={passRef}
-              label="Password"
-              placeholder="At least 6 characters"
+              label={t.registerPassword}
+              placeholder={t.registerPasswordPlaceholder}
               secureTextEntry
               value={password}
               onChangeText={setPassword}
@@ -83,8 +85,8 @@ export default function RegisterScreen({ onRegister, onGoToLogin, loading, error
             />
             <Input
               ref={confirmRef}
-              label="Confirm password"
-              placeholder="Repeat your password"
+              label={t.registerConfirm}
+              placeholder={t.registerConfirmPlaceholder}
               secureTextEntry
               value={confirm}
               onChangeText={setConfirm}
@@ -95,7 +97,7 @@ export default function RegisterScreen({ onRegister, onGoToLogin, loading, error
             {displayError ? <Text style={styles.error}>{displayError}</Text> : null}
 
             <Button
-              title="Create Account"
+              title={t.registerSubmit}
               onPress={handleSubmit}
               loading={loading}
               style={{ marginTop: spacing.sm }}
@@ -103,7 +105,7 @@ export default function RegisterScreen({ onRegister, onGoToLogin, loading, error
 
             <TouchableOpacity onPress={onGoToLogin} style={styles.link}>
               <Text style={styles.linkText}>
-                Already have an account? <Text style={styles.linkBold}>Sign in</Text>
+                {t.registerHasAccount} <Text style={styles.linkBold}>{t.registerSignIn}</Text>
               </Text>
             </TouchableOpacity>
           </View>

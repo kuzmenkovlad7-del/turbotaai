@@ -12,6 +12,7 @@ import ScreenWrapper from "@/components/ScreenWrapper"
 import EmptyState from "@/components/EmptyState"
 import Button from "@/components/Button"
 import * as api from "@/services/api"
+import { useT } from "@/hooks/useLanguage"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 type Props = {
@@ -19,6 +20,7 @@ type Props = {
 }
 
 export default function HistoryScreen({ navigation }: Props) {
+  const { t } = useT()
   const [conversations, setConversations] = useState<api.ConversationSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -34,14 +36,14 @@ export default function HistoryScreen({ navigation }: Props) {
     } catch (e: any) {
       const msg =
         e?.message === "Network request failed"
-          ? "No internet connection."
-          : "Could not load history."
+          ? t.historyNoInternet
+          : t.historyLoadError
       setError(msg)
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     load()
@@ -53,9 +55,9 @@ export default function HistoryScreen({ navigation }: Props) {
       const now = new Date()
       const diffMs = now.getTime() - d.getTime()
       const diffH = diffMs / (1000 * 60 * 60)
-      if (diffH < 1) return "Just now"
-      if (diffH < 24) return `${Math.floor(diffH)}h ago`
-      if (diffH < 48) return "Yesterday"
+      if (diffH < 1) return t.historyJustNow
+      if (diffH < 24) return t.historyHoursAgo(Math.floor(diffH))
+      if (diffH < 48) return t.historyYesterday
       return d.toLocaleDateString()
     } catch {
       return ""
@@ -66,7 +68,7 @@ export default function HistoryScreen({ navigation }: Props) {
     return (
       <ScreenWrapper>
         <View style={styles.header}>
-          <Text style={styles.title}>History</Text>
+          <Text style={styles.title}>{t.historyTitle}</Text>
         </View>
         <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
       </ScreenWrapper>
@@ -77,11 +79,11 @@ export default function HistoryScreen({ navigation }: Props) {
     return (
       <ScreenWrapper>
         <View style={styles.header}>
-          <Text style={styles.title}>History</Text>
+          <Text style={styles.title}>{t.historyTitle}</Text>
         </View>
         <View style={styles.errorWrap}>
           <Text style={styles.errorText}>{error}</Text>
-          <Button title="Retry" variant="outline" onPress={() => load()} style={{ marginTop: spacing.md }} />
+          <Button title={t.retry} variant="outline" onPress={() => load()} style={{ marginTop: spacing.md }} />
         </View>
       </ScreenWrapper>
     )
@@ -90,7 +92,7 @@ export default function HistoryScreen({ navigation }: Props) {
   return (
     <ScreenWrapper padBottom={false}>
       <View style={styles.header}>
-        <Text style={styles.title}>History</Text>
+        <Text style={styles.title}>{t.historyTitle}</Text>
       </View>
       <FlatList
         data={conversations}
@@ -117,7 +119,7 @@ export default function HistoryScreen({ navigation }: Props) {
             <View style={styles.cardRow}>
               <View style={styles.cardBody}>
                 <Text style={styles.cardTitle} numberOfLines={2}>
-                  {item.title || "Untitled conversation"}
+                  {item.title || t.historyUntitled}
                 </Text>
                 <Text style={styles.cardDate}>
                   {formatDate(item.updated_at || item.created_at)}
@@ -130,8 +132,8 @@ export default function HistoryScreen({ navigation }: Props) {
         ListEmptyComponent={
           <EmptyState
             icon={"\uD83D\uDCDD"}
-            title="No conversations yet"
-            subtitle="Start chatting and your history will appear here."
+            title={t.historyEmpty}
+            subtitle={t.historyEmptySubtitle}
           />
         }
       />

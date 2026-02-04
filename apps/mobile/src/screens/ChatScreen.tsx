@@ -12,6 +12,7 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
+import { useT } from "@/hooks/useLanguage"
 import * as api from "@/services/api"
 import { generateUUID } from "@/services/storage"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
@@ -26,6 +27,7 @@ type Message = {
 export default function ChatScreen() {
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
+  const { t } = useT()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
@@ -75,8 +77,8 @@ export default function ChatScreen() {
     } catch (e: any) {
       const errText =
         e?.message === "Network request failed"
-          ? "No internet connection. Check your network and try again."
-          : "Something went wrong. Please try again."
+          ? t.chatNoInternet
+          : t.chatError
       setMessages((prev) => [
         ...prev,
         { id: `e-${Date.now()}`, role: "assistant", text: errText, isError: true },
@@ -85,7 +87,7 @@ export default function ChatScreen() {
       sendingRef.current = false
       setSending(false)
     }
-  }, [input, user, messages.length])
+  }, [input, user, messages.length, t])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => (
@@ -123,10 +125,8 @@ export default function ChatScreen() {
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyIcon}>{"\uD83D\uDCAC"}</Text>
-              <Text style={styles.emptyTitle}>Start a conversation</Text>
-              <Text style={styles.emptySubtitle}>
-                Ask anything — your AI companion is here to help.
-              </Text>
+              <Text style={styles.emptyTitle}>{t.chatStart}</Text>
+              <Text style={styles.emptySubtitle}>{t.chatSubtitle}</Text>
             </View>
           }
         />
@@ -136,7 +136,7 @@ export default function ChatScreen() {
             style={styles.input}
             value={input}
             onChangeText={setInput}
-            placeholder="Type a message..."
+            placeholder={t.chatPlaceholder}
             placeholderTextColor={colors.textMuted}
             multiline
             maxLength={2000}

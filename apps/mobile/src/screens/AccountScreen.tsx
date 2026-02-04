@@ -1,27 +1,32 @@
 import React from "react"
-import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator } from "react-native"
+import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator, TouchableOpacity } from "react-native"
 import ScreenWrapper from "@/components/ScreenWrapper"
 import Button from "@/components/Button"
 import { useAuth } from "@/hooks/useAuth"
+import { useT } from "@/hooks/useLanguage"
 import { useSubscription } from "@/hooks/useSubscription"
 import { IAP_PRODUCTS } from "@/constants/config"
+import { LOCALE_LABELS, type Locale } from "@/constants/i18n"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
+
+const LOCALES: Locale[] = ["en", "uk", "ru"]
 
 export default function AccountScreen() {
   const { user, accessInfo, logout, refreshAccess } = useAuth()
+  const { t, locale, setLocale } = useT()
   const { purchasing, purchase, iapEnabled, error } = useSubscription()
 
   const handleLogout = () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign Out", style: "destructive", onPress: logout },
+    Alert.alert(t.accountSignOut, t.accountSignOutConfirm, [
+      { text: t.accountCancel, style: "cancel" },
+      { text: t.accountSignOut, style: "destructive", onPress: logout },
     ])
   }
 
   return (
     <ScreenWrapper>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.screenTitle}>Account</Text>
+        <Text style={styles.screenTitle}>{t.accountTitle}</Text>
 
         {/* Profile card */}
         <View style={styles.card}>
@@ -30,10 +35,10 @@ export default function AccountScreen() {
               {user?.email ? user.email[0].toUpperCase() : "?"}
             </Text>
           </View>
-          <Text style={styles.email}>{user?.email ?? "Guest"}</Text>
+          <Text style={styles.email}>{user?.email ?? t.guest}</Text>
           {user && (
             <Button
-              title="Sign Out"
+              title={t.accountSignOut}
               variant="outline"
               onPress={handleLogout}
               style={{ marginTop: spacing.md, alignSelf: "center" }}
@@ -41,47 +46,66 @@ export default function AccountScreen() {
           )}
         </View>
 
+        {/* Language card */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{t.accountLanguage}</Text>
+          <View style={styles.langRow}>
+            {LOCALES.map((l) => (
+              <TouchableOpacity
+                key={l}
+                style={[styles.langBtn, l === locale && styles.langBtnActive]}
+                onPress={() => setLocale(l)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.langLabel, l === locale && styles.langLabelActive]}>
+                  {LOCALE_LABELS[l]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* Subscription card */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Subscription</Text>
+          <Text style={styles.sectionTitle}>{t.accountSubscription}</Text>
 
           {!accessInfo ? (
             <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
           ) : accessInfo.unlimited ? (
             <View style={styles.activeBox}>
               <Text style={styles.activeLabel}>
-                {accessInfo.access === "paid" ? "Premium Active" : "Promo Active"}
+                {accessInfo.access === "paid" ? t.accountPremium : t.accountPromo}
               </Text>
               {accessInfo.paidUntil && (
                 <Text style={styles.activeDate}>
-                  Until {new Date(accessInfo.paidUntil).toLocaleDateString()}
+                  {t.accountUntil(new Date(accessInfo.paidUntil).toLocaleDateString())}
                 </Text>
               )}
             </View>
           ) : accessInfo?.access === "trial" ? (
             <View style={styles.trialBox}>
-              <Text style={styles.trialLabel}>Free Trial</Text>
+              <Text style={styles.trialLabel}>{t.accountTrial}</Text>
               <Text style={styles.trialCount}>
-                {accessInfo.trialLeft} question{accessInfo.trialLeft !== 1 ? "s" : ""} remaining
+                {t.accountTrialCount(accessInfo.trialLeft)}
               </Text>
             </View>
           ) : (
             <View style={styles.noAccessBox}>
-              <Text style={styles.noAccessLabel}>No Active Plan</Text>
-              <Text style={styles.noAccessDesc}>Subscribe to get unlimited access</Text>
+              <Text style={styles.noAccessLabel}>{t.accountNoPlan}</Text>
+              <Text style={styles.noAccessDesc}>{t.accountNoPlanDesc}</Text>
             </View>
           )}
 
           {iapEnabled && !accessInfo?.unlimited && (
             <View style={styles.iapButtons}>
               <Button
-                title="Monthly Subscription"
+                title={t.accountMonthly}
                 onPress={() => purchase(IAP_PRODUCTS.MONTHLY)}
                 loading={purchasing}
                 style={{ marginBottom: spacing.sm }}
               />
               <Button
-                title="Yearly Subscription (Best Value)"
+                title={t.accountYearly}
                 variant="secondary"
                 onPress={() => purchase(IAP_PRODUCTS.YEARLY)}
                 loading={purchasing}
@@ -90,9 +114,7 @@ export default function AccountScreen() {
           )}
 
           {!iapEnabled && !accessInfo?.unlimited && (
-            <Text style={styles.iapDisabledNote}>
-              In-app purchases will be available soon. Visit turbotaai.com to subscribe now.
-            </Text>
+            <Text style={styles.iapDisabledNote}>{t.accountIapSoon}</Text>
           )}
 
           {error && <Text style={styles.error}>{error}</Text>}
@@ -135,6 +157,21 @@ const styles = StyleSheet.create({
   avatarLetter: { fontSize: fontSize.xxl, fontWeight: "700", color: colors.primary },
   email: { fontSize: fontSize.md, color: colors.textSecondary, textAlign: "center" },
   sectionTitle: { fontSize: fontSize.lg, fontWeight: "700", color: colors.text, marginBottom: spacing.md },
+  langRow: { flexDirection: "row", gap: spacing.sm },
+  langBtn: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+  },
+  langBtnActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  langLabel: { fontSize: fontSize.sm, fontWeight: "600", color: colors.textSecondary },
+  langLabelActive: { color: colors.primary },
   activeBox: {
     backgroundColor: colors.successLight,
     borderRadius: radii.md,

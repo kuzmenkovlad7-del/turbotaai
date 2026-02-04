@@ -12,6 +12,7 @@ import {
 import ScreenWrapper from "@/components/ScreenWrapper"
 import Button from "@/components/Button"
 import Input from "@/components/Input"
+import { useT } from "@/hooks/useLanguage"
 import { colors, fontSize, spacing } from "@/constants/theme"
 
 type Props = {
@@ -22,6 +23,7 @@ type Props = {
 }
 
 export default function LoginScreen({ onLogin, onGoToRegister, loading, error }: Props) {
+  const { t } = useT()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [localError, setLocalError] = useState("")
@@ -29,13 +31,13 @@ export default function LoginScreen({ onLogin, onGoToRegister, loading, error }:
 
   const handleSubmit = async () => {
     setLocalError("")
-    if (!email.trim()) return setLocalError("Please enter your email")
-    if (!password) return setLocalError("Please enter your password")
+    if (!email.trim()) return setLocalError(t.loginErrEmail)
+    if (!password) return setLocalError(t.loginErrPassword)
     try {
       const result = await onLogin(email.trim().toLowerCase(), password)
       if (!result.ok && result.error) setLocalError(result.error)
     } catch (e: any) {
-      setLocalError(e?.message || "Login failed. Check your connection.")
+      setLocalError(e?.message || t.loginErrFailed)
     }
   }
 
@@ -53,14 +55,14 @@ export default function LoginScreen({ onLogin, onGoToRegister, loading, error }:
           bounces={false}
         >
           <View style={styles.header}>
-            <Text style={styles.logo}>TurbotaAI</Text>
-            <Text style={styles.tagline}>Your AI companion</Text>
+            <Text style={styles.logo}>{t.appName}</Text>
+            <Text style={styles.tagline}>{t.loginTagline}</Text>
           </View>
 
           <View style={styles.form}>
             <Input
-              label="Email"
-              placeholder="you@example.com"
+              label={t.loginEmail}
+              placeholder={t.loginEmailPlaceholder}
               keyboardType="email-address"
               autoCapitalize="none"
               value={email}
@@ -70,8 +72,8 @@ export default function LoginScreen({ onLogin, onGoToRegister, loading, error }:
             />
             <Input
               ref={passwordRef}
-              label="Password"
-              placeholder="Your password"
+              label={t.loginPassword}
+              placeholder={t.loginPasswordPlaceholder}
               secureTextEntry
               value={password}
               onChangeText={setPassword}
@@ -82,7 +84,7 @@ export default function LoginScreen({ onLogin, onGoToRegister, loading, error }:
             {displayError ? <Text style={styles.error}>{displayError}</Text> : null}
 
             <Button
-              title="Sign In"
+              title={t.loginSubmit}
               onPress={handleSubmit}
               loading={loading}
               style={{ marginTop: spacing.sm }}
@@ -90,7 +92,7 @@ export default function LoginScreen({ onLogin, onGoToRegister, loading, error }:
 
             <TouchableOpacity onPress={onGoToRegister} style={styles.link}>
               <Text style={styles.linkText}>
-                Don't have an account? <Text style={styles.linkBold}>Create one</Text>
+                {t.loginNoAccount} <Text style={styles.linkBold}>{t.loginCreate}</Text>
               </Text>
             </TouchableOpacity>
           </View>
