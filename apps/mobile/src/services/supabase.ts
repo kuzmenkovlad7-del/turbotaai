@@ -22,6 +22,11 @@ import {
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || ""
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ""
 
+/** Check if Supabase env vars are configured (without throwing) */
+export function isSupabaseConfigured(): boolean {
+  return !!(SUPABASE_URL && SUPABASE_ANON_KEY)
+}
+
 let _client: ReturnType<typeof createClient> | null = null
 
 export function getSupabase() {

@@ -31,8 +31,12 @@ export default function LoginScreen({ onLogin, onGoToRegister, loading, error }:
     setLocalError("")
     if (!email.trim()) return setLocalError("Please enter your email")
     if (!password) return setLocalError("Please enter your password")
-    const result = await onLogin(email.trim().toLowerCase(), password)
-    if (!result.ok && result.error) setLocalError(result.error)
+    try {
+      const result = await onLogin(email.trim().toLowerCase(), password)
+      if (!result.ok && result.error) setLocalError(result.error)
+    } catch (e: any) {
+      setLocalError(e?.message || "Login failed. Check your connection.")
+    }
   }
 
   const displayError = localError || error

@@ -34,9 +34,12 @@ export default function RegisterScreen({ onRegister, onGoToLogin, loading, error
     if (!email.trim()) return setLocalError("Please enter your email")
     if (password.length < 6) return setLocalError("Password must be at least 6 characters")
     if (password !== confirm) return setLocalError("Passwords do not match")
-    const result = await onRegister(email.trim().toLowerCase(), password)
-    if (!result.ok && result.error) setLocalError(result.error)
-    if (result.ok && result.error) setLocalError(result.error) // e.g. "Check email"
+    try {
+      const result = await onRegister(email.trim().toLowerCase(), password)
+      if (result.error) setLocalError(result.error) // covers both ok+error ("Check email") and !ok+error
+    } catch (e: any) {
+      setLocalError(e?.message || "Registration failed. Check your connection.")
+    }
   }
 
   const displayError = localError || error

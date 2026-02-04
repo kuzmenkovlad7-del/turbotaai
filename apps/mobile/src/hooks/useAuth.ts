@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { ensureDeviceHash } from "@/services/storage"
-import { signIn, signUp, signOut, refreshSession, type AuthResult } from "@/services/supabase"
+import { signIn, signUp, signOut, refreshSession, isSupabaseConfigured, type AuthResult } from "@/services/supabase"
 import { bootstrap, type BootstrapData } from "@/services/api"
 
 export type AccessInfo = {
@@ -63,6 +63,7 @@ export function useAuth() {
       setState(s => ({ ...s, ready: true, user, accessInfo, error: null }))
     } catch (e: any) {
       if (!mounted.current) return
+      console.warn("[useAuth] bootstrap failed:", e?.message)
       setState(s => ({ ...s, ready: true, error: e?.message }))
     }
   }, [])
@@ -70,40 +71,84 @@ export function useAuth() {
   // On mount: try refresh then bootstrap
   useEffect(() => {
     ;(async () => {
-      await ensureDeviceHash()
-      // Try to refresh existing session silently
-      await refreshSession().catch(() => {})
-      await runBootstrap()
+      try {
+        if (!isSupabaseConfigured()) {
+          console.warn("[useAuth] Supabase env vars not configured")
+        }
+        await ensureDeviceHash()
+        await refreshSession().catch(() => {})
+        await runBootstrap()
+      } catch (e: any) {
+        console.warn("[useAuth] init error:", e?.message)
+        if (mounted.current) {
+          setState(s => ({ ...s, ready: true, error: e?.message }))
+        }
+      }
     })()
   }, [runBootstrap])
 
   const login = useCallback(async (email: string, password: string): Promise<AuthResult> => {
     setState(s => ({ ...s, loading: true, error: null }))
-    const result = await signIn(email, password)
-    if (result.ok) {
-      await runBootstrap()
+    try {
+      if (!isSupabaseConfigured()) {
+        const err = "Supabase is not configured. Check .env file."
+        if (mounted.current) setState(s => ({ ...s, loading: false, error: err }))
+        return { ok: false, error: err }
+      }
+      console.log("[useAuth] login attempt:", email)
+      const result = await signIn(email, password)
+      console.log("[useAuth] login result:", result.ok, result.error ?? "")
+      if (result.ok) {
+        await runBootstrap()
+      }
+      if (mounted.current) {
+        setState(s => ({ ...s, loading: false, error: result.ok ? null : (result.error ?? null) }))
+      }
+      return result
+    } catch (e: any) {
+      const msg = e?.message || "Login failed unexpectedly"
+      console.warn("[useAuth] login error:", msg)
+      if (mounted.current) {
+        setState(s => ({ ...s, loading: false, error: msg }))
+      }
+      return { ok: false, error: msg }
     }
-    if (mounted.current) {
-      setState(s => ({ ...s, loading: false, error: result.ok ? null : (result.error ?? null) }))
-    }
-    return result
   }, [runBootstrap])
 
   const register = useCallback(async (email: string, password: string): Promise<AuthResult> => {
     setState(s => ({ ...s, loading: true, error: null }))
-    const result = await signUp(email, password)
-    if (result.ok && !result.error) {
-      // Session created — bootstrap
-      await runBootstrap()
+    try {
+      if (!isSupabaseConfigured()) {
+        const err = "Supabase is not configured. Check .env file."
+        if (mounted.current) setState(s => ({ ...s, loading: false, error: err }))
+        return { ok: false, error: err }
+      }
+      console.log("[useAuth] register attempt:", email)
+      const result = await signUp(email, password)
+      console.log("[useAuth] register result:", result.ok, result.error ?? "")
+      if (result.ok && !result.error) {
+        await runBootstrap()
+      }
+      if (mounted.current) {
+        setState(s => ({ ...s, loading: false, error: result.error ?? null }))
+      }
+      return result
+    } catch (e: any) {
+      const msg = e?.message || "Registration failed unexpectedly"
+      console.warn("[useAuth] register error:", msg)
+      if (mounted.current) {
+        setState(s => ({ ...s, loading: false, error: msg }))
+      }
+      return { ok: false, error: msg }
     }
-    if (mounted.current) {
-      setState(s => ({ ...s, loading: false, error: result.error ?? null }))
-    }
-    return result
   }, [runBootstrap])
 
   const logout = useCallback(async () => {
-    await signOut()
+    try {
+      await signOut()
+    } catch (e: any) {
+      console.warn("[useAuth] logout error:", e?.message)
+    }
     if (mounted.current) {
       setState({ ready: true, user: null, accessInfo: EMPTY_ACCESS, error: null, loading: false })
     }
