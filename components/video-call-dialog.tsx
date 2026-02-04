@@ -1996,6 +1996,7 @@ if (res.status === 402) {
                       <>
                         {selectedCharacter.idleVideo && (
                           <video
+                            key={`idle-${selectedCharacter.id}`}
                             ref={idleVideoRef}
                             className="absolute inset-0 w-full h-full object-cover scale-[1.08]"
                             muted
@@ -2013,6 +2014,7 @@ if (res.status === 402) {
 
                         {selectedCharacter.speakingVideo && (
                           <video
+                            key={`speaking-${selectedCharacter.id}`}
                             ref={speakingVideoRef}
                             className={`absolute inset-0 w-full h-full object-cover scale-[1.08] transition-opacity duration-700 ease-in-out ${
                               isAvatarSpeaking ? "opacity-100" : "opacity-0"
@@ -2044,6 +2046,7 @@ if (res.status === 402) {
 
                         {selectedCharacter.speakingVideo && (
                           <video
+                            key={`speaking-fallback-${selectedCharacter.id}`}
                             ref={speakingVideoRef}
                             className={`absolute inset-0 w-full h-full object-cover scale-[1.08] transition-opacity duration-700 ease-in-out ${
                               isAvatarSpeaking ? "opacity-100" : "opacity-0"
