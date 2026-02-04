@@ -1849,7 +1849,7 @@ if (res.status === 402) {
   const bodyClass = "flex-1 min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col touch-pan-y"
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-6" style={{ minHeight: "100dvh" }}>
+    <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-3 sm:p-6" style={{ minHeight: "100dvh" }}>
       <div className="bg-white rounded-3xl shadow-xl w-[calc(100vw-1.5rem)] max-w-[540px] flex flex-col h-[min(600px,calc(100dvh-2rem))] overflow-hidden md:w-[calc(100vw-4rem)] md:max-w-4xl md:h-[min(720px,calc(100dvh-3rem))]">
         <div className="p-3 sm:p-4 border-b flex items-center justify-between rounded-t-xl relative bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 text-white">
           <div className="flex flex-col flex-1 min-w-0 pr-2">
