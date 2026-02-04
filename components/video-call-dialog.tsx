@@ -40,6 +40,9 @@ interface AICharacter {
   speakingVideo?: string
 }
 
+/** Bump this when avatar videos are replaced to bust Vercel CDN cache */
+const AVATAR_VER = "v2"
+
 const AI_CHARACTERS: AICharacter[] = [
   {
     id: "dr-alexander",
@@ -50,12 +53,10 @@ const AI_CHARACTERS: AICharacter[] = [
     avatar:
       "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-19%D1%83-iWDrUd3gH9sLBeOjmIvu8wX3yxwBuq.jpg",
     animated: true,
-    idleVideo:
-      "/avatars/avatar3_idle.mp4",
-    speakingVideo:
-      "/avatars/avatar3_speaking.mp4",
+    idleVideo: `/avatars/avatar3_idle.mp4?${AVATAR_VER}`,
+    speakingVideo: `/avatars/avatar3_speaking.mp4?${AVATAR_VER}`,
   },
-    {
+  {
     id: "dr-maria",
     name: "Mia",
     gender: "female",
@@ -64,12 +65,10 @@ const AI_CHARACTERS: AICharacter[] = [
     avatar:
       "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-18-BmxDH7DCv7e3p0y8HobTyoPkQw1COM.jpg",
     animated: true,
-    idleVideo:
-      "/avatars/avatar1_idle.mp4",
-    speakingVideo:
-      "/avatars/avatar1_speaking.mp4",
+    idleVideo: `/avatars/avatar1_idle.mp4?${AVATAR_VER}`,
+    speakingVideo: `/avatars/avatar1_speaking.mp4?${AVATAR_VER}`,
   },
-{
+  {
     id: "dr-sophia",
     name: "Alex",
     gender: "female",
@@ -78,10 +77,8 @@ const AI_CHARACTERS: AICharacter[] = [
     avatar:
       "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-ds8y3Pe7RedqJBqZMDPltEeFI149ki.jpg",
     animated: true,
-    idleVideo:
-      "/avatars/avatar2_idle.mp4",
-    speakingVideo:
-      "/avatars/avatar2_speaking.mp4",
+    idleVideo: `/avatars/avatar2_idle.mp4?${AVATAR_VER}`,
+    speakingVideo: `/avatars/avatar2_speaking.mp4?${AVATAR_VER}`,
   },
 ]
 
