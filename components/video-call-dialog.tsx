@@ -465,6 +465,25 @@ export default function VideoCallDialog({
   const idleVideoRef = useRef<HTMLVideoElement | null>(null)
   const speakingVideoRef = useRef<HTMLVideoElement | null>(null)
 
+  // Preload selected character's videos for instant playback
+  useEffect(() => {
+    const links: HTMLLinkElement[] = []
+    if (selectedCharacter.idleVideo) {
+      const link = document.createElement("link")
+      link.rel = "preload"
+      link.as = "video"
+      link.href = selectedCharacter.idleVideo
+      link.type = "video/mp4"
+      document.head.appendChild(link)
+      links.push(link)
+    }
+    // Warm speaking video into browser cache (lower priority)
+    if (selectedCharacter.speakingVideo) {
+      fetch(selectedCharacter.speakingVideo, { priority: "low" } as any).catch(() => {})
+    }
+    return () => { links.forEach((l) => l.remove()) }
+  }, [selectedCharacter.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
   const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
   const voiceCacheRef = useRef<Map<string, SpeechSynthesisVoice>>(new Map())
@@ -1923,7 +1942,8 @@ if (res.status === 402) {
                               loop
                               playsInline
                               autoPlay
-                              preload="auto"
+                              preload="metadata"
+                              poster={character.avatar}
                             >
                               <source src={character.idleVideo} type="video/mp4" />
                             </video>
@@ -1980,13 +2000,17 @@ if (res.status === 402) {
               <div className="row-start-1 w-full sm:w-2/3 flex flex-col min-h-0">
                 <div className="relative w-full flex-1 bg-white rounded-lg overflow-hidden">
                   <div className="absolute inset-0 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
-                    {/* Loading skeleton — visible until video is ready */}
+                    {/* Poster placeholder — visible until video can play */}
                     {!isVideoReady && hasEnhancedVideo && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 z-[1]">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-slate-200 animate-pulse" />
-                          <div className="h-3 w-24 bg-slate-200 rounded animate-pulse" />
-                        </div>
+                      <div className="absolute inset-0 z-[1]">
+                        <Image
+                          src={selectedCharacter.avatar || "/placeholder.svg"}
+                          alt={selectedCharacter.name}
+                          fill
+                          className="object-cover scale-[1.08]"
+                          sizes="(max-width: 640px) 100vw, 540px"
+                          priority
+                        />
                       </div>
                     )}
                     {hasEnhancedVideo ? (
