@@ -26,25 +26,27 @@ npx expo start              # scan QR with Expo Go on your phone
 
 ```
 apps/mobile/
-├── App.tsx                          # Root: SafeAreaProvider + StatusBar + Navigator
+├── App.tsx                          # Root: LanguageContext + SafeArea + Navigator
 ├── index.ts                         # Entry: registerRootComponent(App)
 ├── app.json                         # Expo config (SDK 52, permissions, plugins)
 ├── babel.config.js                  # @/ alias via module-resolver
-├── eas.json                         # EAS build profiles (dev/preview/prod)
+├── eas.json                         # EAS build profiles (dev/preview/prod) + submit config
 ├── package.json                     # Deps: expo, react-navigation, supabase-js
 ├── tsconfig.json                    # Extends expo/tsconfig.base, strict
 ├── .env.example                     # Required env vars template
 ├── assets/                          # Placeholder PNGs (replace before publish)
 └── src/
     ├── constants/
-    │   ├── config.ts                # API_URL, SUPABASE_URL, IAP_ENABLED flag
-    │   └── theme.ts                 # colors, spacing, radii, fontSize tokens
+    │   ├── config.ts                # API_URL, SUPABASE_URL, IAP_ENABLED flag, STORAGE_KEYS
+    │   ├── theme.ts                 # colors, spacing, radii, fontSize tokens
+    │   └── i18n.ts                  # Translations for en, uk, ru (all UI strings)
     ├── services/
     │   ├── supabase.ts              # Supabase JS client: signIn, signUp, signOut, refreshSession
-    │   ├── api.ts                   # apiFetch (Bearer token), bootstrap, history, chat
+    │   ├── api.ts                   # apiFetch (Bearer token), bootstrap, history, chat, saveConversation
     │   └── storage.ts              # SecureStore: tokens, deviceHash, UUID gen
     ├── hooks/
     │   ├── useAuth.ts               # Auth state, bootstrap, session restore on mount
+    │   ├── useLanguage.ts           # LanguageContext, device-locale detection, SecureStore persistence
     │   └── useSubscription.ts       # IAP feature flag, purchase/restore stubs
     ├── components/
     │   ├── ScreenWrapper.tsx         # SafeArea wrapper with theme background
@@ -54,14 +56,23 @@ apps/mobile/
     ├── navigation/
     │   └── AppNavigator.tsx         # AuthStack (Login/Register) | AppStack (Tabs+Chat+Detail)
     └── screens/
-        ├── LoginScreen.tsx          # Email/password, keyboard handling, error display
-        ├── RegisterScreen.tsx       # Email/password/confirm, validation
-        ├── HomeScreen.tsx           # Access badge, card grid, quick actions
-        ├── ChatScreen.tsx           # Message bubbles, safe-area insets, send button
-        ├── HistoryScreen.tsx        # Pull-to-refresh, relative dates, navigate to detail
+        ├── LoginScreen.tsx          # Email/password, keyboard handling, error display, i18n
+        ├── RegisterScreen.tsx       # Email/password/confirm, validation, i18n
+        ├── HomeScreen.tsx           # Access badge, card grid, quick actions, i18n
+        ├── ChatScreen.tsx           # Message bubbles, safe-area insets, history save, i18n
+        ├── HistoryScreen.tsx        # Pull-to-refresh, relative dates, error+retry, i18n
         ├── ConversationDetailScreen.tsx  # Load + display conversation messages
-        └── AccountScreen.tsx        # Avatar, subscription status, sign out, IAP buttons
+        └── AccountScreen.tsx        # Avatar, subscription, sign out, language picker, IAP
 ```
+
+### i18n
+
+- **Supported locales**: English (`en`), Ukrainian (`uk`), Russian (`ru`)
+- **Device-locale detection**: Uses `expo-localization` → `getLocales()[0].languageCode`
+  - `uk*` → Ukrainian, `ru*` → Russian, else → English
+- **Persistence**: Chosen locale saved to SecureStore (`turbotaai_language`)
+- **Language picker**: 3-button row in Account screen
+- **Coverage**: Login, Register, Home, Chat, History, Account, tab labels, error messages
 
 ### Backend Endpoint (new)
 
@@ -77,7 +88,7 @@ Mobile does NOT use the web cookie-based auth endpoints (`/api/auth/*`). Instead
 
 1. **Sign in/up**: Supabase JS SDK → `signInWithPassword()` / `signUp()`
 2. **Token storage**: `expo-secure-store` (Keychain on iOS, Keystore on Android)
-3. **Session restore**: On app launch, read refresh token from SecureStore → `setSession()` → `refreshSession()`
+3. **Session restore**: On app launch, read refresh token from SecureStore → `refreshSession()`
 4. **API calls**: All requests include `Authorization: Bearer <token>` + `X-Device-Hash` header
 
 ### IAP Feature Flag
@@ -89,7 +100,7 @@ Mobile does NOT use the web cookie-based auth endpoints (`/api/auth/*`). Instead
 ## Prerequisites
 
 1. **Node.js** 18+ and npm
-2. **Expo CLI**: `npm install -g eas-cli`
+2. **EAS CLI**: `npm install -g eas-cli`
 3. **macOS** for iOS builds (Xcode 15+)
 4. **Android Studio** (optional, for Android emulator)
 
@@ -140,53 +151,104 @@ npx expo start --dev-client
 
 ---
 
-## Manual Test Plan (5-7 minutes)
+## EAS Build Configuration
+
+### eas.json Profiles
+
+| Profile | Purpose | Distribution | Notes |
+|---------|---------|-------------|-------|
+| `development` | Local dev with expo-dev-client | internal | iOS simulator enabled |
+| `preview` | Internal testing on real devices | internal | Install via QR/link |
+| `production` | Store submission | store | Final builds for App Store / Google Play |
+
+### Build Commands
+
+```bash
+cd apps/mobile
+
+# Development build (installs on simulator / internal device)
+eas build --platform android --profile development
+eas build --platform ios --profile development
+
+# Preview build (share with testers via link)
+eas build --platform android --profile preview
+eas build --platform ios --profile preview
+
+# Production build (submit to stores)
+eas build --platform android --profile production
+eas build --platform ios --profile production
+```
+
+### Submit to Stores
+
+```bash
+# iOS: submit to TestFlight / App Store
+eas submit --platform ios
+
+# Android: submit to Google Play internal track
+eas submit --platform android
+```
+
+### EAS Secrets (set once per project)
+
+```bash
+eas secret:create --scope project --name EXPO_PUBLIC_API_URL --value "https://turbotaai.com"
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value "<your-url>"
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value "<your-key>"
+```
+
+### Submit Config
+
+Before first submission, update `eas.json` → `submit.production`:
+
+- **iOS**: Replace `APPLE_ID_HERE`, `ASC_APP_ID_HERE`, `APPLE_TEAM_ID_HERE` with real values from Apple Developer portal
+- **Android**: Create a Google Play service account → download JSON key → save as `apps/mobile/google-play-key.json`
+
+---
+
+## Manual Test Plan
 
 ### Auth Flow
 - [ ] App shows branded splash screen on launch
-- [ ] Login screen renders: logo, email, password, sign-in button, register link
-- [ ] Empty email → shows "Please enter your email" error
-- [ ] Empty password → shows "Please enter your password" error
+- [ ] Login screen renders in device language (en/uk/ru)
+- [ ] Empty email → shows localized error
+- [ ] Empty password → shows localized error
 - [ ] Wrong credentials → shows server error message
 - [ ] Correct credentials → navigates to Home
 - [ ] Register link → navigates to Register screen
 - [ ] Register: mismatched passwords → shows validation error
-- [ ] Register: valid data → creates account (or shows "check email" if email confirmation on)
 - [ ] Kill app and reopen → session restored, goes straight to Home
 
 ### Home Screen
-- [ ] Shows access badge (Premium / Trial / Free)
+- [ ] Greeting shows in selected language
+- [ ] Access badge shows (Premium / Trial / No access) in selected language
 - [ ] "Chat with AI" card → navigates to Chat
 - [ ] "History" card → switches to History tab
 - [ ] "Account" card → switches to Account tab
 
 ### Chat Screen
-- [ ] Header shows "AI Assistant" with back button
-- [ ] Empty state shows prompt text
-- [ ] Type message + send → message appears in user bubble (right)
-- [ ] AI response appears in assistant bubble (left) with "TurbotaAI" label
+- [ ] Empty state text in selected language
+- [ ] Type message + send → user bubble (right), AI bubble (left)
 - [ ] Send button disabled while sending
-- [ ] Keyboard doesn't cover input area (safe area insets)
+- [ ] Conversation saved to history (check History tab after)
 
 ### History Screen
-- [ ] Shows list of past conversations (or empty state)
+- [ ] Shows conversations with relative dates in selected language
 - [ ] Pull-to-refresh reloads list
-- [ ] Tap conversation → opens ConversationDetail with messages
-- [ ] Relative dates display correctly (Just now, Xh ago, Yesterday)
+- [ ] Tap conversation → opens detail with messages
+- [ ] Error state with retry button when offline
 
 ### Account Screen
-- [ ] Shows avatar circle with email initial
-- [ ] Shows email address
-- [ ] Subscription status card (Premium Active / Trial / No Plan)
-- [ ] IAP buttons hidden when `IAP_ENABLED=false`
-- [ ] Sign Out → confirmation alert → returns to Login
-- [ ] After sign out, reopening app shows Login (no session)
+- [ ] Email + avatar circle displayed
+- [ ] Language picker: tap a language → all UI text changes immediately
+- [ ] Language persists across app restart
+- [ ] Subscription status shown in selected language
+- [ ] Sign Out → confirmation in selected language → returns to Login
 
 ### Navigation
-- [ ] Bottom tabs: Home, History, Account — all switch correctly
-- [ ] Tab icons highlight when active
-- [ ] Back navigation from Chat → Home works
-- [ ] Back navigation from ConversationDetail → History works
+- [ ] Bottom tabs labeled in selected language
+- [ ] All tab switches work
+- [ ] Back from Chat → Home, back from Detail → History
 
 ---
 
@@ -206,9 +268,10 @@ npx expo start --dev-client
 - [ ] **Create EAS account**: `npx eas login` (free Expo account)
 - [ ] **Update `eas.json`**: Fill in Apple Team ID, ASC App ID in submit config
 - [ ] **Create Google Play service account key**: IAM → Service Accounts → download JSON → save as `google-play-key.json`
+- [ ] **Set EAS secrets**: Run the `eas secret:create` commands above
 
 ### To Enable IAP (After Store Accounts Ready)
-- [ ] Set `EXPO_PUBLIC_IAP_ENABLED=true` in `.env`
+- [ ] Set `EXPO_PUBLIC_IAP_ENABLED=true` in `.env` and EAS secrets
 - [ ] Add `react-native-iap` to dependencies: `npx expo install react-native-iap`
 - [ ] Create IAP products in App Store Connect: `com.turbotaai.monthly`, `com.turbotaai.yearly`
 - [ ] Create matching subscriptions in Google Play Console
@@ -232,64 +295,9 @@ eas submit --platform android
 
 ---
 
-## TODO: IAP Implementation (When Store Accounts Are Ready)
-
-Currently `EXPO_PUBLIC_IAP_ENABLED=false` — purchase buttons are hidden and the app runs in Expo Go. Here is the exact sequence of code changes needed later:
-
-### Step 1: Switch from Expo Go to Dev Build
-```bash
-npx expo install react-native-iap expo-dev-client
-eas build --platform ios --profile development
-eas build --platform android --profile development
-# After build completes, install .app/.apk on device
-npx expo start --dev-client
-```
-
-### Step 2: Create Store Products
-- **iOS**: App Store Connect → In-App Purchases → create `com.turbotaai.monthly` and `com.turbotaai.yearly` as auto-renewable subscriptions
-- **Android**: Google Play Console → Monetize → Subscriptions → create matching product IDs
-
-### Step 3: Implement Purchase Flow in `useSubscription.ts`
-Replace the TODO block in `purchase()` with:
-```typescript
-import { requestSubscription, getSubscriptions } from "react-native-iap"
-
-// In purchase():
-const subscription = await requestSubscription({ sku: productId })
-const receipt = Platform.OS === "ios"
-  ? subscription.transactionReceipt
-  : subscription.purchaseToken
-await api.validateReceipt({ platform, productId, transactionReceipt: receipt })
-// Then call refreshAccess() from useAuth to update access status
-```
-
-### Step 4: Implement Backend Receipt Validation
-File: `app/api/billing/iap/validate/route.ts` (already scaffolded, returns 501)
-
-**iOS** — use [App Store Server API v2](https://developer.apple.com/documentation/appstoreserverapi):
-- Verify receipt with Apple servers
-- On success: update `access_grants` row — set `paid_until` to subscription expiry date
-
-**Android** — use [Google Play Developer API](https://developers.google.com/android-publisher):
-- Verify purchase token with Google servers
-- On success: update `access_grants` row — set `paid_until` to subscription expiry date
-
-### Step 5: Server-to-Server Notifications
-- **iOS**: Configure App Store Server Notifications (v2) → point to a new endpoint like `POST /api/billing/iap/apple-webhook`
-- **Android**: Configure Real-time Developer Notifications → point to `POST /api/billing/iap/google-webhook`
-- Handle: renewal, cancellation, refund, billing retry
-
-### Step 6: Enable IAP
-```bash
-# In apps/mobile/.env:
-EXPO_PUBLIC_IAP_ENABLED=true
-```
-
----
-
 ## Branch & Merge Instructions
 
 - **Branch**: `claude/review-repo-files-o8zu7`
 - **Base**: merge into your main branch
 - **Review**: check `app/api/mobile/bootstrap/route.ts` (new backend endpoint) + `tsconfig.json` (added `apps/mobile` to exclude)
-- **Web impact**: None — mobile is isolated in `apps/mobile/`, bootstrap endpoint is additive, web auth unchanged
+- **Web impact**: `components/video-call-dialog.tsx` (avatar flash fix — 3 lines), `components/footer.tsx` (store badges — additive). Web auth unchanged.
