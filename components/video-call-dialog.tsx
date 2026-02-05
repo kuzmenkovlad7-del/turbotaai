@@ -2,7 +2,6 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import {
   X,
@@ -50,8 +49,7 @@ const AI_CHARACTERS: AICharacter[] = [
     gender: "male",
     description:
       "Calm AI companion for everyday conversations and support",
-    avatar:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-19%D1%83-iWDrUd3gH9sLBeOjmIvu8wX3yxwBuq.jpg",
+    avatar: "",
     animated: true,
     idleVideo: `/avatars/avatar3_idle.mp4?${AVATAR_VER}`,
     speakingVideo: `/avatars/avatar3_speaking.mp4?${AVATAR_VER}`,
@@ -62,8 +60,7 @@ const AI_CHARACTERS: AICharacter[] = [
     gender: "female",
     description:
       "Warm AI companion for supportive conversations",
-    avatar:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-18-BmxDH7DCv7e3p0y8HobTyoPkQw1COM.jpg",
+    avatar: "",
     animated: true,
     idleVideo: `/avatars/avatar1_idle.mp4?${AVATAR_VER}`,
     speakingVideo: `/avatars/avatar1_speaking.mp4?${AVATAR_VER}`,
@@ -74,8 +71,7 @@ const AI_CHARACTERS: AICharacter[] = [
     gender: "female",
     description:
       "Clinical specialist specializing in anxiety, depression, and workplace stress management",
-    avatar:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-ds8y3Pe7RedqJBqZMDPltEeFI149ki.jpg",
+    avatar: "",
     animated: true,
     idleVideo: `/avatars/avatar2_idle.mp4?${AVATAR_VER}`,
     speakingVideo: `/avatars/avatar2_speaking.mp4?${AVATAR_VER}`,
@@ -1935,7 +1931,7 @@ if (res.status === 402) {
                     >
                       <div className="p-4 sm:p-5 flex flex-col h-full">
                         <div className="relative w-full aspect-square mb-3 sm:mb-4 overflow-hidden rounded-lg bg-gradient-to-br from-slate-100 to-slate-200">
-                          {character.idleVideo ? (
+                          {character.idleVideo && (
                             <video
                               className="absolute inset-0 w-full h-full object-cover scale-[1.08]"
                               muted
@@ -1943,19 +1939,9 @@ if (res.status === 402) {
                               playsInline
                               autoPlay
                               preload="metadata"
-                              poster={character.avatar}
                             >
                               <source src={character.idleVideo} type="video/mp4" />
                             </video>
-                          ) : (
-                            <Image
-                              src={character.avatar || "/placeholder.svg"}
-                              alt={character.name}
-                              fill
-                              className="object-cover"
-                              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                              priority={character.id === selectedCharacter.id}
-                            />
                           )}
                         </div>
                         <h4 className="font-semibold text-base sm:text-lg text-center mb-1 sm:mb-2">
@@ -2000,18 +1986,9 @@ if (res.status === 402) {
               <div className="row-start-1 w-full sm:w-2/3 flex flex-col min-h-0">
                 <div className="relative w-full flex-1 bg-white rounded-lg overflow-hidden">
                   <div className="absolute inset-0 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
-                    {/* Poster placeholder — visible until video can play */}
+                    {/* Neutral skeleton — visible until video can play */}
                     {!isVideoReady && hasEnhancedVideo && (
-                      <div className="absolute inset-0 z-[1]">
-                        <Image
-                          src={selectedCharacter.avatar || "/placeholder.svg"}
-                          alt={selectedCharacter.name}
-                          fill
-                          className="object-cover scale-[1.08]"
-                          sizes="(max-width: 640px) 100vw, 540px"
-                          priority
-                        />
-                      </div>
+                      <div className="absolute inset-0 z-[1] animate-pulse bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200" />
                     )}
                     {hasEnhancedVideo ? (
                       <>
@@ -2025,7 +2002,6 @@ if (res.status === 402) {
                             playsInline
                             autoPlay
                             preload="auto"
-                            poster={selectedCharacter.avatar}
                             onCanPlay={() => setIsVideoReady(true)}
                             onError={() => setIsVideoReady(true)}
                           >
@@ -2053,15 +2029,7 @@ if (res.status === 402) {
                       <>
                         {selectedCharacter && !isAvatarSpeaking && (
                           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-                            <div className="w-40 h-40 sm:w-56 sm:h-56 relative">
-                              <Image
-                                src={selectedCharacter.avatar || "/placeholder.svg"}
-                                alt={selectedCharacter.name}
-                                fill
-                                className="object-cover rounded-full"
-                                sizes="224px"
-                              />
-                            </div>
+                            <div className="w-40 h-40 sm:w-56 sm:h-56 rounded-full bg-gradient-to-br from-slate-200 to-slate-300" />
                           </div>
                         )}
 
