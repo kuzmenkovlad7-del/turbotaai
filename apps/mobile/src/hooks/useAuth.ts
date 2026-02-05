@@ -60,7 +60,7 @@ export function useAuth() {
         paidUntil: data.paid_until ?? null,
         subscriptionStatus: data.subscription_status ?? null,
       }
-      setState(s => ({ ...s, ready: true, user, accessInfo, error: null }))
+      setState(s => ({ ...s, ready: true, user: user ?? s.user, accessInfo, error: null }))
     } catch (e: any) {
       if (!mounted.current) return
       console.warn("[useAuth] bootstrap failed:", e?.message)
@@ -99,10 +99,15 @@ export function useAuth() {
       const result = await signIn(email, password)
       console.log("[useAuth] login result:", result.ok, result.error ?? "")
       if (result.ok) {
+        // Set user immediately from signIn data so navigator transitions
+        // even if the subsequent bootstrap call is slow or fails
+        if (mounted.current && result.userId && result.email) {
+          setState(s => ({ ...s, user: { id: result.userId!, email: result.email! } }))
+        }
         await runBootstrap()
       }
       if (mounted.current) {
-        setState(s => ({ ...s, loading: false, error: result.ok ? null : (result.error ?? null) }))
+        setState(s => ({ ...s, loading: false, error: result.ok ? s.error : (result.error ?? null) }))
       }
       return result
     } catch (e: any) {
@@ -127,10 +132,14 @@ export function useAuth() {
       const result = await signUp(email, password)
       console.log("[useAuth] register result:", result.ok, result.error ?? "")
       if (result.ok && !result.error) {
+        // Set user immediately so navigator transitions without waiting for bootstrap
+        if (mounted.current && result.userId && result.email) {
+          setState(s => ({ ...s, user: { id: result.userId!, email: result.email! } }))
+        }
         await runBootstrap()
       }
       if (mounted.current) {
-        setState(s => ({ ...s, loading: false, error: result.error ?? null }))
+        setState(s => ({ ...s, loading: false, error: result.error ?? s.error }))
       }
       return result
     } catch (e: any) {
