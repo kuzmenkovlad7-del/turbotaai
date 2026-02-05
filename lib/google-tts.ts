@@ -37,34 +37,21 @@ export function normalizeGender(gender?: string): TTSGender {
 }
 
 /**
- * ПАРА ГОЛОСОВ ДЛЯ ВСЕХ ЯЗЫКОВ:
- *   MALE   → cedar   (в доках рекомендован по качеству)
- *   FEMALE → shimmer (оставляем как было)
- */
-const VOICE_MAP: Record<string, { MALE: string; FEMALE: string }> = {
-  "en-US": {
-    MALE: "cedar",
-    FEMALE: "shimmer",
-  },
-  "ru-RU": {
-    MALE: "cedar",
-    FEMALE: "shimmer",
-  },
-  "uk-UA": {
-    MALE: "cedar",
-    FEMALE: "shimmer",
-  },
-}
-
-/**
- * Выбор голоса OpenAI по языку и полу.
+ * Voice selection for OpenAI gpt-4o-mini-tts.
+ *
+ * Gender  → env var                      → fallback
+ * ──────────────────────────────────────────────────
+ * MALE    → OPENAI_TTS_MALE_VOICE        → "onyx"
+ * FEMALE  → OPENAI_TTS_FEMALE_VOICE      → "nova"
+ *
+ * Same voice pair is used for all languages (en/ru/uk).
+ * To change without a deploy, update the env vars on Vercel.
  */
 export function selectOpenAIVoice(language: string, gender: TTSGender): string {
   const g = normalizeGender(gender)
 
-  // Один мужской/женский голос для en/ru/uk, можно быстро менять через env без правок кода
-  const male = (process.env.OPENAI_TTS_MALE_VOICE || "marin") as string
-  const female = (process.env.OPENAI_TTS_FEMALE_VOICE || "shimmer") as string
+  const male = (process.env.OPENAI_TTS_MALE_VOICE || "onyx") as string
+  const female = (process.env.OPENAI_TTS_FEMALE_VOICE || "nova") as string
 
   return g === "MALE" ? male : female
 }
