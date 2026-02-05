@@ -1,11 +1,22 @@
-import React from "react"
-import { View, Text, StyleSheet, ScrollView, Alert, ActivityIndicator, TouchableOpacity } from "react-native"
+import React, { useState, useCallback } from "react"
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  TouchableOpacity,
+  Linking,
+} from "react-native"
 import ScreenWrapper from "@/components/ScreenWrapper"
 import Button from "@/components/Button"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { useSubscription } from "@/hooks/useSubscription"
-import { IAP_PRODUCTS } from "@/constants/config"
+import { redeemPromo, cancelAutoRenew, resumeAutoRenew } from "@/services/api"
+import { API_BASE_URL, IAP_PRODUCTS } from "@/constants/config"
 import { LOCALE_LABELS, type Locale } from "@/constants/i18n"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
@@ -14,7 +25,16 @@ const LOCALES: Locale[] = ["en", "uk", "ru"]
 export default function AccountScreen() {
   const { user, accessInfo, logout, refreshAccess } = useAuth()
   const { t, locale, setLocale } = useT()
-  const { purchasing, purchase, iapEnabled, error } = useSubscription()
+  const { purchasing, purchase, iapEnabled, error: iapError } = useSubscription()
+
+  // Promo code state
+  const [promoCode, setPromoCode] = useState("")
+  const [promoLoading, setPromoLoading] = useState(false)
+  const [promoMsg, setPromoMsg] = useState<{ text: string; ok: boolean } | null>(null)
+
+  // Subscription action state
+  const [actionLoading, setActionLoading] = useState(false)
+  const [actionMsg, setActionMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
   const handleLogout = () => {
     Alert.alert(t.accountSignOut, t.accountSignOutConfirm, [
@@ -22,6 +42,98 @@ export default function AccountScreen() {
       { text: t.accountSignOut, style: "destructive", onPress: logout },
     ])
   }
+
+  const handleSubscribeWeb = useCallback(() => {
+    Linking.openURL(`${API_BASE_URL}/pricing`).catch(() => {})
+  }, [])
+
+  const handleApplyPromo = useCallback(async () => {
+    const code = promoCode.trim()
+    if (!code) return
+    setPromoLoading(true)
+    setPromoMsg(null)
+    try {
+      const result = await redeemPromo(code)
+      if (result.ok) {
+        setPromoMsg({ text: t.accountPromoSuccess, ok: true })
+        setPromoCode("")
+        await refreshAccess()
+      } else {
+        setPromoMsg({ text: result.error || "Invalid code", ok: false })
+      }
+    } catch (e: any) {
+      setPromoMsg({ text: e?.message || "Failed", ok: false })
+    } finally {
+      setPromoLoading(false)
+    }
+  }, [promoCode, refreshAccess, t])
+
+  const handleCancelAutoRenew = useCallback(() => {
+    Alert.alert(t.accountCancelAutoRenew, t.accountCancelConfirm, [
+      { text: t.accountCancel, style: "cancel" },
+      {
+        text: t.accountCancelAutoRenew,
+        style: "destructive",
+        onPress: async () => {
+          setActionLoading(true)
+          setActionMsg(null)
+          try {
+            const result = await cancelAutoRenew()
+            if (result.ok) {
+              setActionMsg({ text: t.accountActionSuccess, ok: true })
+              await refreshAccess()
+            } else {
+              setActionMsg({ text: result.error || "Failed", ok: false })
+            }
+          } catch (e: any) {
+            setActionMsg({ text: e?.message || "Failed", ok: false })
+          } finally {
+            setActionLoading(false)
+          }
+        },
+      },
+    ])
+  }, [refreshAccess, t])
+
+  const handleResumeAutoRenew = useCallback(() => {
+    Alert.alert(t.accountResumeAutoRenew, t.accountResumeConfirm, [
+      { text: t.accountCancel, style: "cancel" },
+      {
+        text: t.accountResumeAutoRenew,
+        onPress: async () => {
+          setActionLoading(true)
+          setActionMsg(null)
+          try {
+            const result = await resumeAutoRenew()
+            if (result.ok) {
+              setActionMsg({ text: t.accountActionSuccess, ok: true })
+              await refreshAccess()
+            } else {
+              setActionMsg({ text: result.error || "Failed", ok: false })
+            }
+          } catch (e: any) {
+            setActionMsg({ text: e?.message || "Failed", ok: false })
+          } finally {
+            setActionLoading(false)
+          }
+        },
+      },
+    ])
+  }, [refreshAccess, t])
+
+  const fmtDate = (iso: string | null) => {
+    if (!iso) return null
+    try {
+      return new Date(iso).toLocaleDateString()
+    } catch {
+      return iso
+    }
+  }
+
+  const isPaid = accessInfo?.access === "paid"
+  const isPromo = accessInfo?.access === "promo"
+  const isTrial = accessInfo?.access === "trial"
+  const showSubscribeCTA = !accessInfo?.unlimited
 
   return (
     <ScreenWrapper>
@@ -71,18 +183,31 @@ export default function AccountScreen() {
 
           {!accessInfo ? (
             <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
-          ) : accessInfo.unlimited ? (
+          ) : isPaid ? (
             <View style={styles.activeBox}>
-              <Text style={styles.activeLabel}>
-                {accessInfo.access === "paid" ? t.accountPremium : t.accountPromo}
-              </Text>
+              <Text style={styles.activeLabel}>{t.accountPremium}</Text>
               {accessInfo.paidUntil && (
                 <Text style={styles.activeDate}>
-                  {t.accountUntil(new Date(accessInfo.paidUntil).toLocaleDateString())}
+                  {t.accountUntil(fmtDate(accessInfo.paidUntil)!)}
+                </Text>
+              )}
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>{t.accountAutoRenew}:</Text>
+                <Text style={[styles.detailValue, { color: accessInfo.autoRenew ? colors.success : colors.textMuted }]}>
+                  {accessInfo.autoRenew ? t.accountAutoRenewOn : t.accountAutoRenewOff}
+                </Text>
+              </View>
+            </View>
+          ) : isPromo ? (
+            <View style={styles.promoBox}>
+              <Text style={styles.promoLabel}>{t.accountPromo}</Text>
+              {accessInfo.promoUntil && (
+                <Text style={styles.promoDate}>
+                  {t.accountPromoUntil(fmtDate(accessInfo.promoUntil)!)}
                 </Text>
               )}
             </View>
-          ) : accessInfo?.access === "trial" ? (
+          ) : isTrial ? (
             <View style={styles.trialBox}>
               <Text style={styles.trialLabel}>{t.accountTrial}</Text>
               <Text style={styles.trialCount}>
@@ -96,28 +221,92 @@ export default function AccountScreen() {
             </View>
           )}
 
-          {iapEnabled && !accessInfo?.unlimited && (
-            <View style={styles.iapButtons}>
-              <Button
-                title={t.accountMonthly}
-                onPress={() => purchase(IAP_PRODUCTS.MONTHLY)}
-                loading={purchasing}
-                style={{ marginBottom: spacing.sm }}
-              />
-              <Button
-                title={t.accountYearly}
-                variant="secondary"
-                onPress={() => purchase(IAP_PRODUCTS.YEARLY)}
-                loading={purchasing}
-              />
+          {/* Auto-renew management for paid users */}
+          {isPaid && (
+            <View style={styles.actionSection}>
+              {accessInfo.autoRenew ? (
+                <Button
+                  title={t.accountCancelAutoRenew}
+                  variant="outline"
+                  onPress={handleCancelAutoRenew}
+                  loading={actionLoading}
+                />
+              ) : (
+                <Button
+                  title={t.accountResumeAutoRenew}
+                  variant="secondary"
+                  onPress={handleResumeAutoRenew}
+                  loading={actionLoading}
+                />
+              )}
+              {actionMsg && (
+                <Text style={[styles.actionFeedback, { color: actionMsg.ok ? colors.success : colors.error }]}>
+                  {actionMsg.text}
+                </Text>
+              )}
             </View>
           )}
 
-          {!iapEnabled && !accessInfo?.unlimited && (
-            <Text style={styles.iapDisabledNote}>{t.accountIapSoon}</Text>
+          {/* Subscribe CTAs for non-unlimited users */}
+          {showSubscribeCTA && (
+            <View style={styles.actionSection}>
+              {iapEnabled ? (
+                <>
+                  <Button
+                    title={t.accountMonthly}
+                    onPress={() => purchase(IAP_PRODUCTS.MONTHLY)}
+                    loading={purchasing}
+                    style={{ marginBottom: spacing.sm }}
+                  />
+                  <Button
+                    title={t.accountYearly}
+                    variant="secondary"
+                    onPress={() => purchase(IAP_PRODUCTS.YEARLY)}
+                    loading={purchasing}
+                  />
+                </>
+              ) : (
+                <Button
+                  title={t.accountSubscribeWeb}
+                  onPress={handleSubscribeWeb}
+                  style={{ marginBottom: spacing.sm }}
+                />
+              )}
+              {iapError && <Text style={styles.error}>{iapError}</Text>}
+            </View>
           )}
 
-          {error && <Text style={styles.error}>{error}</Text>}
+          {/* Promo code input */}
+          {showSubscribeCTA && (
+            <View style={styles.promoSection}>
+              <Text style={styles.promoSectionTitle}>{t.accountApplyPromo}</Text>
+              <View style={styles.promoRow}>
+                <TextInput
+                  style={styles.promoInput}
+                  value={promoCode}
+                  onChangeText={setPromoCode}
+                  placeholder={t.accountPromoPlaceholder}
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  editable={!promoLoading}
+                />
+                <Button
+                  title={t.accountPromoApply}
+                  onPress={handleApplyPromo}
+                  loading={promoLoading}
+                  disabled={!promoCode.trim()}
+                  style={styles.promoApplyBtn}
+                  textStyle={{ fontSize: fontSize.sm }}
+                />
+              </View>
+              {promoMsg && (
+                <Text style={[styles.promoFeedback, { color: promoMsg.ok ? colors.success : colors.error }]}>
+                  {promoMsg.text}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       </ScrollView>
     </ScreenWrapper>
@@ -172,6 +361,8 @@ const styles = StyleSheet.create({
   },
   langLabel: { fontSize: fontSize.sm, fontWeight: "600", color: colors.textSecondary },
   langLabelActive: { color: colors.primary },
+
+  // Status boxes
   activeBox: {
     backgroundColor: colors.successLight,
     borderRadius: radii.md,
@@ -179,6 +370,20 @@ const styles = StyleSheet.create({
   },
   activeLabel: { fontSize: fontSize.md, fontWeight: "700", color: colors.success },
   activeDate: { fontSize: fontSize.sm, color: colors.success, marginTop: 4 },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: spacing.sm,
+  },
+  detailLabel: { fontSize: fontSize.sm, color: colors.success, marginRight: spacing.xs },
+  detailValue: { fontSize: fontSize.sm, fontWeight: "600" },
+  promoBox: {
+    backgroundColor: "#fef3c7",
+    borderRadius: radii.md,
+    padding: spacing.lg,
+  },
+  promoLabel: { fontSize: fontSize.md, fontWeight: "700", color: "#d97706" },
+  promoDate: { fontSize: fontSize.sm, color: "#d97706", marginTop: 4 },
   trialBox: {
     backgroundColor: colors.primaryLight,
     borderRadius: radii.md,
@@ -193,18 +398,54 @@ const styles = StyleSheet.create({
   },
   noAccessLabel: { fontSize: fontSize.md, fontWeight: "700", color: colors.error },
   noAccessDesc: { fontSize: fontSize.sm, color: colors.error, marginTop: 4 },
-  iapButtons: { marginTop: spacing.lg },
-  iapDisabledNote: {
+
+  // Action sections
+  actionSection: { marginTop: spacing.lg },
+  actionFeedback: {
     fontSize: fontSize.sm,
-    color: colors.textMuted,
     textAlign: "center",
-    marginTop: spacing.lg,
-    lineHeight: 20,
+    marginTop: spacing.sm,
   },
   error: {
     fontSize: fontSize.sm,
     color: colors.error,
     marginTop: spacing.md,
     textAlign: "center",
+  },
+
+  // Promo section
+  promoSection: {
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  promoSectionTitle: {
+    fontSize: fontSize.sm,
+    fontWeight: "600",
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  promoRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  promoInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: fontSize.md,
+    color: colors.text,
+    backgroundColor: colors.background,
+  },
+  promoApplyBtn: {
+    paddingHorizontal: spacing.lg,
+  },
+  promoFeedback: {
+    fontSize: fontSize.sm,
+    marginTop: spacing.sm,
   },
 })

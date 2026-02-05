@@ -211,3 +211,34 @@ export async function validateReceipt(receipt: {
   })
   return safeJson(res, { ok: false, error: `HTTP ${res.status}` })
 }
+
+/* ── Promo codes ── */
+
+export async function redeemPromo(
+  code: string,
+): Promise<{ ok: boolean; promo_until?: string; error?: string }> {
+  const res = await apiFetch("/api/billing/promo/redeem", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  })
+  return safeJson(res, { ok: false, error: `HTTP ${res.status}` })
+}
+
+/* ── Subscription management ── */
+
+export async function cancelAutoRenew(): Promise<{ ok: boolean; error?: string }> {
+  const res = await apiFetch("/api/billing/subscription/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  })
+  return safeJson(res, { ok: false, error: `HTTP ${res.status}` })
+}
+
+export async function resumeAutoRenew(): Promise<{ ok: boolean; error?: string }> {
+  const res = await apiFetch("/api/billing/subscription/resume", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  })
+  return safeJson(res, { ok: false, error: `HTTP ${res.status}` })
+}
