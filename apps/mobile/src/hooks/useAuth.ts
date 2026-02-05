@@ -9,7 +9,9 @@ export type AccessInfo = {
   unlimited: boolean
   trialLeft: number
   paidUntil: string | null
+  promoUntil: string | null
   subscriptionStatus: string | null
+  autoRenew: boolean
 }
 
 type AuthState = {
@@ -26,7 +28,9 @@ const EMPTY_ACCESS: AccessInfo = {
   unlimited: false,
   trialLeft: 0,
   paidUntil: null,
+  promoUntil: null,
   subscriptionStatus: null,
+  autoRenew: false,
 }
 
 export function useAuth() {
@@ -58,7 +62,9 @@ export function useAuth() {
         unlimited: data.unlimited ?? false,
         trialLeft: data.trial_questions_left ?? 0,
         paidUntil: data.paid_until ?? null,
+        promoUntil: data.promo_until ?? null,
         subscriptionStatus: data.subscription_status ?? null,
+        autoRenew: data.auto_renew ?? false,
       }
       setState(s => ({ ...s, ready: true, user: user ?? s.user, accessInfo, error: null }))
     } catch (e: any) {
