@@ -87,7 +87,7 @@ export default function ChatScreen() {
       sendingRef.current = false
       setSending(false)
     }
-  }, [input, user, messages.length, t])
+  }, [input, user, messages.length, t, locale])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => (

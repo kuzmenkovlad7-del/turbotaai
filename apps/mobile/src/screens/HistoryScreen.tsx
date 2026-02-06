@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react"
+import React, { useState, useCallback } from "react"
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native"
+import { useFocusEffect } from "@react-navigation/native"
 import ScreenWrapper from "@/components/ScreenWrapper"
 import EmptyState from "@/components/EmptyState"
 import Button from "@/components/Button"
@@ -45,9 +46,12 @@ export default function HistoryScreen({ navigation }: Props) {
     }
   }, [t])
 
-  useEffect(() => {
-    load()
-  }, [load])
+  // Refresh when screen gains focus (e.g. returning from Chat or switching tabs)
+  useFocusEffect(
+    useCallback(() => {
+      load()
+    }, [load]),
+  )
 
   const formatDate = (iso: string) => {
     try {

@@ -1,6 +1,6 @@
 import React, { useRef, useState, useCallback } from "react"
 import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native"
-import { WebView, type WebViewNavigation } from "react-native-webview"
+import { WebView } from "react-native-webview"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { getAuthToken, getDeviceHash } from "@/services/storage"

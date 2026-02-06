@@ -3,6 +3,7 @@ import { View, Text, FlatList, StyleSheet, ActivityIndicator } from "react-nativ
 import ScreenWrapper from "@/components/ScreenWrapper"
 import Button from "@/components/Button"
 import * as api from "@/services/api"
+import { useT } from "@/hooks/useLanguage"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 type Props = {
@@ -11,6 +12,7 @@ type Props = {
 
 export default function ConversationDetailScreen({ route }: Props) {
   const { id } = route.params
+  const { t } = useT()
   const [messages, setMessages] = useState<api.HistoryMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -27,8 +29,8 @@ export default function ConversationDetailScreen({ route }: Props) {
     } catch (e: any) {
       setError(
         e?.message === "Network request failed"
-          ? "No internet connection."
-          : "Could not load conversation.",
+          ? t.historyNoInternet
+          : t.historyLoadError,
       )
     } finally {
       setLoading(false)
@@ -52,7 +54,7 @@ export default function ConversationDetailScreen({ route }: Props) {
       <ScreenWrapper>
         <View style={styles.errorWrap}>
           <Text style={styles.errorText}>{error}</Text>
-          <Button title="Retry" variant="outline" onPress={load} style={{ marginTop: spacing.md }} />
+          <Button title={t.retry} variant="outline" onPress={load} style={{ marginTop: spacing.md }} />
         </View>
       </ScreenWrapper>
     )
