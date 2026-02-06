@@ -27,7 +27,7 @@ type Message = {
 export default function ChatScreen() {
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
-  const { t } = useT()
+  const { t, locale } = useT()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
@@ -47,7 +47,7 @@ export default function ChatScreen() {
     setInput("")
 
     try {
-      const data = await api.sendMessage(text, "uk", user?.email)
+      const data = await api.sendMessage(text, locale, user?.email)
       const reply = api.extractReplyText(data)
       const isError = data?.ok === false
 

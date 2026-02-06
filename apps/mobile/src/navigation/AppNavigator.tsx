@@ -1,11 +1,11 @@
 import React from "react"
-import { View, Text, ActivityIndicator, StyleSheet } from "react-native"
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native"
 import { NavigationContainer } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
-import { colors, fontSize } from "@/constants/theme"
+import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 import LoginScreen from "@/screens/LoginScreen"
 import RegisterScreen from "@/screens/RegisterScreen"
@@ -14,17 +14,21 @@ import ChatScreen from "@/screens/ChatScreen"
 import HistoryScreen from "@/screens/HistoryScreen"
 import ConversationDetailScreen from "@/screens/ConversationDetailScreen"
 import AccountScreen from "@/screens/AccountScreen"
+import VideoAssistantScreen from "@/screens/VideoAssistantScreen"
+import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen"
 
 /* ── Type definitions ── */
 
-type AuthStackParams = {
+export type AuthStackParams = {
   Login: undefined
   Register: undefined
 }
 
-type AppStackParams = {
+export type AppStackParams = {
   MainTabs: { screen?: string } | undefined
   Chat: undefined
+  VideoAssistant: undefined
+  VoiceAssistant: undefined
   ConversationDetail: { id: string; title?: string }
 }
 
@@ -100,7 +104,8 @@ function MainTabs() {
 /* ── Root navigator ── */
 
 export default function AppNavigator() {
-  const { ready, user, login, register, loading, error } = useAuth()
+  const { ready, user, login, register, loading, error, bootstrapFailed, retryBootstrap } = useAuth()
+  const { t } = useT()
 
   // Splash / loading state
   if (!ready) {
@@ -108,6 +113,21 @@ export default function AppNavigator() {
       <View style={styles.splash}>
         <Text style={styles.splashLogo}>TurbotaAI</Text>
         <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
+      </View>
+    )
+  }
+
+  // Bootstrap failed with no user — show error with retry
+  if (bootstrapFailed && !user && error) {
+    return (
+      <View style={styles.splash}>
+        <Text style={styles.splashLogo}>TurbotaAI</Text>
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={retryBootstrap} activeOpacity={0.7}>
+            <Text style={styles.retryText}>{t.retry}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     )
   }
@@ -149,7 +169,29 @@ export default function AppNavigator() {
             component={ChatScreen}
             options={{
               headerShown: true,
-              title: "AI Assistant",
+              title: t.homeChat,
+              headerTintColor: colors.primary,
+              headerStyle: { backgroundColor: colors.surface },
+              headerTitleStyle: { fontWeight: "600" },
+            }}
+          />
+          <AppStack.Screen
+            name="VideoAssistant"
+            component={VideoAssistantScreen}
+            options={{
+              headerShown: true,
+              title: t.homeVideo,
+              headerTintColor: colors.primary,
+              headerStyle: { backgroundColor: colors.surface },
+              headerTitleStyle: { fontWeight: "600" },
+            }}
+          />
+          <AppStack.Screen
+            name="VoiceAssistant"
+            component={VoiceAssistantScreen}
+            options={{
+              headerShown: true,
+              title: t.homeVoice,
               headerTintColor: colors.primary,
               headerStyle: { backgroundColor: colors.surface },
               headerTitleStyle: { fontWeight: "600" },
@@ -183,5 +225,27 @@ const styles = StyleSheet.create({
     fontSize: fontSize.hero,
     fontWeight: "800",
     color: colors.primary,
+  },
+  errorBox: {
+    marginTop: spacing.xxl,
+    alignItems: "center",
+    paddingHorizontal: spacing.xxxl,
+  },
+  errorText: {
+    fontSize: fontSize.md,
+    color: colors.error,
+    textAlign: "center",
+    marginBottom: spacing.lg,
+  },
+  retryBtn: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xxl,
+    borderRadius: radii.md,
+  },
+  retryText: {
+    color: "#fff",
+    fontSize: fontSize.md,
+    fontWeight: "600",
   },
 })

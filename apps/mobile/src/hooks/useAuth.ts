@@ -20,6 +20,7 @@ type AuthState = {
   accessInfo: AccessInfo | null
   error: string | null
   loading: boolean
+  bootstrapFailed: boolean
 }
 
 const EMPTY_ACCESS: AccessInfo = {
@@ -40,6 +41,7 @@ export function useAuth() {
     accessInfo: null,
     error: null,
     loading: false,
+    bootstrapFailed: false,
   })
   const mounted = useRef(true)
 
@@ -50,9 +52,11 @@ export function useAuth() {
 
   const runBootstrap = useCallback(async () => {
     try {
+      console.log("[useAuth] bootstrap start")
       await ensureDeviceHash()
       const data = await bootstrap()
       if (!mounted.current) return
+      console.log("[useAuth] bootstrap ok, logged_in=", data.isLoggedIn)
       const user = data.isLoggedIn && data.userId && data.email
         ? { id: data.userId, email: data.email }
         : null
@@ -66,13 +70,18 @@ export function useAuth() {
         subscriptionStatus: data.subscription_status ?? null,
         autoRenew: data.auto_renew ?? false,
       }
-      setState(s => ({ ...s, ready: true, user: user ?? s.user, accessInfo, error: null }))
+      setState(s => ({ ...s, ready: true, user: user ?? s.user, accessInfo, error: null, bootstrapFailed: false }))
     } catch (e: any) {
       if (!mounted.current) return
       console.warn("[useAuth] bootstrap failed:", e?.message)
-      setState(s => ({ ...s, ready: true, error: e?.message }))
+      setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true }))
     }
   }, [])
+
+  const retryBootstrap = useCallback(async () => {
+    setState(s => ({ ...s, error: null, bootstrapFailed: false }))
+    await runBootstrap()
+  }, [runBootstrap])
 
   // On mount: try refresh then bootstrap
   useEffect(() => {
@@ -82,12 +91,13 @@ export function useAuth() {
           console.warn("[useAuth] Supabase env vars not configured")
         }
         await ensureDeviceHash()
-        await refreshSession().catch(() => {})
+        const refreshResult = await refreshSession().catch(() => ({ ok: false } as AuthResult))
+        console.log("[useAuth] session refresh:", refreshResult.ok ? "restored" : "no session")
         await runBootstrap()
       } catch (e: any) {
         console.warn("[useAuth] init error:", e?.message)
         if (mounted.current) {
-          setState(s => ({ ...s, ready: true, error: e?.message }))
+          setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true }))
         }
       }
     })()
@@ -160,12 +170,13 @@ export function useAuth() {
 
   const logout = useCallback(async () => {
     try {
+      console.log("[useAuth] logout")
       await signOut()
     } catch (e: any) {
       console.warn("[useAuth] logout error:", e?.message)
     }
     if (mounted.current) {
-      setState({ ready: true, user: null, accessInfo: EMPTY_ACCESS, error: null, loading: false })
+      setState({ ready: true, user: null, accessInfo: EMPTY_ACCESS, error: null, loading: false, bootstrapFailed: false })
     }
   }, [])
 
@@ -175,5 +186,6 @@ export function useAuth() {
     register,
     logout,
     refreshAccess: runBootstrap,
+    retryBootstrap,
   }
 }

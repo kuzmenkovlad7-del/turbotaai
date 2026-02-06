@@ -40,12 +40,28 @@ export default function HomeScreen({ navigation }: Props) {
       accent: colors.primary,
     },
     {
+      key: "video",
+      icon: "\uD83C\uDFA5",
+      title: t.homeVideo,
+      desc: t.homeVideoDesc,
+      onPress: () => navigation.navigate("VideoAssistant"),
+      accent: "#0ea5e9",
+    },
+    {
+      key: "voice",
+      icon: "\uD83C\uDF99\uFE0F",
+      title: t.homeVoice,
+      desc: t.homeVoiceDesc,
+      onPress: () => navigation.navigate("VoiceAssistant"),
+      accent: "#10b981",
+    },
+    {
       key: "history",
       icon: "\uD83D\uDCCB",
       title: t.homeHistory,
       desc: t.homeHistoryDesc,
       onPress: () => navigation.navigate("MainTabs", { screen: "HistoryTab" }),
-      accent: "#0ea5e9",
+      accent: "#f59e0b",
     },
     {
       key: "account",
@@ -53,7 +69,7 @@ export default function HomeScreen({ navigation }: Props) {
       title: t.homeAccount,
       desc: t.homeAccountDesc,
       onPress: () => navigation.navigate("MainTabs", { screen: "AccountTab" }),
-      accent: "#f59e0b",
+      accent: "#8b5cf6",
     },
   ]
 
