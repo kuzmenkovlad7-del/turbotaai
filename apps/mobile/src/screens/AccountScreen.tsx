@@ -25,7 +25,15 @@ const LOCALES: Locale[] = ["en", "uk", "ru"]
 export default function AccountScreen() {
   const { user, accessInfo, logout, refreshAccess } = useAuth()
   const { t, locale, setLocale } = useT()
-  const { purchasing, purchase, iapEnabled, error: iapError } = useSubscription()
+  const {
+    purchasing,
+    restoring,
+    purchase,
+    restorePurchases,
+    manageSubscription,
+    iapEnabled,
+    error: iapError,
+  } = useSubscription()
 
   // Promo code state
   const [promoCode, setPromoCode] = useState("")
@@ -53,6 +61,7 @@ export default function AccountScreen() {
     setPromoLoading(true)
     setPromoMsg(null)
     try {
+      console.log("[Account] applying promo code:", code)
       const result = await redeemPromo(code)
       if (result.ok) {
         setPromoMsg({ text: t.accountPromoSuccess, ok: true })
@@ -247,6 +256,17 @@ export default function AccountScreen() {
             </View>
           )}
 
+          {/* Manage Subscription — opens platform subscription management */}
+          {isPaid && (
+            <View style={styles.actionSection}>
+              <Button
+                title={t.accountManageSubscription}
+                variant="ghost"
+                onPress={manageSubscription}
+              />
+            </View>
+          )}
+
           {/* Subscribe CTAs for non-unlimited users */}
           {showSubscribeCTA && (
             <View style={styles.actionSection}>
@@ -276,37 +296,45 @@ export default function AccountScreen() {
             </View>
           )}
 
+          {/* Restore purchases */}
+          <View style={styles.actionSection}>
+            <Button
+              title={t.accountRestorePurchases}
+              variant="ghost"
+              onPress={restorePurchases}
+              loading={restoring}
+            />
+          </View>
+
           {/* Promo code input */}
-          {showSubscribeCTA && (
-            <View style={styles.promoSection}>
-              <Text style={styles.promoSectionTitle}>{t.accountApplyPromo}</Text>
-              <View style={styles.promoRow}>
-                <TextInput
-                  style={styles.promoInput}
-                  value={promoCode}
-                  onChangeText={setPromoCode}
-                  placeholder={t.accountPromoPlaceholder}
-                  placeholderTextColor={colors.textMuted}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  editable={!promoLoading}
-                />
-                <Button
-                  title={t.accountPromoApply}
-                  onPress={handleApplyPromo}
-                  loading={promoLoading}
-                  disabled={!promoCode.trim()}
-                  style={styles.promoApplyBtn}
-                  textStyle={{ fontSize: fontSize.sm }}
-                />
-              </View>
-              {promoMsg && (
-                <Text style={[styles.promoFeedback, { color: promoMsg.ok ? colors.success : colors.error }]}>
-                  {promoMsg.text}
-                </Text>
-              )}
+          <View style={styles.promoSection}>
+            <Text style={styles.promoSectionTitle}>{t.accountApplyPromo}</Text>
+            <View style={styles.promoRow}>
+              <TextInput
+                style={styles.promoInput}
+                value={promoCode}
+                onChangeText={setPromoCode}
+                placeholder={t.accountPromoPlaceholder}
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                editable={!promoLoading}
+              />
+              <Button
+                title={t.accountPromoApply}
+                onPress={handleApplyPromo}
+                loading={promoLoading}
+                disabled={!promoCode.trim()}
+                style={styles.promoApplyBtn}
+                textStyle={{ fontSize: fontSize.sm }}
+              />
             </View>
-          )}
+            {promoMsg && (
+              <Text style={[styles.promoFeedback, { color: promoMsg.ok ? colors.success : colors.error }]}>
+                {promoMsg.text}
+              </Text>
+            )}
+          </View>
         </View>
       </ScrollView>
     </ScreenWrapper>
