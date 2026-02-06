@@ -124,6 +124,14 @@ const en = {
   accountRefreshing: "Refreshing...",
   accountRestorePurchases: "Restore Purchases",
   accountManageSubscription: "Manage Subscription",
+  accountRefreshAccess: "Refresh Access",
+  accountRestoreSuccess: "Purchases restored!",
+  accountRestoreNone: "No purchases to restore.",
+
+  // Bootstrap
+  bootstrapErrorTitle: "Connection Error",
+  bootstrapErrorDesc: "Could not connect to TurbotaAI. Check your internet and try again.",
+  bootstrapRetry: "Try Again",
 
   // Access badge
   badgePremium: "Premium",
@@ -237,6 +245,13 @@ const uk: typeof en = {
   accountRefreshing: "Оновлення...",
   accountRestorePurchases: "Відновити покупки",
   accountManageSubscription: "Керувати підпискою",
+  accountRefreshAccess: "Оновити доступ",
+  accountRestoreSuccess: "Покупки відновлено!",
+  accountRestoreNone: "Немає покупок для відновлення.",
+
+  bootstrapErrorTitle: "Помилка з'єднання",
+  bootstrapErrorDesc: "Не вдалося підключитися до TurbotaAI. Перевірте інтернет та спробуйте ще раз.",
+  bootstrapRetry: "Спробувати ще",
 
   badgePremium: "Преміум",
   badgePromo: "Промо",
@@ -349,6 +364,13 @@ const ru: typeof en = {
   accountRefreshing: "Обновление...",
   accountRestorePurchases: "Восстановить покупки",
   accountManageSubscription: "Управлять подпиской",
+  accountRefreshAccess: "Обновить доступ",
+  accountRestoreSuccess: "Покупки восстановлены!",
+  accountRestoreNone: "Нет покупок для восстановления.",
+
+  bootstrapErrorTitle: "Ошибка соединения",
+  bootstrapErrorDesc: "Не удалось подключиться к TurbotaAI. Проверьте интернет и попробуйте снова.",
+  bootstrapRetry: "Попробовать ещё",
 
   badgePremium: "Премиум",
   badgePromo: "Промо",

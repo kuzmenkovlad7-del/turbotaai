@@ -81,7 +81,7 @@ export default function ConversationDetailScreen({ route }: Props) {
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>No messages in this conversation</Text>
+            <Text style={styles.emptyText}>{t.historyEmpty}</Text>
           </View>
         }
       />

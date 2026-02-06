@@ -44,6 +44,9 @@ export default function AccountScreen() {
   const [actionLoading, setActionLoading] = useState(false)
   const [actionMsg, setActionMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
+  // Refresh access state
+  const [refreshingAccess, setRefreshingAccess] = useState(false)
+
   const handleLogout = () => {
     Alert.alert(t.accountSignOut, t.accountSignOutConfirm, [
       { text: t.accountCancel, style: "cancel" },
@@ -296,13 +299,23 @@ export default function AccountScreen() {
             </View>
           )}
 
-          {/* Restore purchases */}
+          {/* Restore purchases + Refresh access */}
           <View style={styles.actionSection}>
             <Button
               title={t.accountRestorePurchases}
               variant="ghost"
               onPress={restorePurchases}
               loading={restoring}
+            />
+            <Button
+              title={t.accountRefreshAccess}
+              variant="outline"
+              onPress={async () => {
+                setRefreshingAccess(true)
+                try { await refreshAccess() } finally { setRefreshingAccess(false) }
+              }}
+              loading={refreshingAccess}
+              style={{ marginTop: spacing.sm }}
             />
           </View>
 
