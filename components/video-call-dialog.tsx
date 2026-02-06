@@ -2,7 +2,6 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import {
   X,
@@ -40,6 +39,9 @@ interface AICharacter {
   speakingVideo?: string
 }
 
+/** Bump this when avatar videos are replaced to bust Vercel CDN cache */
+const AVATAR_VER = "v2"
+
 const AI_CHARACTERS: AICharacter[] = [
   {
     id: "dr-alexander",
@@ -47,41 +49,32 @@ const AI_CHARACTERS: AICharacter[] = [
     gender: "male",
     description:
       "Calm AI companion for everyday conversations and support",
-    avatar:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-19%D1%83-iWDrUd3gH9sLBeOjmIvu8wX3yxwBuq.jpg",
+    avatar: "",
     animated: true,
-    idleVideo:
-      "/avatars/avatar3_idle.mp4",
-    speakingVideo:
-      "/avatars/avatar3_speaking.mp4",
+    idleVideo: `/avatars/avatar3_idle.mp4?${AVATAR_VER}`,
+    speakingVideo: `/avatars/avatar3_speaking.mp4?${AVATAR_VER}`,
   },
-    {
+  {
     id: "dr-maria",
     name: "Mia",
     gender: "female",
     description:
       "Warm AI companion for supportive conversations",
-    avatar:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-18-BmxDH7DCv7e3p0y8HobTyoPkQw1COM.jpg",
+    avatar: "",
     animated: true,
-    idleVideo:
-      "/avatars/avatar1_idle.mp4",
-    speakingVideo:
-      "/avatars/avatar1_speaking.mp4",
+    idleVideo: `/avatars/avatar1_idle.mp4?${AVATAR_VER}`,
+    speakingVideo: `/avatars/avatar1_speaking.mp4?${AVATAR_VER}`,
   },
-{
+  {
     id: "dr-sophia",
     name: "Alex",
     gender: "female",
     description:
       "Clinical specialist specializing in anxiety, depression, and workplace stress management",
-    avatar:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/photo_2025-10-31_22-27-ds8y3Pe7RedqJBqZMDPltEeFI149ki.jpg",
+    avatar: "",
     animated: true,
-    idleVideo:
-      "/avatars/avatar2_idle.mp4",
-    speakingVideo:
-      "/avatars/avatar2_speaking.mp4",
+    idleVideo: `/avatars/avatar2_idle.mp4?${AVATAR_VER}`,
+    speakingVideo: `/avatars/avatar2_speaking.mp4?${AVATAR_VER}`,
   },
 ]
 
@@ -442,6 +435,7 @@ export default function VideoCallDialog({
 
   const [isCallActive, setIsCallActive] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
+  const [isVideoReady, setIsVideoReady] = useState(false)
 
   const [isMicMuted, setIsMicMuted] = useState(false)
   const [isCameraOff, setIsCameraOff] = useState(false)
@@ -466,6 +460,25 @@ export default function VideoCallDialog({
   const userVideoRef = useRef<HTMLVideoElement | null>(null)
   const idleVideoRef = useRef<HTMLVideoElement | null>(null)
   const speakingVideoRef = useRef<HTMLVideoElement | null>(null)
+
+  // Preload selected character's videos for instant playback
+  useEffect(() => {
+    const links: HTMLLinkElement[] = []
+    if (selectedCharacter.idleVideo) {
+      const link = document.createElement("link")
+      link.rel = "preload"
+      link.as = "video"
+      link.href = selectedCharacter.idleVideo
+      link.type = "video/mp4"
+      document.head.appendChild(link)
+      links.push(link)
+    }
+    // Warm speaking video into browser cache (lower priority)
+    if (selectedCharacter.speakingVideo) {
+      fetch(selectedCharacter.speakingVideo, { priority: "low" } as any).catch(() => {})
+    }
+    return () => { links.forEach((l) => l.remove()) }
+  }, [selectedCharacter.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
   const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
@@ -1093,6 +1106,7 @@ export default function VideoCallDialog({
       isSttBusyRef.current = true
       setActivityStatus("thinking")
 
+      const _sttStart = performance.now()
       const res = await fetch("/api/stt", {
         method: "POST",
         headers: {
@@ -1122,7 +1136,9 @@ export default function VideoCallDialog({
       audioChunksRef.current = keep ? [keep] : []
       sentIdxRef.current = keep ? 1 : 0
 
+      const _sttMs = Math.round(performance.now() - _sttStart)
       const fullText = (data.text || "").toString().trim()
+      if (fullText) console.log(`[perf] STT: ${_sttMs}ms — "${fullText.slice(0, 40)}"`)
       if (!fullText) {
         setActivityStatus("listening")
         return
@@ -1304,6 +1320,7 @@ export default function VideoCallDialog({
     const ttsGender = gender === "male" ? "MALE" : "FEMALE"
     const langCode = computeLangCode()
 
+    const _ttsStart = performance.now()
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1318,6 +1335,8 @@ export default function VideoCallDialog({
       throw new Error(json?.error || `TTS error: ${res.status}`)
     }
 
+    const _ttsMs = Math.round(performance.now() - _ttsStart)
+    console.log(`[perf] TTS: ${_ttsMs}ms`)
     const contentType = (json.contentType || "audio/mpeg").toString()
     const audioB64 = String(json.audioContent || "")
 
@@ -1554,6 +1573,7 @@ export default function VideoCallDialog({
         throw new Error("VIDEO_ASSISTANT_WEBHOOK_URL is not configured")
       }
 
+      const _agentStart = performance.now()
       const res = await fetch(VIDEO_ASSISTANT_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1580,9 +1600,12 @@ if (res.status === 402) {
         data = JSON.parse(raw)
       } catch {}
 
+      const _agentMs = Math.round(performance.now() - _agentStart)
       let aiRaw = extractAnswer(data)
       aiRaw = cleanResponseText(aiRaw)
       aiRaw = sanitizeAssistantText(aiRaw)
+      if (aiRaw) console.log(`[perf] Agent: ${_agentMs}ms — "${aiRaw.slice(0, 40)}"`)
+
 
       if (!aiRaw) throw new Error("Empty response received")
 
@@ -1674,7 +1697,14 @@ if (res.status === 402) {
 
       if (hasEnhancedVideo && idleVideoRef.current && selectedCharacter.idleVideo) {
         try {
-          idleVideoRef.current.play().catch(() => {})
+          const idle = idleVideoRef.current
+          idle.load()
+          await idle.play().catch(() => {})
+        } catch {}
+      }
+      if (hasEnhancedVideo && speakingVideoRef.current && selectedCharacter.speakingVideo) {
+        try {
+          speakingVideoRef.current.load()
         } catch {}
       }
 
@@ -1715,6 +1745,7 @@ if (res.status === 402) {
     setInterimTranscript("")
     setMessages([])
     setSpeechError(null)
+    setIsVideoReady(false)
 
     if (idleVideoRef.current) {
       try {
@@ -1817,7 +1848,9 @@ if (res.status === 402) {
   const micOn = isCallActive && !isMicMuted && isListening && !isAiSpeaking
 
   const statusText = (() => {
-    if (!isCallActive) return t("Choose an AI specialist and press “Start video call” to begin.")
+    if (isConnecting) return t("Connecting...")
+    if (!isCallActive) return t('Choose an AI specialist and press "Start video call" to begin.')
+    if (speechError) return t("An error occurred. Check the chat panel for details.")
     if (isAvatarSpeaking) return t("Assistant is speaking. Please wait a moment.")
     if (activityStatus === "thinking") return t("Thinking...")
     if (micOn) return t("Listening… you can speak.")
@@ -1828,8 +1861,8 @@ if (res.status === 402) {
   const bodyClass = "flex-1 min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col touch-pan-y"
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 sm:p-6">
-      <div className="bg-white rounded-3xl shadow-xl w-[calc(100vw-1.5rem)] max-w-[540px] flex flex-col h-[600px] overflow-hidden md:w-[calc(100vw-4rem)] md:max-w-4xl md:h-[720px]">
+    <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-3 sm:p-6" style={{ minHeight: "100dvh" }}>
+      <div className="bg-white rounded-3xl shadow-xl w-[calc(100vw-1.5rem)] max-w-[540px] flex flex-col h-[min(600px,calc(100dvh-2rem))] overflow-hidden md:w-[calc(100vw-4rem)] md:max-w-4xl md:h-[min(720px,calc(100dvh-3rem))]">
         <div className="p-3 sm:p-4 border-b flex items-center justify-between rounded-t-xl relative bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 text-white">
           <div className="flex flex-col flex-1 min-w-0 pr-2">
             <h3 className="font-semibold text-base sm:text-lg truncate flex items-center gap-2">
@@ -1889,7 +1922,7 @@ if (res.status === 402) {
                     <button
                       key={character.id}
                       type="button"
-                      onClick={() => setSelectedCharacter(character)}
+                      onClick={() => { setIsVideoReady(false); setSelectedCharacter(character) }}
                       className={`relative bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border-2 ${
                         selectedCharacter.id === character.id
                           ? "border-primary-600"
@@ -1897,8 +1930,8 @@ if (res.status === 402) {
                       }`}
                     >
                       <div className="p-4 sm:p-5 flex flex-col h-full">
-                        <div className="relative w-full aspect-square mb-3 sm:mb-4 overflow-hidden rounded-lg bg-black">
-                          {character.idleVideo ? (
+                        <div className="relative w-full aspect-square mb-3 sm:mb-4 overflow-hidden rounded-lg bg-gradient-to-br from-slate-100 to-slate-200">
+                          {character.idleVideo && (
                             <video
                               className="absolute inset-0 w-full h-full object-cover scale-[1.08]"
                               muted
@@ -1909,15 +1942,6 @@ if (res.status === 402) {
                             >
                               <source src={character.idleVideo} type="video/mp4" />
                             </video>
-                          ) : (
-                            <Image
-                              src={character.avatar || "/placeholder.svg"}
-                              alt={character.name}
-                              fill
-                              className="object-cover"
-                              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                              priority={character.id === selectedCharacter.id}
-                            />
                           )}
                         </div>
                         <h4 className="font-semibold text-base sm:text-lg text-center mb-1 sm:mb-2">
@@ -1961,18 +1985,25 @@ if (res.status === 402) {
               {/* LEFT: VIDEO (mobile gets at least 200px via grid row, desktop uses flex) */}
               <div className="row-start-1 w-full sm:w-2/3 flex flex-col min-h-0">
                 <div className="relative w-full flex-1 bg-white rounded-lg overflow-hidden">
-                  <div className="absolute inset-0 bg-white overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+                    {/* Neutral skeleton — visible until video can play */}
+                    {!isVideoReady && hasEnhancedVideo && (
+                      <div className="absolute inset-0 z-[1] animate-pulse bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200" />
+                    )}
                     {hasEnhancedVideo ? (
                       <>
                         {selectedCharacter.idleVideo && (
                           <video
+                            key={`idle-${selectedCharacter.id}`}
                             ref={idleVideoRef}
                             className="absolute inset-0 w-full h-full object-cover scale-[1.08]"
                             muted
                             loop
                             playsInline
                             autoPlay
-                            preload="metadata"
+                            preload="auto"
+                            onCanPlay={() => setIsVideoReady(true)}
+                            onError={() => setIsVideoReady(true)}
                           >
                             <source src={selectedCharacter.idleVideo} type="video/mp4" />
                           </video>
@@ -1980,6 +2011,7 @@ if (res.status === 402) {
 
                         {selectedCharacter.speakingVideo && (
                           <video
+                            key={`speaking-${selectedCharacter.id}`}
                             ref={speakingVideoRef}
                             className={`absolute inset-0 w-full h-full object-cover scale-[1.08] transition-opacity duration-700 ease-in-out ${
                               isAvatarSpeaking ? "opacity-100" : "opacity-0"
@@ -1987,7 +2019,7 @@ if (res.status === 402) {
                             muted
                             loop
                             playsInline
-                            preload="metadata"
+                            preload="auto"
                           >
                             <source src={selectedCharacter.speakingVideo} type="video/mp4" />
                           </video>
@@ -1996,21 +2028,14 @@ if (res.status === 402) {
                     ) : (
                       <>
                         {selectedCharacter && !isAvatarSpeaking && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-white">
-                            <div className="w-40 h-40 sm:w-56 sm:h-56 relative">
-                              <Image
-                                src={selectedCharacter.avatar || "/placeholder.svg"}
-                                alt={selectedCharacter.name}
-                                fill
-                                className="object-cover rounded-full"
-                                sizes="224px"
-                              />
-                            </div>
+                          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
+                            <div className="w-40 h-40 sm:w-56 sm:h-56 rounded-full bg-gradient-to-br from-slate-200 to-slate-300" />
                           </div>
                         )}
 
                         {selectedCharacter.speakingVideo && (
                           <video
+                            key={`speaking-fallback-${selectedCharacter.id}`}
                             ref={speakingVideoRef}
                             className={`absolute inset-0 w-full h-full object-cover scale-[1.08] transition-opacity duration-700 ease-in-out ${
                               isAvatarSpeaking ? "opacity-100" : "opacity-0"
@@ -2018,7 +2043,7 @@ if (res.status === 402) {
                             muted
                             loop
                             playsInline
-                            preload="metadata"
+                            preload="auto"
                           >
                             <source src={selectedCharacter.speakingVideo} type="video/mp4" />
                           </video>
@@ -2028,19 +2053,37 @@ if (res.status === 402) {
                   </div>
 
                   <div
-                    className={`absolute top-2 sm:top-4 right-2 sm:right-4 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${
-                      activityStatus === "listening"
+                    className={`absolute top-2 sm:top-4 right-2 sm:right-4 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1.5 ${
+                      speechError
+                        ? "bg-rose-100 text-rose-800"
+                        : activityStatus === "listening"
                         ? "bg-green-100 text-green-800"
                         : activityStatus === "thinking"
                         ? "bg-blue-100 text-blue-800"
                         : "bg-purple-100 text-purple-800"
                     }`}
                   >
-                    {activityStatus === "listening"
-                      ? t("Listening...")
-                      : activityStatus === "thinking"
-                      ? t("Thinking...")
-                      : t("Speaking...")}
+                    {speechError ? (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-500" />
+                        {t("Error")}
+                      </>
+                    ) : activityStatus === "listening" ? (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        {t("Listening...")}
+                      </>
+                    ) : activityStatus === "thinking" ? (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                        {t("Thinking...")}
+                      </>
+                    ) : (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                        {t("Speaking...")}
+                      </>
+                    )}
                   </div>
 
                   {!isCameraOff && (
@@ -2110,7 +2153,14 @@ if (res.status === 402) {
 
                   {speechError && (
                     <div className="bg-rose-50 rounded-lg p-3 text-xs sm:text-sm text-rose-700 break-words">
-                      {speechError}
+                      <p>{speechError}</p>
+                      <button
+                        type="button"
+                        onClick={() => { setSpeechError(null); resetVadState(); safeStartListening() }}
+                        className="mt-2 text-xs font-medium text-rose-800 underline underline-offset-2 hover:text-rose-900"
+                      >
+                        {t("Try again")}
+                      </button>
                     </div>
                   )}
                 </div>

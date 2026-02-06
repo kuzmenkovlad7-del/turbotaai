@@ -224,7 +224,7 @@ if (res.status === 402) {
   return (
     <Dialog open={controlledOpen ?? isOpen} onOpenChange={(v) => { extOnOpenChange?.(v); if (!v) { if (typeof onClose === "function") onClose(); } }}>
       <DialogContent
-        style={keyboardOffset > 0 ? ({ bottom: keyboardOffset } as any) : undefined}
+        style={keyboardOffset > 0 ? { transform: `translate(-50%, calc(-50% - ${keyboardOffset / 2}px))` } : undefined}
         className="border-none bg-transparent p-0 w-[calc(100vw-1.5rem)] max-w-[520px] sm:w-full sm:max-w-xl"
       >
         <div className="mx-auto w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/10 ">
@@ -246,7 +246,10 @@ if (res.status === 402) {
             </div>
           </DialogHeader>
 
-          <div className="flex h-[500px] flex-col md:h-[540px]">
+          <div
+            className="flex flex-col h-[500px] md:h-[540px]"
+            style={keyboardOffset > 0 ? { height: Math.max(220, Math.min(500, (window.visualViewport?.height ?? window.innerHeight) - keyboardOffset - 100)) } : undefined}
+          >
             <ScrollArea className="flex-1 px-5 pt-4 pb-2">
               <div ref={scrollRef} className="max-h-full space-y-3 pr-1">
                 {messages.length === 0 && (
