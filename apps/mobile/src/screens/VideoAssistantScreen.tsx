@@ -1,5 +1,5 @@
-import React, { useRef, useState, useCallback } from "react"
-import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native"
+import React, { useRef, useState, useCallback, useEffect } from "react"
+import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity, BackHandler, AppState, type AppStateStatus } from "react-native"
 import { WebView, type WebViewMessageEvent } from "react-native-webview"
 import { useNavigation } from "@react-navigation/native"
 import { useAuth } from "@/hooks/useAuth"
@@ -72,6 +72,34 @@ export default function VideoAssistantScreen() {
   React.useEffect(() => {
     getInjectedJS().then(setInjectedJS)
   }, [getInjectedJS])
+
+  // Android hardware back button → go back instead of default behavior
+  useEffect(() => {
+    const handler = BackHandler.addEventListener("hardwareBackPress", () => {
+      navigation.goBack()
+      return true
+    })
+    return () => handler.remove()
+  }, [navigation])
+
+  // Re-inject fresh auth token when app returns from background
+  useEffect(() => {
+    const appStateRef = { current: AppState.currentState }
+    const sub = AppState.addEventListener("change", async (next: AppStateStatus) => {
+      const prev = appStateRef.current
+      appStateRef.current = next
+      if (prev.match(/inactive|background/) && next === "active" && webViewRef.current) {
+        const freshToken = await getAuthToken()
+        if (freshToken) {
+          webViewRef.current.injectJavaScript(`
+            window.__MOBILE_AUTH_TOKEN = '${freshToken}';
+            true;
+          `)
+        }
+      }
+    })
+    return () => sub.remove()
+  }, [])
 
   const handleError = () => {
     setError(true)

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react"
+import { AppState, type AppStateStatus } from "react-native"
 import { ensureDeviceHash } from "@/services/storage"
 import { signIn, signUp, signOut, refreshSession, isSupabaseConfigured, type AuthResult } from "@/services/supabase"
 import { bootstrap, type BootstrapData } from "@/services/api"
@@ -105,6 +106,28 @@ export function useAuth() {
         }
       }
     })()
+  }, [runBootstrap])
+
+  // Refresh session + access when app returns from background
+  useEffect(() => {
+    const appStateRef = { current: AppState.currentState }
+    const subscription = AppState.addEventListener("change", async (next: AppStateStatus) => {
+      const prev = appStateRef.current
+      appStateRef.current = next
+      if (prev.match(/inactive|background/) && next === "active" && mounted.current) {
+        console.log("[useAuth] app foregrounded — refreshing session")
+        try {
+          const result = await refreshSession().catch(() => ({ ok: false } as AuthResult))
+          if (result.ok && result.userId && result.email && mounted.current) {
+            setState(s => ({ ...s, user: { id: result.userId!, email: result.email! } }))
+          }
+          await runBootstrap()
+        } catch (e: any) {
+          console.warn("[useAuth] foreground refresh error:", e?.message)
+        }
+      }
+    })
+    return () => subscription.remove()
   }, [runBootstrap])
 
   const login = useCallback(async (email: string, password: string): Promise<AuthResult> => {
