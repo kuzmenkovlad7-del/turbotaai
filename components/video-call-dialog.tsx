@@ -518,8 +518,8 @@ export default function VideoCallDialog({
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
   const ttsObjectUrlRef = useRef<string | null>(null)
 
-  const MIN_UTTERANCE_MS = 450
-  const hangoverMs = 1800
+  const MIN_UTTERANCE_MS = 200
+  const hangoverMs = 2800
   const maxUtteranceMs = 20000
 
   const startListeningInFlightRef = useRef(false)
@@ -573,6 +573,13 @@ export default function VideoCallDialog({
     voiceUntilTs: 0,
     utteranceStartTs: 0,
   })
+
+  const sttDebugRef = useRef({ state: "idle", uttMs: 0, rms: 0, thr: 0, rejectReason: "", lastLen: 0 })
+  const [sttDebugTick, setSttDebugTick] = useState(0)
+  const sttDebugEnabled = useMemo(() => {
+    if (typeof window === "undefined") return false
+    return new URLSearchParams(window.location.search).get("sttDebug") === "1"
+  }, [])
 
   const isMobile = useMemo(() => {
     if (typeof navigator === "undefined") return false
@@ -908,13 +915,26 @@ export default function VideoCallDialog({
           const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
           st.voice = false
           st.utteranceStartTs = 0
-          if (voiceMs >= MIN_UTTERANCE_MS) void flushAndSendStt("vad_end")
+          if (voiceMs >= MIN_UTTERANCE_MS) {
+            void flushAndSendStt("vad_end")
+          } else if (voiceMs > 0 && sttDebugEnabled) {
+            sttDebugRef.current.rejectReason = `too_short:${voiceMs}ms`
+          }
         }
       }
 
       if (st.voice && st.utteranceStartTs && now - st.utteranceStartTs > maxUtteranceMs) {
         st.utteranceStartTs = now
         void flushAndSendStt("max_utt")
+      }
+
+      if (sttDebugEnabled && now % 250 < 17) {
+        const d = sttDebugRef.current
+        d.state = st.voice ? "voice" : "silence"
+        d.uttMs = st.voice && st.utteranceStartTs ? now - st.utteranceStartTs : 0
+        d.rms = Math.round(rms * 10000) / 10000
+        d.thr = Math.round(thr * 10000) / 10000
+        setSttDebugTick(t => t + 1)
       }
     }
 
@@ -1097,10 +1117,17 @@ export default function VideoCallDialog({
     if (!header || body.length === 0) return
 
     const roughSize = body.reduce((acc, b) => acc + (b?.size || 0), 0)
-    if (roughSize < 7000) return
+    const minBytes = isMobile ? 2600 : 2200
+    if (roughSize < minBytes) {
+      if (sttDebugEnabled) sttDebugRef.current.rejectReason = `too_small:${roughSize}b`
+      return
+    }
 
     const blob = new Blob([header, ...body], { type: header.type || body[0]?.type || "audio/webm" })
-    if (blob.size < 6000) return
+    if (blob.size < minBytes) {
+      if (sttDebugEnabled) sttDebugRef.current.rejectReason = `blob_small:${blob.size}b`
+      return
+    }
 
     try {
       isSttBusyRef.current = true
@@ -1138,6 +1165,7 @@ export default function VideoCallDialog({
 
       const _sttMs = Math.round(performance.now() - _sttStart)
       const fullText = (data.text || "").toString().trim()
+      if (sttDebugEnabled) { sttDebugRef.current.lastLen = fullText.length; sttDebugRef.current.rejectReason = "" }
       if (fullText) console.log(`[perf] STT: ${_sttMs}ms — "${fullText.slice(0, 40)}"`)
       if (!fullText) {
         setActivityStatus("listening")
@@ -1152,14 +1180,17 @@ export default function VideoCallDialog({
       delta = sanitizeUserText(delta)
 
       if (!delta) {
+        if (sttDebugEnabled) sttDebugRef.current.rejectReason = "empty_after_sanitize"
         setActivityStatus("listening")
         return
       }
       if (isMostlyGarbage(delta)) {
+        if (sttDebugEnabled) sttDebugRef.current.rejectReason = "garbage"
         setActivityStatus("listening")
         return
       }
       if (shouldDedupUser(delta)) {
+        if (sttDebugEnabled) sttDebugRef.current.rejectReason = "dedup"
         setActivityStatus("listening")
         return
       }
@@ -1866,7 +1897,13 @@ if (res.status === 402) {
 
   return (
     <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-3 sm:p-6" style={{ minHeight: "100dvh" }}>
-      <div className="bg-white rounded-3xl shadow-xl w-[calc(100vw-1.5rem)] max-w-[540px] flex flex-col h-[min(600px,calc(100dvh-2rem))] overflow-hidden md:w-[calc(100vw-4rem)] md:max-w-4xl md:h-[min(720px,calc(100dvh-3rem))]">
+      <div className="bg-white rounded-3xl shadow-xl w-[calc(100vw-1.5rem)] max-w-[540px] flex flex-col h-[min(600px,calc(100dvh-2rem))] overflow-hidden md:w-[calc(100vw-4rem)] md:max-w-4xl md:h-[min(720px,calc(100dvh-3rem))] relative">
+        {sttDebugEnabled && (
+          <div style={{ position: "absolute", top: 4, right: 4, zIndex: 9999, background: "rgba(0,0,0,0.8)", color: "#0f0", fontSize: 10, fontFamily: "monospace", padding: "4px 6px", borderRadius: 4, pointerEvents: "none", lineHeight: 1.4 }}>
+            {sttDebugRef.current.state} | utt:{sttDebugRef.current.uttMs}ms | rms:{sttDebugRef.current.rms} thr:{sttDebugRef.current.thr}<br/>
+            last:{sttDebugRef.current.lastLen}ch {sttDebugRef.current.rejectReason && <>| rej:{sttDebugRef.current.rejectReason}</>}
+          </div>
+        )}
         <div className="p-3 sm:p-4 border-b flex items-center justify-between rounded-t-xl relative bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 text-white">
           <div className="flex flex-col flex-1 min-w-0 pr-2">
             <h3 className="font-semibold text-base sm:text-lg truncate flex items-center gap-2">

@@ -9,9 +9,11 @@ import {
 
 export const runtime = "nodejs"
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+let _openai: OpenAI | null = null
+function getOpenAI(): OpenAI {
+  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  return _openai
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,7 +34,7 @@ export async function POST(req: NextRequest) {
     const gender = normalizeGender(body.gender)
     const voice = selectOpenAIVoice(langCode, gender)
 
-    const response = await openai.audio.speech.create({
+    const response = await getOpenAI().audio.speech.create({
       model: OPENAI_TTS_MODEL,
       voice,
       input: text,

@@ -317,7 +317,7 @@ export default function VoiceCallDialog({
   const pendingSttTimerRef = useRef<number | null>(null)
   const pendingSttStartIdxRef = useRef<number | null>(null)
 
-  const MIN_UTTERANCE_MS = 280
+  const MIN_UTTERANCE_MS = 200
   const isSttBusyRef = useRef(false)
 
   const lastUserSentNormRef = useRef("")
@@ -341,9 +341,9 @@ export default function VoiceCallDialog({
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const debugParams = useMemo(() => {
-    if (typeof window === "undefined") return { debug: false }
+    if (typeof window === "undefined") return { debug: false, sttDebug: false }
     const qs = new URLSearchParams(window.location.search)
-    return { debug: qs.get("debugAudio") === "1" }
+    return { debug: qs.get("debugAudio") === "1", sttDebug: qs.get("sttDebug") === "1" }
   }, [])
 
   const isMobile = useMemo(() => {
@@ -432,6 +432,10 @@ export default function VoiceCallDialog({
     utteranceStartTs: 0,
     voiceOnCount: 0,
   })
+
+  // sttDebug overlay state (ref to avoid re-renders on every frame)
+  const sttDebugRef = useRef({ state: "idle", uttMs: 0, rms: 0, thr: 0, rejectReason: "", lastLen: 0 })
+  const [sttDebugTick, setSttDebugTick] = useState(0)
 
   function stopRaf() {
     if (rafRef.current) {
@@ -567,10 +571,16 @@ export default function VoiceCallDialog({
 
     const roughSize = body.reduce((acc, b) => acc + (b?.size || 0), 0)
     const minBytes = isMobile ? 2600 : 2200
-    if (roughSize < minBytes) return
+    if (roughSize < minBytes) {
+      if (debugParams.sttDebug) sttDebugRef.current.rejectReason = `too_small:${roughSize}b`
+      return
+    }
 
     const blob = new Blob([header, ...body], { type: header.type || body[0]?.type || "audio/webm" })
-    if (blob.size < minBytes) return
+    if (blob.size < minBytes) {
+      if (debugParams.sttDebug) sttDebugRef.current.rejectReason = `blob_small:${blob.size}b`
+      return
+    }
 
     try {
       isSttBusyRef.current = true
@@ -605,15 +615,16 @@ export default function VoiceCallDialog({
       utterStartIdxRef.current = keepHeader ? 1 : 0
 
       const fullText = (data.text || "").toString().trim()
+      if (debugParams.sttDebug) { sttDebugRef.current.lastLen = fullText.length; sttDebugRef.current.rejectReason = "" }
       if (!fullText) return
 
       let delta = fullText
       delta = stripLeadingEchoOfPrev(delta, lastUserSentNormRef.current, lastUserSentTsRef.current)
       delta = sanitizeUserText(delta)
 
-      if (!delta) return
-      if (isMostlyGarbage(delta)) return
-      if (shouldDedupUser(delta)) return
+      if (!delta) { if (debugParams.sttDebug) sttDebugRef.current.rejectReason = "empty_after_sanitize"; return }
+      if (isMostlyGarbage(delta)) { if (debugParams.sttDebug) sttDebugRef.current.rejectReason = "garbage"; return }
+      if (shouldDedupUser(delta)) { if (debugParams.sttDebug) sttDebugRef.current.rejectReason = "dedup"; return }
 
       lastUserSentNormRef.current = normalizeUtterance(delta)
       lastUserSentTsRef.current = Date.now()
@@ -716,7 +727,7 @@ export default function VoiceCallDialog({
       const voiceNow = rms > thr
 
       if (!st.voice) {
-        st.voiceOnCount = voiceNow ? Math.min(onFramesNeeded + 2, st.voiceOnCount + 1) : 0
+        st.voiceOnCount = voiceNow ? Math.min(onFramesNeeded + 2, st.voiceOnCount + 1) : Math.max(0, st.voiceOnCount - 2)
         if (st.voiceOnCount >= onFramesNeeded) {
           st.voiceOnCount = 0
           st.voice = true
@@ -731,7 +742,11 @@ export default function VoiceCallDialog({
           const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
           st.voice = false
           st.utteranceStartTs = 0
-          if (voiceMs >= MIN_UTTERANCE_MS) void flushAndSendStt("vad_end", utterStartIdxRef.current)
+          if (voiceMs >= MIN_UTTERANCE_MS) {
+            void flushAndSendStt("vad_end", utterStartIdxRef.current)
+          } else if (voiceMs > 0 && debugParams.sttDebug) {
+            sttDebugRef.current.rejectReason = `too_short:${voiceMs}ms`
+          }
         }
 
         if (st.voice && st.utteranceStartTs && now - st.utteranceStartTs > maxUtteranceMs) {
@@ -739,6 +754,16 @@ export default function VoiceCallDialog({
           void flushAndSendStt("max_utt", utterStartIdxRef.current)
           utterStartIdxRef.current = Math.max(1, audioChunksRef.current.length - 1)
         }
+      }
+
+      // sttDebug overlay update (~4 Hz to avoid perf overhead)
+      if (debugParams.sttDebug && now % 250 < 17) {
+        const d = sttDebugRef.current
+        d.state = st.voice ? "voice" : "silence"
+        d.uttMs = st.voice && st.utteranceStartTs ? now - st.utteranceStartTs : 0
+        d.rms = Math.round(rms * 10000) / 10000
+        d.thr = Math.round(thr * 10000) / 10000
+        setSttDebugTick(t => t + 1)
       }
 
       rafRef.current = requestAnimationFrame(tick)
@@ -1245,6 +1270,12 @@ if (res.status === 402) {
     >
       <DialogContent className="border-none bg-transparent p-0 w-[calc(100vw-1.5rem)] max-w-[520px] sm:w-full sm:max-w-xl">
         <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/10">
+          {debugParams.sttDebug && (
+            <div style={{ position: "absolute", top: 4, right: 4, zIndex: 9999, background: "rgba(0,0,0,0.8)", color: "#0f0", fontSize: 10, fontFamily: "monospace", padding: "4px 6px", borderRadius: 4, pointerEvents: "none", lineHeight: 1.4 }}>
+              {sttDebugRef.current.state} | utt:{sttDebugRef.current.uttMs}ms | rms:{sttDebugRef.current.rms} thr:{sttDebugRef.current.thr}<br/>
+              last:{sttDebugRef.current.lastLen}ch {sttDebugRef.current.rejectReason && <>| rej:{sttDebugRef.current.rejectReason}</>}
+            </div>
+          )}
           <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
             <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
