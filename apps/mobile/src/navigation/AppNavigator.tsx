@@ -1,11 +1,26 @@
 import React from "react"
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native"
-import { NavigationContainer } from "@react-navigation/native"
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, StatusBar } from "react-native"
+import { NavigationContainer, DefaultTheme } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
+
+/** Force light theme — never inherit device dark mode */
+const LightTheme = {
+  ...DefaultTheme,
+  dark: false,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: colors.primary,
+    background: colors.background,
+    card: colors.surface,
+    text: colors.text,
+    border: colors.border,
+    notification: colors.primary,
+  },
+}
 
 import LoginScreen from "@/screens/LoginScreen"
 import RegisterScreen from "@/screens/RegisterScreen"
@@ -133,7 +148,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={LightTheme}>
       {!user ? (
         <AuthStack.Navigator screenOptions={{ headerShown: false }}>
           <AuthStack.Screen name="Login">

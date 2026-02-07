@@ -1,6 +1,7 @@
 import React, { useRef, useState, useCallback } from "react"
 import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native"
-import { WebView } from "react-native-webview"
+import { WebView, type WebViewMessageEvent } from "react-native-webview"
+import { useNavigation } from "@react-navigation/native"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { getAuthToken, getDeviceHash } from "@/services/storage"
@@ -8,23 +9,28 @@ import { API_BASE_URL } from "@/constants/config"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 /**
- * Video Assistant screen.
+ * Video Assistant — dedicated embedded WebView.
  *
- * Opens the web video-call dialog inside an authenticated WebView.
- * The WebView receives the auth token and device hash via injected JS
- * so the user session is preserved — no re-login needed.
+ * Loads /app/video (embedded route with no site chrome: no header,
+ * no footer, no menu, no CTA). The WebView receives auth token and
+ * device hash via injected JS so the user session is preserved.
  *
- * This approach provides full web feature parity (avatar selection,
- * STT/TTS, animated video avatars) while keeping the native navigation.
+ * Query params:
+ *   embedded=1  — signals the web layout to strip all chrome
+ *   theme=light — force light theme
+ *   hideChrome=1 — explicit flag for hiding header/footer
+ *   mobile=1   — mark as mobile client
+ *   lang=XX    — locale
  */
 export default function VideoAssistantScreen() {
   const { user } = useAuth()
   const { t, locale } = useT()
+  const navigation = useNavigation()
   const webViewRef = useRef<WebView>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
-  const uri = `${API_BASE_URL}/?mode=video&lang=${locale}&mobile=1`
+  const uri = `${API_BASE_URL}/app/video?embedded=1&theme=light&hideChrome=1&mobile=1&lang=${locale}`
 
   const getInjectedJS = useCallback(async () => {
     const token = await getAuthToken()
@@ -32,16 +38,13 @@ export default function VideoAssistantScreen() {
     return `
       (function() {
         try {
-          // Set auth cookie for API requests from the WebView
           document.cookie = 'ta_device_hash=${deviceHash || ""}; path=/; SameSite=Lax';
-          // Store token for fetch interceptor
           window.__MOBILE_AUTH_TOKEN = '${token || ""}';
           window.__MOBILE_DEVICE_HASH = '${deviceHash || ""}';
           window.__MOBILE_LANG = '${locale}';
           window.__IS_MOBILE_WEBVIEW = true;
 
-          // Patch fetch to include auth headers
-          const origFetch = window.fetch;
+          var origFetch = window.fetch;
           window.fetch = function(input, init) {
             init = init || {};
             init.headers = init.headers || {};
@@ -77,6 +80,15 @@ export default function VideoAssistantScreen() {
 
   const handleLoad = () => {
     setLoading(false)
+  }
+
+  const handleMessage = (event: WebViewMessageEvent) => {
+    try {
+      const msg = JSON.parse(event.nativeEvent.data)
+      if (msg.type === "close") {
+        navigation.goBack()
+      }
+    } catch {}
   }
 
   if (error) {
@@ -119,6 +131,7 @@ export default function VideoAssistantScreen() {
         onLoad={handleLoad}
         onError={handleError}
         onHttpError={handleError}
+        onMessage={handleMessage}
         javaScriptEnabled
         domStorageEnabled
         mediaPlaybackRequiresUserAction={false}
@@ -126,27 +139,30 @@ export default function VideoAssistantScreen() {
         mediaCapturePermissionGrantType="grant"
         startInLoadingState={false}
         style={loading ? styles.hidden : styles.webview}
+        overScrollMode="never"
+        bounces={false}
+        scrollEnabled={false}
       />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1, backgroundColor: "#ffffff" },
   webview: { flex: 1 },
   hidden: { flex: 1, opacity: 0 },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.background,
+    backgroundColor: "#ffffff",
     padding: spacing.xxl,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.background,
+    backgroundColor: "#ffffff",
     zIndex: 10,
   },
   loadingText: {
