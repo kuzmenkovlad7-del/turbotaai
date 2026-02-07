@@ -49,7 +49,7 @@ export default function ConversationDetailScreen({ route }: Props) {
     )
   }
 
-  if (error && messages.length === 0) {
+  if (error) {
     return (
       <ScreenWrapper>
         <View style={styles.errorWrap}>

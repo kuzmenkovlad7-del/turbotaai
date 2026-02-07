@@ -12,7 +12,8 @@
     "build:ios": "eas build --platform ios --profile production",
     "build:android": "eas build --platform android --profile production",
     "submit:ios": "eas submit --platform ios",
-    "submit:android": "eas submit --platform android"
+    "submit:android": "eas submit --platform android",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^7.0.0",
@@ -39,6 +40,7 @@
   "devDependencies": {
     "@babel/core": "^7.26.0",
     "@types/react": "~18.3.0",
+    "patch-package": "^8.0.1",
     "typescript": "~5.6.0"
   },
   "private": true
