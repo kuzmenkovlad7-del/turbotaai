@@ -5,7 +5,7 @@ import { useNavigation } from "@react-navigation/native"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { getAuthToken, getDeviceHash } from "@/services/storage"
-import { API_BASE_URL } from "@/constants/config"
+import { API_BASE_URL, DEBUG_ENABLED } from "@/constants/config"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 /**
@@ -29,6 +29,7 @@ export default function VideoAssistantScreen() {
   const webViewRef = useRef<WebView>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [lastMsg, setLastMsg] = useState<string>("")
 
   const uri = `${API_BASE_URL}/app/video?embedded=1&theme=light&hideChrome=1&mobile=1&lang=${locale}`
 
@@ -112,7 +113,9 @@ export default function VideoAssistantScreen() {
 
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
-      const msg = JSON.parse(event.nativeEvent.data)
+      const raw = event.nativeEvent.data
+      if (DEBUG_ENABLED) setLastMsg(raw.slice(0, 120))
+      const msg = JSON.parse(raw)
       if (msg.type === "close") {
         navigation.goBack()
       } else if (msg.type === "paywall") {
@@ -174,6 +177,13 @@ export default function VideoAssistantScreen() {
         bounces={false}
         scrollEnabled={false}
       />
+      {DEBUG_ENABLED && (
+        <View style={styles.debugOverlay} pointerEvents="none">
+          <Text style={styles.debugText}>URL: {uri}</Text>
+          <Text style={styles.debugText}>Token: {injectedJS ? `${injectedJS.length}ch` : "none"}</Text>
+          {lastMsg ? <Text style={styles.debugText}>Msg: {lastMsg}</Text> : null}
+        </View>
+      )}
     </View>
   )
 }
@@ -215,4 +225,17 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
   },
   retryText: { color: "#fff", fontSize: fontSize.md, fontWeight: "600" },
+  debugOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    padding: 6,
+  },
+  debugText: {
+    color: "#0f0",
+    fontSize: 10,
+    fontFamily: "monospace",
+  },
 })

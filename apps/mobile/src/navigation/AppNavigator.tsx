@@ -1,11 +1,12 @@
 import React from "react"
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, StatusBar } from "react-native"
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, ScrollView } from "react-native"
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
+import { ENV_OK, ENV_ISSUES } from "@/constants/config"
 
 /** Force light theme — never inherit device dark mode */
 const LightTheme = {
@@ -121,6 +122,33 @@ function MainTabs() {
 export default function AppNavigator() {
   const { ready, user, login, register, loading, error, bootstrapFailed, retryBootstrap } = useAuth()
   const { t } = useT()
+
+  // Missing environment variables — show clear error instead of crashing silently
+  if (!ENV_OK) {
+    return (
+      <View style={styles.splash}>
+        <Text style={styles.splashLogo}>TurbotaAI</Text>
+        <ScrollView style={styles.configErrorScroll} contentContainerStyle={styles.configErrorContent}>
+          <Text style={styles.configTitle}>Configuration Error</Text>
+          <Text style={styles.configDesc}>
+            Required environment variables are missing. Copy .env.example to .env and fill in the values.
+          </Text>
+          {ENV_ISSUES.map((issue) => (
+            <View key={issue.name} style={styles.configRow}>
+              <Text style={styles.configSeverity}>
+                {issue.severity === "error" ? "MISSING" : "WARN"}
+              </Text>
+              <Text style={styles.configVar}>{issue.name}</Text>
+            </View>
+          ))}
+          <Text style={styles.configHint}>
+            File: apps/mobile/.env{"\n"}
+            Then restart: npx expo start --clear
+          </Text>
+        </ScrollView>
+      </View>
+    )
+  }
 
   // Splash / loading state
   if (!ready) {
@@ -262,5 +290,52 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: fontSize.md,
     fontWeight: "600",
+  },
+  configErrorScroll: {
+    marginTop: spacing.xxl,
+    maxHeight: 400,
+    width: "100%",
+  },
+  configErrorContent: {
+    paddingHorizontal: spacing.xxl,
+    alignItems: "center",
+  },
+  configTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: "700",
+    color: colors.error,
+    marginBottom: spacing.sm,
+  },
+  configDesc: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginBottom: spacing.lg,
+    lineHeight: 20,
+  },
+  configRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: spacing.xs,
+    width: "100%",
+  },
+  configSeverity: {
+    fontSize: fontSize.xs,
+    fontWeight: "700",
+    color: colors.error,
+    width: 60,
+  },
+  configVar: {
+    fontSize: fontSize.sm,
+    fontWeight: "600",
+    color: colors.text,
+    fontFamily: "monospace",
+  },
+  configHint: {
+    marginTop: spacing.lg,
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
   },
 })
