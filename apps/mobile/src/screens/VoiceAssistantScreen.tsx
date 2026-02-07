@@ -87,6 +87,9 @@ export default function VoiceAssistantScreen() {
       const msg = JSON.parse(event.nativeEvent.data)
       if (msg.type === "close") {
         navigation.goBack()
+      } else if (msg.type === "paywall") {
+        navigation.goBack()
+        ;(navigation as any).navigate("MainTabs", { screen: "AccountTab" })
       }
     } catch {}
   }

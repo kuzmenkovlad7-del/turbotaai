@@ -93,6 +93,10 @@ export function useAuth() {
         await ensureDeviceHash()
         const refreshResult = await refreshSession().catch(() => ({ ok: false } as AuthResult))
         console.log("[useAuth] session refresh:", refreshResult.ok ? "restored" : "no session")
+        // Pre-set user from refresh result so if bootstrap fails we still know who's logged in
+        if (refreshResult.ok && refreshResult.userId && refreshResult.email && mounted.current) {
+          setState(s => ({ ...s, user: { id: refreshResult.userId!, email: refreshResult.email! } }))
+        }
         await runBootstrap()
       } catch (e: any) {
         console.warn("[useAuth] init error:", e?.message)

@@ -317,7 +317,7 @@ export default function VoiceCallDialog({
   const pendingSttTimerRef = useRef<number | null>(null)
   const pendingSttStartIdxRef = useRef<number | null>(null)
 
-  const MIN_UTTERANCE_MS = 520
+  const MIN_UTTERANCE_MS = 280
   const isSttBusyRef = useRef(false)
 
   const lastUserSentNormRef = useRef("")
@@ -691,7 +691,7 @@ export default function VoiceCallDialog({
     const data = new Uint8Array(analyser.fftSize)
 
     const baseThr = isMobile ? 0.014 : 0.01
-    const hangoverMs = 2000
+    const hangoverMs = 3000
     const maxUtteranceMs = 25000
     const onFramesNeeded = isMobile ? 4 : 3
     const thrMult = isMobile ? 5.0 : 4.6
@@ -940,7 +940,11 @@ export default function VoiceCallDialog({
         }),
       })
 if (res.status === 402) {
-  window.location.href = "/pricing"
+  if (window.__IS_MOBILE_WEBVIEW && window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: "paywall" }))
+  } else {
+    window.location.href = "/pricing"
+  }
   return
 }
 

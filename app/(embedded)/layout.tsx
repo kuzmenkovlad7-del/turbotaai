@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { Suspense } from "react"
 import { AuthProvider } from "@/lib/auth/auth-context"
 import { LanguageProvider } from "@/lib/i18n/language-context"
+import "../globals.css"
 
 /**
  * Embedded layout — used by /app/voice and /app/video routes.

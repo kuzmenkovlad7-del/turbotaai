@@ -6,14 +6,20 @@ import { supabaseAdmin } from "@/lib/supabase/admin"
 const DEVICE_COOKIE = "ta_device_hash"
 
 export async function GET() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anon) {
+    return NextResponse.json({ conversations: [], error: "Missing env" }, { status: 500 })
+  }
+
   const cookieStore = cookies()
   const res = new NextResponse(null, { status: 200 })
 
   const deviceHash = cookieStore.get(DEVICE_COOKIE)?.value || null
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anon,
     {
       cookies: {
         get(name: string) {

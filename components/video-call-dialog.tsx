@@ -1587,7 +1587,11 @@ export default function VideoCallDialog({
         }),
       })
 if (res.status === 402) {
-  window.location.href = "/pricing"
+  if (window.__IS_MOBILE_WEBVIEW && window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: "paywall" }))
+  } else {
+    window.location.href = "/pricing"
+  }
   return
 }
 
@@ -1922,7 +1926,7 @@ if (res.status === 402) {
                     <button
                       key={character.id}
                       type="button"
-                      onClick={() => { setIsVideoReady(false); setSelectedCharacter(character) }}
+                      onClick={() => { setIsVideoReady(false); setMessages([]); setSelectedCharacter(character) }}
                       className={`relative bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border-2 ${
                         selectedCharacter.id === character.id
                           ? "border-primary-600"
