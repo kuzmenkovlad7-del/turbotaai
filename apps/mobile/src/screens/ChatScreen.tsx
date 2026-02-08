@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import * as api from "@/services/api"
-import { generateUUID } from "@/services/storage"
+import { generateUUID, getDeviceHash } from "@/services/storage"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 type Message = {
@@ -33,7 +33,9 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false)
   const flatListRef = useRef<FlatList>(null)
   const conversationIdRef = useRef<string | null>(null)
+  const sessionIdRef = useRef<string>(generateUUID())
   const sendingRef = useRef(false)
+  const isNearBottomRef = useRef(true)
 
   const sendMessage = useCallback(async () => {
     const text = input.trim()
@@ -47,7 +49,18 @@ export default function ChatScreen() {
     setInput("")
 
     try {
-      const data = await api.sendMessage(text, locale, user?.email)
+      const deviceId = await getDeviceHash() || ""
+      const data = await api.sendMessage({
+        query: text,
+        language: locale,
+        mode: "chat",
+        userId: user?.id || null,
+        sessionId: sessionIdRef.current,
+        deviceId,
+        clientMessageId: generateUUID(),
+        timestamp: new Date().toISOString(),
+        email: user?.email,
+      })
       const reply = api.extractReplyText(data)
       const isError = data?.ok === false
 
@@ -61,6 +74,7 @@ export default function ChatScreen() {
 
       // Save to history (fire-and-forget, don't block UI)
       if (!isError) {
+        const isFirstMessage = !conversationIdRef.current
         const convId = conversationIdRef.current || generateUUID()
         conversationIdRef.current = convId
         api
@@ -70,7 +84,7 @@ export default function ChatScreen() {
               { role: "user", content: text },
               { role: "assistant", content: reply },
             ],
-            title: messages.length === 0 ? text.slice(0, 64) : undefined,
+            title: isFirstMessage ? text.slice(0, 64) : undefined,
           })
           .catch(() => {})
       }
@@ -87,7 +101,7 @@ export default function ChatScreen() {
       sendingRef.current = false
       setSending(false)
     }
-  }, [input, user, messages.length, t, locale])
+  }, [input, user, t, locale])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => (
@@ -121,7 +135,17 @@ export default function ChatScreen() {
           renderItem={renderMessage}
           keyExtractor={(m) => m.id}
           contentContainerStyle={[styles.list, messages.length === 0 && styles.listEmpty]}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          onContentSizeChange={() => {
+            if (isNearBottomRef.current) {
+              flatListRef.current?.scrollToEnd({ animated: true })
+            }
+          }}
+          onScroll={({ nativeEvent }) => {
+            const { contentOffset, layoutMeasurement, contentSize } = nativeEvent
+            isNearBottomRef.current =
+              contentOffset.y + layoutMeasurement.height >= contentSize.height - 80
+          }}
+          scrollEventThrottle={100}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyIcon}>{"\uD83D\uDCAC"}</Text>

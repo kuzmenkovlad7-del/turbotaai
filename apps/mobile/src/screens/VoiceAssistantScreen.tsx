@@ -4,7 +4,7 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview"
 import { useNavigation } from "@react-navigation/native"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
-import { getAuthToken, getDeviceHash } from "@/services/storage"
+import { getAuthToken, getDeviceHash, generateUUID } from "@/services/storage"
 import { API_BASE_URL, DEBUG_ENABLED } from "@/constants/config"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
@@ -30,18 +30,22 @@ export default function VoiceAssistantScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [lastMsg, setLastMsg] = useState<string>("")
+  const sessionIdRef = useRef<string>(generateUUID())
 
   const uri = `${API_BASE_URL}/app/voice?embedded=1&theme=light&hideChrome=1&mobile=1&lang=${locale}`
 
   const getInjectedJS = useCallback(async () => {
     const token = await getAuthToken()
     const deviceHash = await getDeviceHash()
+    const userId = user?.id || ""
     return `
       (function() {
         try {
           document.cookie = 'ta_device_hash=${deviceHash || ""}; path=/; SameSite=Lax';
           window.__MOBILE_AUTH_TOKEN = '${token || ""}';
           window.__MOBILE_DEVICE_HASH = '${deviceHash || ""}';
+          window.__MOBILE_USER_ID = '${userId}';
+          window.__MOBILE_SESSION_ID = '${sessionIdRef.current}';
           window.__MOBILE_LANG = '${locale}';
           window.__IS_MOBILE_WEBVIEW = true;
 
@@ -66,7 +70,7 @@ export default function VoiceAssistantScreen() {
       })();
       true;
     `
-  }, [locale])
+  }, [locale, user?.id])
 
   const [injectedJS, setInjectedJS] = useState<string | null>(null)
 
@@ -176,6 +180,9 @@ export default function VoiceAssistantScreen() {
         overScrollMode="never"
         bounces={false}
         scrollEnabled={false}
+        textZoom={100}
+        setSupportMultipleWindows={false}
+        nestedScrollEnabled={false}
       />
       {DEBUG_ENABLED && (
         <View style={styles.debugOverlay} pointerEvents="none">

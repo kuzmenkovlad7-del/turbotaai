@@ -152,15 +152,50 @@ export type AgentResponse = {
   error?: string
 }
 
-export async function sendMessage(
-  query: string,
-  language: string,
-  email?: string,
-): Promise<AgentResponse> {
+/** Payload contract for every webhook message */
+export type MessagePayload = {
+  query: string
+  language: string
+  mode: "chat" | "voice" | "video"
+  userId: string | null
+  sessionId: string
+  deviceId: string
+  clientMessageId: string
+  timestamp: string
+  email?: string
+}
+
+/** Dev-safe validator: logs missing/invalid fields, never crashes */
+function validatePayload(payload: MessagePayload): void {
+  const issues: string[] = []
+  if (!payload.query) issues.push("query is empty")
+  if (!payload.sessionId) issues.push("sessionId is empty")
+  if (!payload.deviceId) issues.push("deviceId is empty")
+  if (!payload.clientMessageId) issues.push("clientMessageId is empty")
+  if (!payload.timestamp) issues.push("timestamp is empty")
+  if (!payload.language) issues.push("language is empty")
+  if (payload.userId === "") issues.push("userId is empty string (should be null)")
+  if (issues.length > 0) {
+    console.warn("[PayloadValidator] Issues before send:", issues.join(", "), payload)
+  }
+}
+
+export async function sendMessage(payload: MessagePayload): Promise<AgentResponse> {
+  validatePayload(payload)
   const res = await apiFetch("/api/turbotaai-agent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, language, mode: "chat", email }),
+    body: JSON.stringify({
+      query: payload.query,
+      language: payload.language,
+      mode: payload.mode,
+      userId: payload.userId,
+      sessionId: payload.sessionId,
+      deviceId: payload.deviceId,
+      clientMessageId: payload.clientMessageId,
+      timestamp: payload.timestamp,
+      email: payload.email || undefined,
+    }),
   })
   const data = await safeJson(res, { ok: false, error: `HTTP ${res.status}` } as AgentResponse)
 
