@@ -1,5 +1,6 @@
 import React from "react"
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, ScrollView } from "react-native"
+import { StatusBar } from "expo-status-bar"
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
@@ -177,6 +178,7 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer theme={LightTheme}>
+      <StatusBar style="dark" />
       {!user ? (
         <AuthStack.Navigator screenOptions={{ headerShown: false }}>
           <AuthStack.Screen name="Login">

@@ -1,248 +1,279 @@
-import React, { useRef, useState, useCallback, useEffect } from "react"
-import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity, BackHandler, AppState, type AppStateStatus } from "react-native"
-import { WebView, type WebViewMessageEvent } from "react-native-webview"
-import { useNavigation } from "@react-navigation/native"
+import React, { useState, useRef, useCallback } from "react"
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
-import { getAuthToken, getDeviceHash, generateUUID } from "@/services/storage"
-import { API_BASE_URL, DEBUG_ENABLED } from "@/constants/config"
+import * as api from "@/services/api"
+import { generateUUID, getDeviceHash } from "@/services/storage"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
+type Message = {
+  id: string
+  role: "user" | "assistant"
+  text: string
+  isError?: boolean
+}
+
 /**
- * Video Assistant — dedicated embedded WebView.
+ * Video Assistant — native app-side screen.
  *
- * Loads /app/video (embedded route with no site chrome: no header,
- * no footer, no menu, no CTA). The WebView receives auth token and
- * device hash via injected JS so the user session is preserved.
- *
- * Query params:
- *   embedded=1  — signals the web layout to strip all chrome
- *   theme=light — force light theme
- *   hideChrome=1 — explicit flag for hiding header/footer
- *   mobile=1   — mark as mobile client
- *   lang=XX    — locale
+ * Uses the same sendMessage API as ChatScreen with mode="video".
+ * No WebView, no embedded web page — purely native RN UI.
  */
 export default function VideoAssistantScreen() {
+  const insets = useSafeAreaInsets()
   const { user } = useAuth()
   const { t, locale } = useT()
-  const navigation = useNavigation()
-  const webViewRef = useRef<WebView>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-  const [lastMsg, setLastMsg] = useState<string>("")
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState("")
+  const [sending, setSending] = useState(false)
+  const flatListRef = useRef<FlatList>(null)
+  const conversationIdRef = useRef<string | null>(null)
   const sessionIdRef = useRef<string>(generateUUID())
+  const sendingRef = useRef(false)
+  const isNearBottomRef = useRef(true)
 
-  const uri = `${API_BASE_URL}/app/video?embedded=1&theme=light&hideChrome=1&mobile=1&lang=${locale}`
+  const sendMessage = useCallback(async () => {
+    const text = input.trim()
+    if (!text || sendingRef.current) return
 
-  const getInjectedJS = useCallback(async () => {
-    const token = await getAuthToken()
-    const deviceHash = await getDeviceHash()
-    const userId = user?.id || ""
-    return `
-      (function() {
-        try {
-          document.cookie = 'ta_device_hash=${deviceHash || ""}; path=/; SameSite=Lax';
-          window.__MOBILE_AUTH_TOKEN = '${token || ""}';
-          window.__MOBILE_DEVICE_HASH = '${deviceHash || ""}';
-          window.__MOBILE_USER_ID = '${userId}';
-          window.__MOBILE_SESSION_ID = '${sessionIdRef.current}';
-          window.__MOBILE_LANG = '${locale}';
-          window.__IS_MOBILE_WEBVIEW = true;
+    sendingRef.current = true
+    setSending(true)
 
-          var origFetch = window.fetch;
-          window.fetch = function(input, init) {
-            init = init || {};
-            init.headers = init.headers || {};
-            if (typeof init.headers.set === 'function') {
-              if (window.__MOBILE_AUTH_TOKEN) init.headers.set('Authorization', 'Bearer ' + window.__MOBILE_AUTH_TOKEN);
-              if (window.__MOBILE_DEVICE_HASH) init.headers.set('X-Device-Hash', window.__MOBILE_DEVICE_HASH);
-              init.headers.set('X-Client', 'mobile-webview');
-            } else {
-              if (window.__MOBILE_AUTH_TOKEN) init.headers['Authorization'] = 'Bearer ' + window.__MOBILE_AUTH_TOKEN;
-              if (window.__MOBILE_DEVICE_HASH) init.headers['X-Device-Hash'] = window.__MOBILE_DEVICE_HASH;
-              init.headers['X-Client'] = 'mobile-webview';
-            }
-            return origFetch.call(this, input, init);
-          };
-        } catch(e) {
-          console.warn('[VideoAssistant] inject error:', e);
-        }
-      })();
-      true;
-    `
-  }, [locale, user?.id])
+    const userMsg: Message = { id: `u-${Date.now()}`, role: "user", text }
+    setMessages((prev) => [...prev, userMsg])
+    setInput("")
 
-  const [injectedJS, setInjectedJS] = useState<string | null>(null)
-
-  React.useEffect(() => {
-    getInjectedJS().then(setInjectedJS)
-  }, [getInjectedJS])
-
-  // Android hardware back button → go back instead of default behavior
-  useEffect(() => {
-    const handler = BackHandler.addEventListener("hardwareBackPress", () => {
-      navigation.goBack()
-      return true
-    })
-    return () => handler.remove()
-  }, [navigation])
-
-  // Re-inject fresh auth token when app returns from background
-  useEffect(() => {
-    const appStateRef = { current: AppState.currentState }
-    const sub = AppState.addEventListener("change", async (next: AppStateStatus) => {
-      const prev = appStateRef.current
-      appStateRef.current = next
-      if (prev.match(/inactive|background/) && next === "active" && webViewRef.current) {
-        const freshToken = await getAuthToken()
-        if (freshToken) {
-          webViewRef.current.injectJavaScript(`
-            window.__MOBILE_AUTH_TOKEN = '${freshToken}';
-            true;
-          `)
-        }
-      }
-    })
-    return () => sub.remove()
-  }, [])
-
-  const handleError = () => {
-    setError(true)
-    setLoading(false)
-  }
-
-  const handleLoad = () => {
-    setLoading(false)
-  }
-
-  const handleMessage = (event: WebViewMessageEvent) => {
     try {
-      const raw = event.nativeEvent.data
-      if (DEBUG_ENABLED) setLastMsg(raw.slice(0, 120))
-      const msg = JSON.parse(raw)
-      if (msg.type === "close") {
-        navigation.goBack()
-      } else if (msg.type === "paywall") {
-        navigation.goBack()
-        ;(navigation as any).navigate("MainTabs", { screen: "AccountTab" })
+      const deviceId = (await getDeviceHash()) || ""
+      const data = await api.sendMessage({
+        query: text,
+        language: locale,
+        mode: "video",
+        userId: user?.id || null,
+        sessionId: sessionIdRef.current,
+        deviceId,
+        clientMessageId: generateUUID(),
+        timestamp: new Date().toISOString(),
+        email: user?.email,
+      })
+      const reply = api.extractReplyText(data)
+      const isError = data?.ok === false
+
+      const aiMsg: Message = {
+        id: `a-${Date.now()}`,
+        role: "assistant",
+        text: reply,
+        isError,
       }
-    } catch {}
-  }
+      setMessages((prev) => [...prev, aiMsg])
 
-  if (error) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorIcon}>{"\uD83C\uDFA5"}</Text>
-        <Text style={styles.errorText}>{t.assistantError}</Text>
-        <TouchableOpacity
-          style={styles.retryBtn}
-          onPress={() => { setError(false); setLoading(true); webViewRef.current?.reload() }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.retryText}>{t.retry}</Text>
-        </TouchableOpacity>
-      </View>
-    )
-  }
+      // Save to history (fire-and-forget)
+      if (!isError) {
+        const isFirstMessage = !conversationIdRef.current
+        const convId = conversationIdRef.current || generateUUID()
+        conversationIdRef.current = convId
+        api
+          .saveConversation({
+            conversationId: convId,
+            messages: [
+              { role: "user", content: text },
+              { role: "assistant", content: reply },
+            ],
+            mode: "video",
+            title: isFirstMessage ? text.slice(0, 64) : undefined,
+          })
+          .catch(() => {})
+      }
+    } catch (e: any) {
+      const errText =
+        e?.message === "Network request failed"
+          ? t.chatNoInternet
+          : t.chatError
+      setMessages((prev) => [
+        ...prev,
+        { id: `e-${Date.now()}`, role: "assistant", text: errText, isError: true },
+      ])
+    } finally {
+      sendingRef.current = false
+      setSending(false)
+    }
+  }, [input, user, t, locale])
 
-  if (!injectedJS) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>{t.assistantLoading}</Text>
+  const renderMessage = useCallback(
+    ({ item }: { item: Message }) => (
+      <View
+        style={[
+          styles.bubble,
+          item.role === "user" ? styles.userBubble : styles.aiBubble,
+          item.isError && styles.errorBubble,
+        ]}
+      >
+        {item.role === "assistant" && !item.isError && (
+          <Text style={styles.aiLabel}>TurbotaAI</Text>
+        )}
+        {item.isError && <Text style={styles.errorLabel}>Error</Text>}
+        <Text style={item.role === "user" ? styles.userText : styles.aiText}>{item.text}</Text>
       </View>
-    )
-  }
+    ),
+    [],
+  )
 
   return (
-    <View style={styles.root}>
-      {loading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>{t.assistantLoading}</Text>
+    <View style={[styles.root, { paddingBottom: insets.bottom }]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(m) => m.id}
+          contentContainerStyle={[styles.list, messages.length === 0 && styles.listEmpty]}
+          onContentSizeChange={() => {
+            if (isNearBottomRef.current) {
+              flatListRef.current?.scrollToEnd({ animated: true })
+            }
+          }}
+          onScroll={({ nativeEvent }) => {
+            const { contentOffset, layoutMeasurement, contentSize } = nativeEvent
+            isNearBottomRef.current =
+              contentOffset.y + layoutMeasurement.height >= contentSize.height - 80
+          }}
+          scrollEventThrottle={100}
+          ListEmptyComponent={
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyIcon}>{"\uD83C\uDFA5"}</Text>
+              <Text style={styles.emptyTitle}>{t.videoStart}</Text>
+              <Text style={styles.emptySubtitle}>{t.videoSubtitle}</Text>
+            </View>
+          }
+        />
+
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            value={input}
+            onChangeText={setInput}
+            placeholder={t.videoPlaceholder}
+            placeholderTextColor={colors.textMuted}
+            multiline
+            maxLength={2000}
+            editable={!sending}
+            returnKeyType="send"
+            blurOnSubmit={false}
+            onSubmitEditing={sendMessage}
+          />
+          <TouchableOpacity
+            style={[styles.sendBtn, (!input.trim() || sending) && styles.sendBtnDisabled]}
+            onPress={sendMessage}
+            disabled={!input.trim() || sending}
+            activeOpacity={0.7}
+          >
+            {sending ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.sendIcon}>{"\u2191"}</Text>
+            )}
+          </TouchableOpacity>
         </View>
-      )}
-      <WebView
-        ref={webViewRef}
-        source={{ uri }}
-        injectedJavaScript={injectedJS}
-        onLoad={handleLoad}
-        onError={handleError}
-        onHttpError={handleError}
-        onMessage={handleMessage}
-        javaScriptEnabled
-        domStorageEnabled
-        mediaPlaybackRequiresUserAction={false}
-        allowsInlineMediaPlayback
-        mediaCapturePermissionGrantType="grant"
-        startInLoadingState={false}
-        style={loading ? styles.hidden : styles.webview}
-        overScrollMode="never"
-        bounces={false}
-        scrollEnabled={false}
-        textZoom={100}
-        setSupportMultipleWindows={false}
-        nestedScrollEnabled={false}
-      />
-      {DEBUG_ENABLED && (
-        <View style={styles.debugOverlay} pointerEvents="none">
-          <Text style={styles.debugText}>URL: {uri}</Text>
-          <Text style={styles.debugText}>Token: {injectedJS ? `${injectedJS.length}ch` : "none"}</Text>
-          {lastMsg ? <Text style={styles.debugText}>Msg: {lastMsg}</Text> : null}
-        </View>
-      )}
+      </KeyboardAvoidingView>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#ffffff" },
-  webview: { flex: 1 },
-  hidden: { flex: 1, opacity: 0 },
-  center: {
+  root: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
+  list: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  listEmpty: { flexGrow: 1 },
+  bubble: {
+    maxWidth: "82%",
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  userBubble: { alignSelf: "flex-end", backgroundColor: colors.userBubble },
+  aiBubble: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.aiBubble,
+    borderWidth: 1,
+    borderColor: colors.aiBubbleBorder,
+  },
+  errorBubble: {
+    backgroundColor: colors.errorLight,
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
+  aiLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: "600",
+    color: colors.success,
+    marginBottom: 4,
+  },
+  errorLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: "600",
+    color: colors.error,
+    marginBottom: 4,
+  },
+  userText: { color: "#fff", fontSize: fontSize.md, lineHeight: 22 },
+  aiText: { color: colors.text, fontSize: fontSize.md, lineHeight: 22 },
+  emptyWrap: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#ffffff",
     padding: spacing.xxl,
   },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    zIndex: 10,
-  },
-  loadingText: {
-    marginTop: spacing.md,
-    fontSize: fontSize.md,
-    color: colors.textSecondary,
-  },
-  errorIcon: { fontSize: 48, marginBottom: spacing.lg },
-  errorText: {
-    fontSize: fontSize.md,
-    color: colors.error,
+  emptyIcon: { fontSize: 48, marginBottom: spacing.md },
+  emptyTitle: { fontSize: fontSize.lg, fontWeight: "600", color: colors.textSecondary },
+  emptySubtitle: {
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
     textAlign: "center",
-    marginBottom: spacing.lg,
+    marginTop: spacing.xs,
+    maxWidth: 260,
   },
-  retryBtn: {
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xxl,
-    borderRadius: radii.md,
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
   },
-  retryText: { color: "#fff", fontSize: fontSize.md, fontWeight: "600" },
-  debugOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    padding: 6,
+  input: {
+    flex: 1,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.xl,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: Platform.OS === "ios" ? 12 : 8,
+    fontSize: fontSize.md,
+    color: colors.text,
+    maxHeight: 100,
   },
-  debugText: {
-    color: "#0f0",
-    fontSize: 10,
-    fontFamily: "monospace",
+  sendBtn: {
+    backgroundColor: "#0ea5e9",
+    width: 40,
+    height: 40,
+    borderRadius: radii.full,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: spacing.sm,
   },
+  sendBtnDisabled: { opacity: 0.4 },
+  sendIcon: { color: "#fff", fontSize: 20, fontWeight: "700" },
 })

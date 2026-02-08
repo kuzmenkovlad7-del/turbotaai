@@ -77,6 +77,12 @@ const en = {
   assistantCharacterLeo: "Leo",
   assistantCharacterMia: "Mia",
   assistantCharacterAlex: "Alex",
+  voiceStart: "Voice conversation",
+  voiceSubtitle: "Speak or type your question — your AI companion will answer.",
+  voicePlaceholder: "Type or speak your message...",
+  videoStart: "Video consultation",
+  videoSubtitle: "Ask your question — your AI companion will guide you.",
+  videoPlaceholder: "Type your question...",
 
   // History
   historyTitle: "History",
@@ -200,6 +206,12 @@ const uk: typeof en = {
   assistantCharacterLeo: "Лео",
   assistantCharacterMia: "Мія",
   assistantCharacterAlex: "Алекс",
+  voiceStart: "Голосова розмова",
+  voiceSubtitle: "Говоріть або пишіть запитання — AI-помічник відповість.",
+  voicePlaceholder: "Введіть або скажіть повідомлення...",
+  videoStart: "Відеоконсультація",
+  videoSubtitle: "Задайте запитання — AI-помічник допоможе.",
+  videoPlaceholder: "Введіть запитання...",
 
   historyTitle: "Історія",
   historyEmpty: "Розмов ще немає",
@@ -319,6 +331,12 @@ const ru: typeof en = {
   assistantCharacterLeo: "Лео",
   assistantCharacterMia: "Мия",
   assistantCharacterAlex: "Алекс",
+  voiceStart: "Голосовой разговор",
+  voiceSubtitle: "Говорите или пишите вопрос — AI-помощник ответит.",
+  voicePlaceholder: "Введите или скажите сообщение...",
+  videoStart: "Видеоконсультация",
+  videoSubtitle: "Задайте вопрос — AI-помощник поможет.",
+  videoPlaceholder: "Введите вопрос...",
 
   historyTitle: "История",
   historyEmpty: "Разговоров ещё нет",
