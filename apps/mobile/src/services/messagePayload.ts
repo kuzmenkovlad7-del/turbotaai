@@ -22,13 +22,16 @@ export async function buildMessagePayload(params: {
   const deviceId = await ensureDeviceHash()
   const clientMessageId = generateUUID()
   const timestamp = new Date().toISOString()
-  const user = params.userId ?? `guest:${params.sessionId}`
+
+  // Normalize: empty-string userId → null so n8n memory key falls to sessionId
+  const userId = params.userId || null
+  const user = userId ?? `guest:${params.sessionId}`
 
   return {
     query: params.query,
     language: params.language,
     mode: params.mode,
-    userId: params.userId,
+    userId,
     sessionId: params.sessionId,
     deviceId,
     clientMessageId,
