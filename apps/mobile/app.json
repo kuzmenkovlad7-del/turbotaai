@@ -19,6 +19,7 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "TurbotaAI needs microphone access for voice conversations with your AI companion.",
+        "NSSpeechRecognitionUsageDescription": "TurbotaAI uses speech recognition to convert your voice to text for the AI assistant.",
         "NSCameraUsageDescription": "TurbotaAI needs camera access for video consultations with your AI companion."
       }
     },
@@ -34,7 +35,8 @@
     "plugins": [
       "expo-secure-store",
       "expo-font",
-      "expo-localization"
+      "expo-localization",
+      "expo-speech-recognition"
     ]
   }
 }
