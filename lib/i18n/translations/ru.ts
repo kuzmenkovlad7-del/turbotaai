@@ -81,6 +81,7 @@ export const ru = {
   "Assistant is speaking. Please wait a moment.": "Ассистент говорит. Пожалуйста, подождите немного.",
   "Assistant is speaking...": "Ассистент говорит...",
   "Assistant is thinking...": "Ассистент обдумывает ответ...",
+  "AI is thinking...": "AI обдумывает...",
   "Assistant online": "Ассистент онлайн",
   "attempt to gain unauthorized access to our systems or other users' data;": "пытаться получить несанкционированный доступ к нашим системам или данным других пользователей;",
   "Average reply": "Среднее время ответа",

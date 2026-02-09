@@ -81,6 +81,7 @@ export const en = {
   "Assistant is speaking. Please wait a moment.": "Assistant is speaking. Please wait a moment.",
   "Assistant is speaking...": "Assistant is speaking...",
   "Assistant is thinking...": "Assistant is thinking...",
+  "AI is thinking...": "AI is thinking...",
   "Assistant online": "Assistant online",
   "attempt to gain unauthorized access to our systems or other users' data;": "attempt to gain unauthorized access to our systems or other users' data;",
   "Average reply": "Average reply time",

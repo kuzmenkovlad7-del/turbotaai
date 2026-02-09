@@ -290,6 +290,7 @@ export default function VoiceCallDialog({
   const [isListening, setIsListening] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
+  const [isThinking, setIsThinking] = useState(false)
   const [messages, setMessages] = useState<VoiceMessage[]>([])
   const [networkError, setNetworkError] = useState<string | null>(null)
 
@@ -634,6 +635,10 @@ export default function VoiceCallDialog({
         console.log("[STT]", { reason, startIdx, fullText, delta })
       }
 
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[Voice perf] Final transcript captured:", delta.slice(0, 40))
+      }
+
       const userMsg: VoiceMessage = {
         id: `${Date.now()}-user`,
         role: "user",
@@ -673,7 +678,7 @@ export default function VoiceCallDialog({
       pendingSttStartIdxRef.current = null
       pendingSttTimerRef.current = null
       void maybeSendStt(r, si)
-    }, 220)
+    }, 120)
   }
 
   function pickMime(): string | null {
@@ -814,7 +819,11 @@ export default function VoiceCallDialog({
       // только актуальный запрос может сбрасывать состояние
       if (seq !== ttsSeqRef.current) return
 
-      ttsCooldownUntilRef.current = Date.now() + 900
+      ttsCooldownUntilRef.current = Date.now() + 700
+
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[Voice perf] TTS playback finished, resuming mic after 150ms cooldown")
+      }
 
       setIsAiSpeaking(false)
       isAiSpeakingRef.current = false
@@ -825,18 +834,19 @@ export default function VoiceCallDialog({
           try {
             rec.resume()
           } catch {}
-        }, 260)
+        }, 150)
       }
     }
 
     const begin = () => {
-      // стопаем прошлое аудио сразу, чтобы не было наложения/“двоения”
+      // стопаем прошлое аудио сразу, чтобы не было наложения/"двоения"
       stopTtsAudio()
 
+      setIsThinking(false)
       setIsAiSpeaking(true)
       isAiSpeakingRef.current = true
 
-      ttsCooldownUntilRef.current = Date.now() + 900
+      ttsCooldownUntilRef.current = Date.now() + 700
 
       const hdr = audioChunksRef.current?.[0]
       audioChunksRef.current = hdr ? [hdr] : []
@@ -924,6 +934,9 @@ export default function VoiceCallDialog({
         }
 
         try {
+          if (process.env.NODE_ENV === "development") {
+            console.debug("[Voice perf] TTS audio playback starting")
+          }
           await a.play()
         } catch {
           finishOnce()
@@ -946,6 +959,9 @@ export default function VoiceCallDialog({
     }
 
     isAgentBusyRef.current = true
+    setIsThinking(true)
+
+    const _t0 = performance.now()
 
     const resolvedWebhook =
       (webhookUrl && webhookUrl.trim()) ||
@@ -953,6 +969,9 @@ export default function VoiceCallDialog({
       FALLBACK_CHAT_API
 
     try {
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[Voice perf] Agent request sent at", new Date().toISOString())
+      }
       const res = await fetch(resolvedWebhook, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -986,13 +1005,17 @@ if (res.status === 402) {
         data = JSON.parse(raw)
       } catch {}
 
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[Voice perf] Agent response received in", Math.round(performance.now() - _t0), "ms")
+      }
+
       let answer = extractAnswer(data)
       if (!answer) answer = t("I'm sorry, I couldn't process your message. Please try again.")
 
       answer = sanitizeAssistantText(answer)
 
-      if (!answer) return
-      if (shouldDedupAssistant(answer)) return
+      if (!answer) { setIsThinking(false); return }
+      if (shouldDedupAssistant(answer)) { setIsThinking(false); return }
 
       lastAssistantSentNormRef.current = normalizeUtterance(answer)
       lastAssistantSentTsRef.current = Date.now()
@@ -1008,6 +1031,7 @@ if (res.status === 402) {
       speakText(answer, voiceLangCode)
     } catch (e: any) {
       console.error(e)
+      setIsThinking(false)
       setNetworkError(t("Connection error. Please try again."))
       if (onError && e instanceof Error) onError(e)
     } finally {
@@ -1187,6 +1211,7 @@ if (res.status === 402) {
     setIsListening(false)
     setIsMicMuted(false)
     setIsAiSpeaking(false)
+    setIsThinking(false)
     setNetworkError(null)
 
     pendingSttReasonRef.current = null
@@ -1256,11 +1281,13 @@ if (res.status === 402) {
     ? t("In crisis situations, please contact local emergency services immediately.")
     : isAiSpeaking
       ? t("Assistant is speaking...")
-      : isMicMuted
-        ? t("Paused. Turn on microphone to continue.")
-        : isListening
-          ? t("Listening… you can speak.")
-          : t("Waiting... you can start speaking at any moment.")
+      : isThinking
+        ? t("AI is thinking...")
+        : isMicMuted
+          ? t("Paused. Turn on microphone to continue.")
+          : isListening
+            ? t("Listening… you can speak.")
+            : t("Waiting... you can start speaking at any moment.")
 
   const __props: any = (typeof arguments !== "undefined" ? (arguments as any)[0] : undefined)
   const controlledOpen: boolean | undefined = typeof __props?.open === "boolean" ? __props.open : undefined

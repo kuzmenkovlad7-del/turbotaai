@@ -81,6 +81,7 @@ export const uk = {
   "Assistant is speaking. Please wait a moment.": "Асистент говорить. Будь ласка, зачекайте трохи.",
   "Assistant is speaking...": "Асистент говорить...",
   "Assistant is thinking...": "Асистент обмірковує відповідь...",
+  "AI is thinking...": "AI обмірковує...",
   "Assistant online": "Асистент онлайн",
   "attempt to gain unauthorized access to our systems or other users' data;": "намагатися отримати несанкціонований доступ до наших систем або до даних інших користувачів;",
   "Average reply": "Середній час відповіді",
