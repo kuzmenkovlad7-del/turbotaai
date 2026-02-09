@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     const query = String(body?.query ?? body?.message ?? body?.text ?? "").trim()
     const language = String(body?.language ?? "uk")
-    const userEmail = String(body?.user ?? body?.email ?? "guest@example.com")
+    const mode = String(body?.mode ?? "chat")
 
     if (!query) {
       return NextResponse.json({ ok: false, error: "Empty query" }, { status: 400, headers: { "cache-control": "no-store" } })
@@ -53,11 +53,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Normalize identity fields — never send "guest@example.com"
+    const rawUserId = body?.userId
+    const userId = (typeof rawUserId === "string" && rawUserId.trim()) ? rawUserId.trim() : null
+    const clientMessageId = String(body?.clientMessageId || crypto.randomUUID())
+    const sessionId = String(body?.sessionId || `sess_${clientMessageId}`)
+    const deviceId = String(body?.deviceId ?? "")
+    const timestamp = String(body?.timestamp || new Date().toISOString())
+    const email = body?.email || undefined
+    const user = userId ?? `guest:${sessionId}`
+
     const payload = {
-      ...body,
       query,
       language,
-      user: userEmail,
+      mode,
+      userId,
+      sessionId,
+      deviceId,
+      clientMessageId,
+      timestamp,
+      user,
+      ...(email ? { email } : {}),
     }
 
     const r = await fetch(WEBHOOK_URL, {
