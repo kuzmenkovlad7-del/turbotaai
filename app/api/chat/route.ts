@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAccess } from "@/lib/access/access-control"
 import { getOrCreateConversationId, appendMessage } from "@/lib/history/history-store"
+import { resolveAuthUserId } from "@/lib/auth/resolve-user"
 
 const FALLBACK_WEBHOOK_URL = "https://vladkuzmenko.com/webhook/turbotaai-agent"
 
@@ -77,7 +78,16 @@ export async function POST(request: NextRequest) {
 
     // Normalize identity fields — never send "guest@example.com"
     const rawUserId = requestData?.userId
-    const userId = (typeof rawUserId === "string" && rawUserId.trim()) ? rawUserId.trim() : null
+    const bodyUserId = (typeof rawUserId === "string" && rawUserId.trim()) ? rawUserId.trim() : null
+
+    // Server auth reconciliation: resolve real userId from Supabase session cookies
+    const authUserId = await resolveAuthUserId(request)
+    const userId = authUserId || bodyUserId
+
+    if (authUserId && !bodyUserId) {
+      console.warn("[chat] Auth reconciliation: body.userId was null but server auth resolved:", authUserId)
+    }
+
     const clientMessageId = String(requestData?.clientMessageId || crypto.randomUUID())
     const sessionId = String(requestData?.sessionId || `sess_${clientMessageId}`)
     const deviceId = String(requestData?.deviceId ?? "")

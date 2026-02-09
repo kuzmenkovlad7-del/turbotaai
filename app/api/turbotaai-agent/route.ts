@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAccess } from "@/lib/access/access-control"
+import { resolveAuthUserId } from "@/lib/auth/resolve-user"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -55,7 +56,16 @@ export async function POST(request: NextRequest) {
 
     // Normalize identity fields — never send "guest@example.com"
     const rawUserId = body?.userId
-    const userId = (typeof rawUserId === "string" && rawUserId.trim()) ? rawUserId.trim() : null
+    const bodyUserId = (typeof rawUserId === "string" && rawUserId.trim()) ? rawUserId.trim() : null
+
+    // Server auth reconciliation: resolve real userId from Supabase session cookies
+    const authUserId = await resolveAuthUserId(request)
+    const userId = authUserId || bodyUserId
+
+    if (authUserId && !bodyUserId) {
+      console.warn("[turbotaai-agent] Auth reconciliation: body.userId was null but server auth resolved:", authUserId)
+    }
+
     const clientMessageId = String(body?.clientMessageId || crypto.randomUUID())
     const sessionId = String(body?.sessionId || `sess_${clientMessageId}`)
     const deviceId = String(body?.deviceId ?? "")
