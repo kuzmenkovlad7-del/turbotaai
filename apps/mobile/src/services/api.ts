@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "@/constants/config"
-import { getAuthToken, getDeviceHash } from "./storage"
+import { getAuthToken, getDeviceHash, generateUUID } from "./storage"
 
 /* ── Authenticated fetch wrapper ── */
 
@@ -180,7 +180,35 @@ function validatePayload(payload: MessagePayload): void {
   }
 }
 
-export async function sendMessage(payload: MessagePayload): Promise<AgentResponse> {
+/**
+ * Shared payload builder for chat/voice/video screens.
+ * Normalizes userId (empty string → null) and adds compatibility `user` field.
+ */
+export function buildMessagePayload(opts: {
+  query: string
+  language: string
+  mode: "chat" | "voice" | "video"
+  userId: string | null | undefined
+  sessionId: string
+  deviceId: string
+  email?: string
+}): MessagePayload & { user: string } {
+  const normalizedUserId = opts.userId && opts.userId.trim() ? opts.userId : null
+  return {
+    query: opts.query,
+    language: opts.language,
+    mode: opts.mode,
+    userId: normalizedUserId,
+    sessionId: opts.sessionId,
+    deviceId: opts.deviceId,
+    clientMessageId: generateUUID(),
+    timestamp: new Date().toISOString(),
+    email: opts.email,
+    user: normalizedUserId ?? `guest:${opts.sessionId}`,
+  }
+}
+
+export async function sendMessage(payload: MessagePayload & { user?: string }): Promise<AgentResponse> {
   validatePayload(payload)
   const res = await apiFetch("/api/turbotaai-agent", {
     method: "POST",
@@ -195,6 +223,7 @@ export async function sendMessage(payload: MessagePayload): Promise<AgentRespons
       clientMessageId: payload.clientMessageId,
       timestamp: payload.timestamp,
       email: payload.email || undefined,
+      user: payload.user || payload.userId || `guest:${payload.sessionId}`,
     }),
   })
   const data = await safeJson(res, { ok: false, error: `HTTP ${res.status}` } as AgentResponse)

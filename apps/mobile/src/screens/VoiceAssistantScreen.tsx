@@ -16,7 +16,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
 import * as api from "@/services/api"
-import { generateUUID, getDeviceHash } from "@/services/storage"
+import { generateUUID, getDeviceHash, getSessionId } from "@/services/storage"
 import { colors, darkColors, fontSize, spacing, radii } from "@/constants/theme"
 
 type Message = {
@@ -46,9 +46,14 @@ export default function VoiceAssistantScreen() {
   const [sending, setSending] = useState(false)
   const flatListRef = useRef<FlatList>(null)
   const conversationIdRef = useRef<string | null>(null)
-  const sessionIdRef = useRef<string>(generateUUID())
+  const sessionIdRef = useRef<string>("")
   const sendingRef = useRef(false)
   const isNearBottomRef = useRef(true)
+
+  // Load persistent sessionId on mount (no new ID on remount)
+  useEffect(() => {
+    getSessionId().then((id) => { sessionIdRef.current = id })
+  }, [])
 
   const {
     voiceState,
@@ -82,17 +87,17 @@ export default function VoiceAssistantScreen() {
 
       try {
         const deviceId = (await getDeviceHash()) || ""
-        const data = await api.sendMessage({
+        if (!sessionIdRef.current) sessionIdRef.current = await getSessionId()
+        const payload = api.buildMessagePayload({
           query: trimmed,
           language: locale,
           mode: "voice",
-          userId: user?.id || null,
+          userId: user?.id,
           sessionId: sessionIdRef.current,
           deviceId,
-          clientMessageId: generateUUID(),
-          timestamp: new Date().toISOString(),
           email: user?.email,
         })
+        const data = await api.sendMessage(payload)
         const reply = api.extractReplyText(data)
         const isError = data?.ok === false
 
