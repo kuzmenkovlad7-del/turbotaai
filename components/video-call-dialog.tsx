@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
+import { buildWebPayload } from "@/lib/payload"
 import {
   getLocaleForLanguage,
   getNativeSpeechParameters,
@@ -1578,10 +1579,13 @@ export default function VideoCallDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: trimmed,
-          language: langForBackend,
-          email: user?.email || "guest@example.com",
-          mode: "video",
+          ...buildWebPayload({
+            query: trimmed,
+            language: langForBackend,
+            mode: "video",
+            userId: user?.id,
+            email: user?.email,
+          }),
           characterId: selectedCharacter.id,
           gender: selectedCharacter.gender,
         }),
