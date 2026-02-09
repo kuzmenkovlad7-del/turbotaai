@@ -32,7 +32,7 @@ type Message = {
  */
 export default function VoiceAssistantScreen() {
   const insets = useSafeAreaInsets()
-  const { user } = useAuth()
+  const { user, refreshAccess } = useAuth()
   const { t, locale } = useT()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -77,6 +77,9 @@ export default function VoiceAssistantScreen() {
         isError,
       }
       setMessages((prev) => [...prev, aiMsg])
+
+      // Refresh access state so trial counter stays in sync (fire-and-forget)
+      refreshAccess().catch(() => {})
 
       // Save to history (fire-and-forget)
       if (!isError) {

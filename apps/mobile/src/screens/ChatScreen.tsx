@@ -26,7 +26,7 @@ type Message = {
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets()
-  const { user } = useAuth()
+  const { user, refreshAccess } = useAuth()
   const { t, locale } = useT()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -71,6 +71,9 @@ export default function ChatScreen() {
         isError,
       }
       setMessages((prev) => [...prev, aiMsg])
+
+      // Refresh access state so trial counter stays in sync (fire-and-forget)
+      refreshAccess().catch(() => {})
 
       // Save to history (fire-and-forget, don't block UI)
       if (!isError) {

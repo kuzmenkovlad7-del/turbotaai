@@ -1,16 +1,16 @@
 import React from "react"
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, ScrollView } from "react-native"
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, ScrollView, useColorScheme } from "react-native"
 import { StatusBar } from "expo-status-bar"
-import { NavigationContainer, DefaultTheme } from "@react-navigation/native"
+import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
-import { colors, fontSize, spacing, radii } from "@/constants/theme"
+import { colors, darkColors, fontSize, spacing, radii } from "@/constants/theme"
 import { ENV_OK, ENV_ISSUES } from "@/constants/config"
 
-/** Force light theme — never inherit device dark mode */
-const LightTheme = {
+/** Light nav theme */
+const LightNavTheme = {
   ...DefaultTheme,
   dark: false,
   colors: {
@@ -21,6 +21,21 @@ const LightTheme = {
     text: colors.text,
     border: colors.border,
     notification: colors.primary,
+  },
+}
+
+/** Dark nav theme */
+const DarkNavTheme = {
+  ...DarkTheme,
+  dark: true,
+  colors: {
+    ...DarkTheme.colors,
+    primary: darkColors.primary,
+    background: darkColors.background,
+    card: darkColors.surface,
+    text: darkColors.text,
+    border: darkColors.border,
+    notification: darkColors.primary,
   },
 }
 
@@ -61,39 +76,41 @@ const Tab = createBottomTabNavigator<TabParams>()
 
 /* ── Tab icons (simple text, no external icon lib needed) ── */
 
-function TabIcon({ label, focused }: { label: string; focused: boolean }) {
-  const icons: Record<string, string> = {
+function TabIcon({ label, focused, isDark }: { label: string; focused: boolean; isDark: boolean }) {
+  const c = isDark ? darkColors : colors
+  const iconMap: Record<string, string> = {
     Home: "\u2302",
     History: "\u2630",
     Account: "\u2699",
   }
   return (
-    <Text style={{ fontSize: 20, color: focused ? colors.primary : colors.textMuted }}>
-      {icons[label] || "\u25CB"}
+    <Text style={{ fontSize: 20, color: focused ? c.primary : c.textMuted }}>
+      {iconMap[label] || "\u25CB"}
     </Text>
   )
 }
 
 /* ── Main tab navigator ── */
 
-function MainTabs() {
+function MainTabs({ isDark }: { isDark: boolean }) {
   const { t } = useT()
+  const c = isDark ? darkColors : colors
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarActiveTintColor: c.primary,
+        tabBarInactiveTintColor: c.textMuted,
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
+          backgroundColor: c.surface,
+          borderTopColor: c.border,
           paddingBottom: 4,
           height: 56,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
         tabBarIcon: ({ focused }) => {
           const label = route.name.replace("Tab", "")
-          return <TabIcon label={label} focused={focused} />
+          return <TabIcon label={label} focused={focused} isDark={isDark} />
         },
       })}
     >
@@ -123,26 +140,30 @@ function MainTabs() {
 export default function AppNavigator() {
   const { ready, user, login, register, loading, error, bootstrapFailed, retryBootstrap } = useAuth()
   const { t } = useT()
+  const scheme = useColorScheme()
+  const isDark = scheme === "dark"
+  const c = isDark ? darkColors : colors
+  const navTheme = isDark ? DarkNavTheme : LightNavTheme
 
   // Missing environment variables — show clear error instead of crashing silently
   if (!ENV_OK) {
     return (
-      <View style={styles.splash}>
-        <Text style={styles.splashLogo}>TurbotaAI</Text>
+      <View style={[styles.splash, { backgroundColor: c.background }]}>
+        <Text style={[styles.splashLogo, { color: c.primary }]}>TurbotaAI</Text>
         <ScrollView style={styles.configErrorScroll} contentContainerStyle={styles.configErrorContent}>
-          <Text style={styles.configTitle}>Configuration Error</Text>
-          <Text style={styles.configDesc}>
+          <Text style={[styles.configTitle, { color: c.error }]}>Configuration Error</Text>
+          <Text style={[styles.configDesc, { color: c.textSecondary }]}>
             Required environment variables are missing. Copy .env.example to .env and fill in the values.
           </Text>
           {ENV_ISSUES.map((issue) => (
             <View key={issue.name} style={styles.configRow}>
-              <Text style={styles.configSeverity}>
+              <Text style={[styles.configSeverity, { color: c.error }]}>
                 {issue.severity === "error" ? "MISSING" : "WARN"}
               </Text>
-              <Text style={styles.configVar}>{issue.name}</Text>
+              <Text style={[styles.configVar, { color: c.text }]}>{issue.name}</Text>
             </View>
           ))}
-          <Text style={styles.configHint}>
+          <Text style={[styles.configHint, { color: c.textMuted }]}>
             File: apps/mobile/.env{"\n"}
             Then restart: npx expo start --clear
           </Text>
@@ -154,9 +175,9 @@ export default function AppNavigator() {
   // Splash / loading state
   if (!ready) {
     return (
-      <View style={styles.splash}>
-        <Text style={styles.splashLogo}>TurbotaAI</Text>
-        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
+      <View style={[styles.splash, { backgroundColor: c.background }]}>
+        <Text style={[styles.splashLogo, { color: c.primary }]}>TurbotaAI</Text>
+        <ActivityIndicator size="large" color={c.primary} style={{ marginTop: 24 }} />
       </View>
     )
   }
@@ -164,11 +185,11 @@ export default function AppNavigator() {
   // Bootstrap failed with no user — show error with retry
   if (bootstrapFailed && !user && error) {
     return (
-      <View style={styles.splash}>
-        <Text style={styles.splashLogo}>TurbotaAI</Text>
+      <View style={[styles.splash, { backgroundColor: c.background }]}>
+        <Text style={[styles.splashLogo, { color: c.primary }]}>TurbotaAI</Text>
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={retryBootstrap} activeOpacity={0.7}>
+          <Text style={[styles.errorText, { color: c.error }]}>{error}</Text>
+          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: c.primary }]} onPress={retryBootstrap} activeOpacity={0.7}>
             <Text style={styles.retryText}>{t.retry}</Text>
           </TouchableOpacity>
         </View>
@@ -177,8 +198,8 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer theme={LightTheme}>
-      <StatusBar style="dark" />
+    <NavigationContainer theme={navTheme}>
+      <StatusBar style="auto" />
       {!user ? (
         <AuthStack.Navigator screenOptions={{ headerShown: false }}>
           <AuthStack.Screen name="Login">
@@ -206,17 +227,18 @@ export default function AppNavigator() {
         <AppStack.Navigator>
           <AppStack.Screen
             name="MainTabs"
-            component={MainTabs}
             options={{ headerShown: false }}
-          />
+          >
+            {() => <MainTabs isDark={isDark} />}
+          </AppStack.Screen>
           <AppStack.Screen
             name="Chat"
             component={ChatScreen}
             options={{
               headerShown: true,
               title: t.homeChat,
-              headerTintColor: colors.primary,
-              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: c.primary,
+              headerStyle: { backgroundColor: c.surface },
               headerTitleStyle: { fontWeight: "600" },
             }}
           />
@@ -226,8 +248,8 @@ export default function AppNavigator() {
             options={{
               headerShown: true,
               title: t.homeVideo,
-              headerTintColor: colors.primary,
-              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: c.primary,
+              headerStyle: { backgroundColor: c.surface },
               headerTitleStyle: { fontWeight: "600" },
             }}
           />
@@ -237,8 +259,8 @@ export default function AppNavigator() {
             options={{
               headerShown: true,
               title: t.homeVoice,
-              headerTintColor: colors.primary,
-              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: c.primary,
+              headerStyle: { backgroundColor: c.surface },
               headerTitleStyle: { fontWeight: "600" },
             }}
           />
@@ -248,8 +270,8 @@ export default function AppNavigator() {
             options={({ route }) => ({
               headerShown: true,
               title: (route.params as any)?.title || "Conversation",
-              headerTintColor: colors.primary,
-              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: c.primary,
+              headerStyle: { backgroundColor: c.surface },
               headerTitleStyle: { fontWeight: "600" },
             })}
           />
@@ -264,12 +286,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.background,
   },
   splashLogo: {
     fontSize: fontSize.hero,
     fontWeight: "800",
-    color: colors.primary,
   },
   errorBox: {
     marginTop: spacing.xxl,
@@ -278,12 +298,10 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: fontSize.md,
-    color: colors.error,
     textAlign: "center",
     marginBottom: spacing.lg,
   },
   retryBtn: {
-    backgroundColor: colors.primary,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xxl,
     borderRadius: radii.md,
@@ -305,12 +323,10 @@ const styles = StyleSheet.create({
   configTitle: {
     fontSize: fontSize.lg,
     fontWeight: "700",
-    color: colors.error,
     marginBottom: spacing.sm,
   },
   configDesc: {
     fontSize: fontSize.sm,
-    color: colors.textSecondary,
     textAlign: "center",
     marginBottom: spacing.lg,
     lineHeight: 20,
@@ -324,19 +340,16 @@ const styles = StyleSheet.create({
   configSeverity: {
     fontSize: fontSize.xs,
     fontWeight: "700",
-    color: colors.error,
     width: 60,
   },
   configVar: {
     fontSize: fontSize.sm,
     fontWeight: "600",
-    color: colors.text,
     fontFamily: "monospace",
   },
   configHint: {
     marginTop: spacing.lg,
     fontSize: fontSize.xs,
-    color: colors.textMuted,
     textAlign: "center",
     lineHeight: 18,
   },

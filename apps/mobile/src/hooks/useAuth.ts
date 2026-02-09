@@ -35,6 +35,9 @@ const EMPTY_ACCESS: AccessInfo = {
   autoRenew: false,
 }
 
+/** Minimum ms between foreground refresh calls to avoid spam */
+const FOREGROUND_DEBOUNCE_MS = 5_000
+
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
     ready: false,
@@ -45,10 +48,31 @@ export function useAuth() {
     bootstrapFailed: false,
   })
   const mounted = useRef(true)
+  const lastRefreshTs = useRef(0)
 
   useEffect(() => {
     mounted.current = true
     return () => { mounted.current = false }
+  }, [])
+
+  /** Map backend bootstrap data to AccessInfo, with safe fallbacks */
+  const mapAccess = useCallback((data: BootstrapData): AccessInfo => {
+    const raw = data.access ?? "none"
+    // Guard: if backend says "trial" but trialLeft is 0 and there's no actual
+    // trial entitlement, treat as "none" to avoid false "trial" labels
+    const trialLeft = data.trial_questions_left ?? 0
+    const access: AccessInfo["access"] =
+      raw === "trial" && trialLeft <= 0 ? "none" : raw
+    return {
+      access,
+      hasAccess: data.hasAccess ?? false,
+      unlimited: data.unlimited ?? false,
+      trialLeft,
+      paidUntil: data.paid_until ?? null,
+      promoUntil: data.promo_until ?? null,
+      subscriptionStatus: data.subscription_status ?? null,
+      autoRenew: data.auto_renew ?? false,
+    }
   }, [])
 
   const runBootstrap = useCallback(async () => {
@@ -57,27 +81,19 @@ export function useAuth() {
       await ensureDeviceHash()
       const data = await bootstrap()
       if (!mounted.current) return
-      console.log("[useAuth] bootstrap ok, logged_in=", data.isLoggedIn)
+      console.log("[useAuth] bootstrap ok, logged_in=", data.isLoggedIn, "access=", data.access)
       const user = data.isLoggedIn && data.userId && data.email
         ? { id: data.userId, email: data.email }
         : null
-      const accessInfo: AccessInfo = {
-        access: data.access ?? "none",
-        hasAccess: data.hasAccess ?? false,
-        unlimited: data.unlimited ?? false,
-        trialLeft: data.trial_questions_left ?? 0,
-        paidUntil: data.paid_until ?? null,
-        promoUntil: data.promo_until ?? null,
-        subscriptionStatus: data.subscription_status ?? null,
-        autoRenew: data.auto_renew ?? false,
-      }
+      const accessInfo = mapAccess(data)
+      lastRefreshTs.current = Date.now()
       setState(s => ({ ...s, ready: true, user: user ?? s.user, accessInfo, error: null, bootstrapFailed: false }))
     } catch (e: any) {
       if (!mounted.current) return
       console.warn("[useAuth] bootstrap failed:", e?.message)
       setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true }))
     }
-  }, [])
+  }, [mapAccess])
 
   const retryBootstrap = useCallback(async () => {
     setState(s => ({ ...s, error: null, bootstrapFailed: false }))
@@ -108,13 +124,18 @@ export function useAuth() {
     })()
   }, [runBootstrap])
 
-  // Refresh session + access when app returns from background
+  // Refresh session + access when app returns from background (debounced)
   useEffect(() => {
     const appStateRef = { current: AppState.currentState }
     const subscription = AppState.addEventListener("change", async (next: AppStateStatus) => {
       const prev = appStateRef.current
       appStateRef.current = next
       if (prev.match(/inactive|background/) && next === "active" && mounted.current) {
+        // Debounce: skip if we refreshed recently
+        if (Date.now() - lastRefreshTs.current < FOREGROUND_DEBOUNCE_MS) {
+          console.log("[useAuth] foreground refresh skipped (debounce)")
+          return
+        }
         console.log("[useAuth] app foregrounded — refreshing session")
         try {
           const result = await refreshSession().catch(() => ({ ok: false } as AuthResult))
@@ -142,8 +163,6 @@ export function useAuth() {
       const result = await signIn(email, password)
       console.log("[useAuth] login result:", result.ok, result.error ?? "")
       if (result.ok) {
-        // Set user immediately from signIn data so navigator transitions
-        // even if the subsequent bootstrap call is slow or fails
         if (mounted.current && result.userId && result.email) {
           setState(s => ({ ...s, user: { id: result.userId!, email: result.email! } }))
         }
@@ -175,7 +194,6 @@ export function useAuth() {
       const result = await signUp(email, password)
       console.log("[useAuth] register result:", result.ok, result.error ?? "")
       if (result.ok && !result.error) {
-        // Set user immediately so navigator transitions without waiting for bootstrap
         if (mounted.current && result.userId && result.email) {
           setState(s => ({ ...s, user: { id: result.userId!, email: result.email! } }))
         }
