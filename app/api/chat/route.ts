@@ -62,11 +62,6 @@ export async function POST(request: NextRequest) {
     const userLanguage: string =
       typeof requestData.language === "string" ? requestData.language : "uk"
 
-    const userEmail: string =
-      typeof requestData.email === "string" && requestData.email.trim()
-        ? requestData.email
-        : "guest@example.com"
-
     if (!userMessage.trim()) {
       return NextResponse.json({ error: "Empty query" }, { status: 400 })
     }
@@ -80,10 +75,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Normalize identity fields — never send "guest@example.com"
+    const rawUserId = requestData?.userId
+    const userId = (typeof rawUserId === "string" && rawUserId.trim()) ? rawUserId.trim() : null
+    const clientMessageId = String(requestData?.clientMessageId || crypto.randomUUID())
+    const sessionId = String(requestData?.sessionId || `sess_${clientMessageId}`)
+    const deviceId = String(requestData?.deviceId ?? "")
+    const timestamp = String(requestData?.timestamp || new Date().toISOString())
+    const email = (typeof requestData?.email === "string" && requestData.email.trim())
+      ? requestData.email
+      : undefined
+    const user = userId ?? `guest:${sessionId}`
+
     const payload = {
       query: userMessage,
       language: userLanguage,
-      user: userEmail,
+      mode: String(requestData?.mode ?? "chat"),
+      userId,
+      sessionId,
+      deviceId,
+      clientMessageId,
+      timestamp,
+      user,
+      ...(email ? { email } : {}),
       requestType: "chat",
       source: "turbota-web-chat",
       channel: "web",
@@ -125,7 +139,7 @@ export async function POST(request: NextRequest) {
         deviceHash,
         mode: "chat",
         title,
-        userEmail,
+        userEmail: email || user,
       })
 
       if (convId) {
