@@ -61,6 +61,7 @@ const en = {
   homeAccountDesc: "Manage your profile and subscription",
 
   // Chat
+  newChat: "New Chat",
   chatStart: "Start a conversation",
   chatSubtitle: "Ask anything — your AI companion is here to help.",
   chatPlaceholder: "Type a message...",
@@ -191,6 +192,7 @@ const uk: typeof en = {
   homeAccount: "Акаунт",
   homeAccountDesc: "Керуйте профілем та підпискою",
 
+  newChat: "Новий чат",
   chatStart: "Почніть розмову",
   chatSubtitle: "Запитуйте що завгодно — ваш AI-помічник тут.",
   chatPlaceholder: "Введіть повідомлення...",
@@ -316,6 +318,7 @@ const ru: typeof en = {
   homeAccount: "Аккаунт",
   homeAccountDesc: "Управляйте профилем и подпиской",
 
+  newChat: "Новый чат",
   chatStart: "Начните разговор",
   chatSubtitle: "Спрашивайте что угодно — ваш AI-помощник здесь.",
   chatPlaceholder: "Введите сообщение...",

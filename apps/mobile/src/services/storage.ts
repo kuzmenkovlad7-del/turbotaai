@@ -41,6 +41,17 @@ export async function ensureDeviceHash(): Promise<string> {
   return hash
 }
 
+/* ── Session ID persistence (per mode) ── */
+
+export const getSessionId = (mode: string) =>
+  SecureStore.getItemAsync(STORAGE_KEYS.SESSION_PREFIX + mode)
+
+export const setSessionId = (mode: string, id: string) =>
+  SecureStore.setItemAsync(STORAGE_KEYS.SESSION_PREFIX + mode, id)
+
+export const clearSessionId = (mode: string) =>
+  SecureStore.deleteItemAsync(STORAGE_KEYS.SESSION_PREFIX + mode)
+
 /** Clear all stored credentials */
 export async function clearAll(): Promise<void> {
   await Promise.all([clearAuthToken(), clearRefreshToken()])

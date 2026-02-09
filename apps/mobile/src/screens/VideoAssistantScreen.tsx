@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react"
+import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react"
 import {
   View,
   Text,
@@ -10,11 +10,13 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native"
+import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import * as api from "@/services/api"
-import { generateUUID, getDeviceHash } from "@/services/storage"
+import { generateUUID, getSessionId, setSessionId } from "@/services/storage"
+import { buildMessagePayload } from "@/services/messagePayload"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 type Message = {
@@ -31,6 +33,7 @@ type Message = {
  * No WebView, no embedded web page — purely native RN UI.
  */
 export default function VideoAssistantScreen() {
+  const navigation = useNavigation()
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
   const { t, locale } = useT()
@@ -39,13 +42,48 @@ export default function VideoAssistantScreen() {
   const [sending, setSending] = useState(false)
   const flatListRef = useRef<FlatList>(null)
   const conversationIdRef = useRef<string | null>(null)
-  const sessionIdRef = useRef<string>(generateUUID())
+  const sessionIdRef = useRef<string>("")
   const sendingRef = useRef(false)
   const isNearBottomRef = useRef(true)
 
+  // Load or create persistent sessionId
+  useEffect(() => {
+    ;(async () => {
+      const stored = await getSessionId("video")
+      if (stored) {
+        sessionIdRef.current = stored
+      } else {
+        const newId = generateUUID()
+        sessionIdRef.current = newId
+        await setSessionId("video", newId)
+      }
+    })()
+  }, [])
+
+  // New Chat — reset session, messages, conversation
+  const resetSession = useCallback(async () => {
+    const newId = generateUUID()
+    sessionIdRef.current = newId
+    await setSessionId("video", newId)
+    conversationIdRef.current = null
+    setMessages([])
+    setInput("")
+  }, [])
+
+  // Add New Chat button to header
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={resetSession} style={styles.newChatBtn} activeOpacity={0.7}>
+          <Text style={styles.newChatText}>{t.newChat}</Text>
+        </TouchableOpacity>
+      ),
+    })
+  }, [navigation, resetSession, t])
+
   const sendMessage = useCallback(async () => {
     const text = input.trim()
-    if (!text || sendingRef.current) return
+    if (!text || sendingRef.current || !sessionIdRef.current) return
 
     sendingRef.current = true
     setSending(true)
@@ -55,18 +93,15 @@ export default function VideoAssistantScreen() {
     setInput("")
 
     try {
-      const deviceId = (await getDeviceHash()) || ""
-      const data = await api.sendMessage({
+      const payload = await buildMessagePayload({
         query: text,
         language: locale,
         mode: "video",
         userId: user?.id || null,
         sessionId: sessionIdRef.current,
-        deviceId,
-        clientMessageId: generateUUID(),
-        timestamp: new Date().toISOString(),
         email: user?.email,
       })
+      const data = await api.sendMessage(payload)
       const reply = api.extractReplyText(data)
       const isError = data?.ok === false
 
@@ -276,4 +311,6 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: { opacity: 0.4 },
   sendIcon: { color: "#fff", fontSize: 20, fontWeight: "700" },
+  newChatBtn: { marginRight: 12 },
+  newChatText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: "600" },
 })
