@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Phone, Brain, Mic, MicOff, Loader2, Sparkles } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
+import { buildWebPayload } from "@/lib/payload"
 
 interface VoiceCallDialogProps {
   isOpen: boolean
@@ -293,7 +294,7 @@ export default function VoiceCallDialog({
   const [networkError, setNetworkError] = useState<string | null>(null)
 
   const voiceGenderRef = useRef<"female" | "male">("female")
-  const effectiveEmail = userEmail || user?.email || "guest@example.com"
+  const effectiveEmail = userEmail || user?.email || undefined
 
   // фиксируем язык на момент старта звонка (STT/TTS/агент)
   const sessionVoiceLangRef = useRef<string>("uk-UA")
@@ -956,10 +957,13 @@ export default function VoiceCallDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: text,
-          language: agentLang,
-          email: effectiveEmail,
-          mode: "voice",
+          ...buildWebPayload({
+            query: text,
+            language: agentLang,
+            mode: "voice",
+            userId: user?.id,
+            email: effectiveEmail,
+          }),
           gender: voiceGenderRef.current,
           voiceLanguage: voiceLangCode,
         }),
