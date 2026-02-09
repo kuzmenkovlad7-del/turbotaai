@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
+import { buildWebPayload } from "@/lib/payload"
 
 type Props = {
   isOpen: boolean
@@ -159,12 +160,13 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
+        body: JSON.stringify(buildWebPayload({
           query: text,
           language: langCode,
-          email: user?.email ?? null,
           mode: "chat",
-        }),
+          userId: user?.id,
+          email: user?.email,
+        })),
       })
 if (res.status === 402) {
   window.location.href = "/pricing"
