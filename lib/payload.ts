@@ -42,6 +42,20 @@ function generateUUID(): string {
 }
 
 /**
+ * Normalize assistant gender to strict lowercase "male"/"female" or null.
+ * Never returns "unknown", empty string, or undefined.
+ */
+export function normalizeGender(
+  value: string | null | undefined,
+): "male" | "female" | null {
+  if (value == null) return null
+  const v = String(value).toLowerCase().trim()
+  if (v === "male" || v === "m" || v === "man") return "male"
+  if (v === "female" || v === "f" || v === "woman") return "female"
+  return null
+}
+
+/**
  * Build a complete message payload with full identity contract.
  *
  * @param opts.userId - Supabase user.id (string if logged in, undefined/null if guest)

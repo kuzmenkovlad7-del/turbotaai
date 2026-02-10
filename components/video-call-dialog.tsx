@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
-import { buildWebPayload } from "@/lib/payload"
+import { buildWebPayload, normalizeGender } from "@/lib/payload"
 import {
   getLocaleForLanguage,
   getNativeSpeechParameters,
@@ -1605,11 +1605,16 @@ export default function VideoCallDialog({
         throw new Error("VIDEO_ASSISTANT_WEBHOOK_URL is not configured")
       }
 
+      const genderResolved = normalizeGender(selectedCharacter.gender)
+
       if (process.env.NODE_ENV === "development") {
-        const g = selectedCharacter.gender
-        if (!g || (g !== "male" && g !== "female")) {
-          console.warn("[Video] gender is missing or invalid:", g)
+        if (genderResolved === null) {
+          console.warn("[Video] gender resolved to null — source:", selectedCharacter.gender, "avatar:", selectedCharacter.id)
         }
+        if (genderResolved !== null && genderResolved !== "male" && genderResolved !== "female") {
+          console.warn("[Video] gender is not male/female/null:", genderResolved)
+        }
+        console.debug("[Video diag] source=avatar:%s, raw=%s, final=%s", selectedCharacter.id, selectedCharacter.gender, genderResolved)
       }
 
       const _agentStart = performance.now()
@@ -1625,8 +1630,8 @@ export default function VideoCallDialog({
             email: user?.email,
           }),
           characterId: selectedCharacter.id,
-          gender: selectedCharacter.gender,
-          roleGender: selectedCharacter.gender,
+          gender: genderResolved,
+          roleGender: genderResolved,
         }),
       })
 if (res.status === 402) {
