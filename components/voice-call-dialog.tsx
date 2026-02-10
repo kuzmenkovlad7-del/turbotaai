@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Phone, Brain, Mic, MicOff, Loader2, Sparkles } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
-import { buildWebPayload } from "@/lib/payload"
+import { buildWebPayload, normalizeGender } from "@/lib/payload"
 
 interface VoiceCallDialogProps {
   isOpen: boolean
@@ -969,11 +969,16 @@ export default function VoiceCallDialog({
       FALLBACK_CHAT_API
 
     try {
+      const genderResolved = normalizeGender(voiceGenderRef.current)
+
       if (process.env.NODE_ENV === "development") {
-        const g = voiceGenderRef.current
-        if (!g || (g !== "male" && g !== "female")) {
-          console.warn("[Voice] gender is missing or invalid:", g)
+        if (genderResolved === null) {
+          console.warn("[Voice] gender resolved to null — source:", voiceGenderRef.current)
         }
+        if (genderResolved !== null && genderResolved !== "male" && genderResolved !== "female") {
+          console.warn("[Voice] gender is not male/female/null:", genderResolved)
+        }
+        console.debug("[Voice diag] source=voiceGenderRef, raw=%s, final=%s", voiceGenderRef.current, genderResolved)
         console.debug("[Voice perf] Agent request sent at", new Date().toISOString())
       }
       const res = await fetch(resolvedWebhook, {
@@ -987,8 +992,8 @@ export default function VoiceCallDialog({
             userId: user?.id,
             email: effectiveEmail,
           }),
-          gender: voiceGenderRef.current,
-          roleGender: voiceGenderRef.current,
+          gender: genderResolved,
+          roleGender: genderResolved,
           voiceLanguage: voiceLangCode,
         }),
       })
