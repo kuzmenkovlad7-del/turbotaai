@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { requireAccess } from "@/lib/access/access-control"
 import { getOrCreateConversationId, appendMessage } from "@/lib/history/history-store"
 import { resolveAuthUserId } from "@/lib/auth/resolve-user"
+import { normalizeGender } from "@/lib/payload"
 
 const FALLBACK_WEBHOOK_URL = "https://vladkuzmenko.com/webhook/turbotaai-agent"
 
@@ -97,10 +98,28 @@ export async function POST(request: NextRequest) {
       : undefined
     const user = userId ?? `guest:${sessionId}`
 
+    const mode = String(requestData?.mode ?? "chat")
+
+    // Gender normalization: resolve from any frontend field, never "unknown"
+    const genderNorm = normalizeGender(requestData?.gender ?? requestData?.roleGender ?? requestData?.assistantGender)
+    const characterId = (typeof requestData?.characterId === "string" && requestData.characterId.trim()) ? requestData.characterId.trim() : null
+    const voiceId = (typeof requestData?.voiceId === "string" && requestData.voiceId.trim()) ? requestData.voiceId.trim() : null
+    const voiceLanguage = (typeof requestData?.voiceLanguage === "string" && requestData.voiceLanguage.trim())
+      ? requestData.voiceLanguage.trim()
+      : (typeof requestData?.language === "string" && requestData.language.trim()) ? requestData.language.trim() : null
+
+    // Diagnostics (warn-only)
+    if (mode === "voice" || mode === "video") {
+      if (genderNorm === null) {
+        console.warn(`[chat] mode=${mode} but gender resolved to null. raw: gender=${requestData?.gender}, roleGender=${requestData?.roleGender}, assistantGender=${requestData?.assistantGender}`)
+      }
+      console.debug(`[chat] mode=${mode} gender=${genderNorm} characterId=${characterId} voiceId=${voiceId}`)
+    }
+
     const payload = {
       query: userMessage,
       language: userLanguage,
-      mode: String(requestData?.mode ?? "chat"),
+      mode,
       userId,
       sessionId,
       deviceId,
@@ -108,6 +127,12 @@ export async function POST(request: NextRequest) {
       timestamp,
       user,
       ...(email ? { email } : {}),
+      gender: genderNorm,
+      roleGender: genderNorm,
+      assistantGender: genderNorm,
+      characterId,
+      voiceId,
+      voiceLanguage,
       requestType: "chat",
       source: "turbota-web-chat",
       channel: "web",
