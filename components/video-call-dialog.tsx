@@ -43,10 +43,18 @@ interface AICharacter {
 /** Bump this when avatar videos are replaced to bust Vercel CDN cache */
 const AVATAR_VER = "v2"
 
+/** Map legacy saved avatar ids to canonical ids */
+const LEGACY_ID_MAP: Record<string, string> = {
+  "dr-alexander": "leo",
+  "dr-maria": "mia",
+  "dr-sophia": "alex",
+  "dr-alex": "alex",
+}
+
 const AI_CHARACTERS: AICharacter[] = [
   {
-    id: "dr-alexander",
-    name: "Leo",
+    id: "leo",
+    name: "Лео",
     gender: "male",
     description:
       "Calm AI companion for everyday conversations and support",
@@ -56,8 +64,8 @@ const AI_CHARACTERS: AICharacter[] = [
     speakingVideo: `/avatars/avatar3_speaking.mp4?${AVATAR_VER}`,
   },
   {
-    id: "dr-maria",
-    name: "Mia",
+    id: "mia",
+    name: "Миа",
     gender: "female",
     description:
       "Warm AI companion for supportive conversations",
@@ -67,8 +75,8 @@ const AI_CHARACTERS: AICharacter[] = [
     speakingVideo: `/avatars/avatar1_speaking.mp4?${AVATAR_VER}`,
   },
   {
-    id: "dr-sophia",
-    name: "Alex",
+    id: "alex",
+    name: "Алекс",
     gender: "female",
     description:
       "Clinical specialist specializing in anxiety, depression, and workplace stress management",
@@ -433,6 +441,8 @@ export default function VideoCallDialog({
   const [selectedCharacter, setSelectedCharacter] = useState<AICharacter>(
     AI_CHARACTERS[1] || AI_CHARACTERS[0],
   )
+  const selectedCharacterRef = useRef(selectedCharacter)
+  selectedCharacterRef.current = selectedCharacter
 
   const [isCallActive, setIsCallActive] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
@@ -1522,7 +1532,7 @@ export default function VideoCallDialog({
     ttsCooldownUntilRef.current = Date.now() + 700
     resetVadState()
 
-    const gender: "male" | "female" = selectedCharacter.gender || "female"
+    const gender: "male" | "female" = selectedCharacterRef.current.gender || "female"
 
     let ttsWatchdog: any = null
     let started = false
@@ -1605,16 +1615,15 @@ export default function VideoCallDialog({
         throw new Error("VIDEO_ASSISTANT_WEBHOOK_URL is not configured")
       }
 
-      const genderResolved = normalizeGender(selectedCharacter.gender)
+      // Read latest selected avatar via ref to avoid stale closure
+      const avatar = selectedCharacterRef.current
+      const genderResolved = normalizeGender(avatar.gender)
 
       if (process.env.NODE_ENV === "development") {
         if (genderResolved === null) {
-          console.warn("[Video] gender resolved to null — source:", selectedCharacter.gender, "avatar:", selectedCharacter.id)
+          console.warn("[Video] gender resolved to null — source:", avatar.gender, "avatar:", avatar.id)
         }
-        if (genderResolved !== null && genderResolved !== "male" && genderResolved !== "female") {
-          console.warn("[Video] gender is not male/female/null:", genderResolved)
-        }
-        console.debug("[Video diag] source=avatar:%s, raw=%s, final=%s", selectedCharacter.id, selectedCharacter.gender, genderResolved)
+        console.debug("[Video diag] source=avatar:%s, raw=%s, final=%s", avatar.id, avatar.gender, genderResolved)
       }
 
       const _agentStart = performance.now()
@@ -1629,7 +1638,7 @@ export default function VideoCallDialog({
             userId: user?.id,
             email: user?.email,
           }),
-          characterId: selectedCharacter.id,
+          characterId: avatar.id,
           gender: genderResolved,
           roleGender: genderResolved,
         }),
