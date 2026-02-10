@@ -970,6 +970,10 @@ export default function VoiceCallDialog({
 
     try {
       if (process.env.NODE_ENV === "development") {
+        const g = voiceGenderRef.current
+        if (!g || (g !== "male" && g !== "female")) {
+          console.warn("[Voice] gender is missing or invalid:", g)
+        }
         console.debug("[Voice perf] Agent request sent at", new Date().toISOString())
       }
       const res = await fetch(resolvedWebhook, {
@@ -984,6 +988,7 @@ export default function VoiceCallDialog({
             email: effectiveEmail,
           }),
           gender: voiceGenderRef.current,
+          roleGender: voiceGenderRef.current,
           voiceLanguage: voiceLangCode,
         }),
       })
@@ -1282,7 +1287,7 @@ if (res.status === 402) {
     : isAiSpeaking
       ? t("Assistant is speaking...")
       : isThinking
-        ? t("AI is thinking...")
+        ? t("Assistant is thinking...")
         : isMicMuted
           ? t("Paused. Turn on microphone to continue.")
           : isListening

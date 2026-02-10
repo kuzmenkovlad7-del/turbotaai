@@ -1605,6 +1605,13 @@ export default function VideoCallDialog({
         throw new Error("VIDEO_ASSISTANT_WEBHOOK_URL is not configured")
       }
 
+      if (process.env.NODE_ENV === "development") {
+        const g = selectedCharacter.gender
+        if (!g || (g !== "male" && g !== "female")) {
+          console.warn("[Video] gender is missing or invalid:", g)
+        }
+      }
+
       const _agentStart = performance.now()
       const res = await fetch(VIDEO_ASSISTANT_WEBHOOK_URL, {
         method: "POST",
@@ -1619,6 +1626,7 @@ export default function VideoCallDialog({
           }),
           characterId: selectedCharacter.id,
           gender: selectedCharacter.gender,
+          roleGender: selectedCharacter.gender,
         }),
       })
 if (res.status === 402) {
