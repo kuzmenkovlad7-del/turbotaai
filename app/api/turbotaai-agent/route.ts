@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAccess } from "@/lib/access/access-control"
 import { resolveAuthUserId } from "@/lib/auth/resolve-user"
+import { normalizeGender } from "@/lib/payload"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -73,6 +74,22 @@ export async function POST(request: NextRequest) {
     const email = body?.email || undefined
     const user = userId ?? `guest:${sessionId}`
 
+    // Gender normalization: resolve from any frontend field, never "unknown"
+    const genderNorm = normalizeGender(body?.gender ?? body?.roleGender ?? body?.assistantGender)
+    const characterId = (typeof body?.characterId === "string" && body.characterId.trim()) ? body.characterId.trim() : null
+    const voiceId = (typeof body?.voiceId === "string" && body.voiceId.trim()) ? body.voiceId.trim() : null
+    const voiceLanguage = (typeof body?.voiceLanguage === "string" && body.voiceLanguage.trim())
+      ? body.voiceLanguage.trim()
+      : (typeof body?.language === "string" && body.language.trim()) ? body.language.trim() : null
+
+    // Diagnostics (warn-only)
+    if (mode === "voice" || mode === "video") {
+      if (genderNorm === null) {
+        console.warn(`[turbotaai-agent] mode=${mode} but gender resolved to null. raw: gender=${body?.gender}, roleGender=${body?.roleGender}, assistantGender=${body?.assistantGender}`)
+      }
+      console.debug(`[turbotaai-agent] mode=${mode} gender=${genderNorm} characterId=${characterId} voiceId=${voiceId}`)
+    }
+
     const payload = {
       query,
       language,
@@ -84,6 +101,12 @@ export async function POST(request: NextRequest) {
       timestamp,
       user,
       ...(email ? { email } : {}),
+      gender: genderNorm,
+      roleGender: genderNorm,
+      assistantGender: genderNorm,
+      characterId,
+      voiceId,
+      voiceLanguage,
     }
 
     const r = await fetch(WEBHOOK_URL, {
