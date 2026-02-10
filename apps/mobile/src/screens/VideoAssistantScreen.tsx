@@ -24,7 +24,13 @@ type Message = {
   isError?: boolean
 }
 
-export default function ChatScreen() {
+/**
+ * Video Assistant — native app-side screen.
+ *
+ * Uses the same sendMessage API as ChatScreen with mode="video".
+ * No WebView, no embedded web page — purely native RN UI.
+ */
+export default function VideoAssistantScreen() {
   const insets = useSafeAreaInsets()
   const { user, refreshAccess } = useAuth()
   const { t, locale } = useT()
@@ -54,12 +60,12 @@ export default function ChatScreen() {
     setInput("")
 
     try {
-      const deviceId = await getDeviceHash() || ""
+      const deviceId = (await getDeviceHash()) || ""
       if (!sessionIdRef.current) sessionIdRef.current = await getSessionId()
       const payload = api.buildMessagePayload({
         query: text,
         language: locale,
-        mode: "chat",
+        mode: "video",
         userId: user?.id,
         sessionId: sessionIdRef.current,
         deviceId,
@@ -80,7 +86,7 @@ export default function ChatScreen() {
       // Refresh access state so trial counter stays in sync (fire-and-forget)
       refreshAccess().catch(() => {})
 
-      // Save to history (fire-and-forget, don't block UI)
+      // Save to history (fire-and-forget)
       if (!isError) {
         const isFirstMessage = !conversationIdRef.current
         const convId = conversationIdRef.current || generateUUID()
@@ -92,6 +98,7 @@ export default function ChatScreen() {
               { role: "user", content: text },
               { role: "assistant", content: reply },
             ],
+            mode: "video",
             title: isFirstMessage ? text.slice(0, 64) : undefined,
           })
           .catch(() => {})
@@ -156,9 +163,9 @@ export default function ChatScreen() {
           scrollEventThrottle={100}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
-              <Text style={styles.emptyIcon}>{"\uD83D\uDCAC"}</Text>
-              <Text style={styles.emptyTitle}>{t.chatStart}</Text>
-              <Text style={styles.emptySubtitle}>{t.chatSubtitle}</Text>
+              <Text style={styles.emptyIcon}>{"\uD83C\uDFA5"}</Text>
+              <Text style={styles.emptyTitle}>{t.videoStart}</Text>
+              <Text style={styles.emptySubtitle}>{t.videoSubtitle}</Text>
             </View>
           }
         />
@@ -168,7 +175,7 @@ export default function ChatScreen() {
             style={styles.input}
             value={input}
             onChangeText={setInput}
-            placeholder={t.chatPlaceholder}
+            placeholder={t.videoPlaceholder}
             placeholderTextColor={colors.textMuted}
             multiline
             maxLength={2000}
@@ -267,7 +274,7 @@ const styles = StyleSheet.create({
     maxHeight: 100,
   },
   sendBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: "#0ea5e9",
     width: 40,
     height: 40,
     borderRadius: radii.full,

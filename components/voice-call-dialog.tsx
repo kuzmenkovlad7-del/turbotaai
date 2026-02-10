@@ -290,6 +290,7 @@ export default function VoiceCallDialog({
   const [isListening, setIsListening] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
+  const [isThinking, setIsThinking] = useState(false)
   const [messages, setMessages] = useState<VoiceMessage[]>([])
   const [networkError, setNetworkError] = useState<string | null>(null)
 
@@ -318,7 +319,7 @@ export default function VoiceCallDialog({
   const pendingSttTimerRef = useRef<number | null>(null)
   const pendingSttStartIdxRef = useRef<number | null>(null)
 
-  const MIN_UTTERANCE_MS = 520
+  const MIN_UTTERANCE_MS = 200
   const isSttBusyRef = useRef(false)
 
   const lastUserSentNormRef = useRef("")
@@ -342,9 +343,9 @@ export default function VoiceCallDialog({
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const debugParams = useMemo(() => {
-    if (typeof window === "undefined") return { debug: false }
+    if (typeof window === "undefined") return { debug: false, sttDebug: false }
     const qs = new URLSearchParams(window.location.search)
-    return { debug: qs.get("debugAudio") === "1" }
+    return { debug: qs.get("debugAudio") === "1", sttDebug: qs.get("sttDebug") === "1" }
   }, [])
 
   const isMobile = useMemo(() => {
@@ -433,6 +434,10 @@ export default function VoiceCallDialog({
     utteranceStartTs: 0,
     voiceOnCount: 0,
   })
+
+  // sttDebug overlay state (ref to avoid re-renders on every frame)
+  const sttDebugRef = useRef({ state: "idle", uttMs: 0, rms: 0, thr: 0, rejectReason: "", lastLen: 0 })
+  const [sttDebugTick, setSttDebugTick] = useState(0)
 
   function stopRaf() {
     if (rafRef.current) {
@@ -568,10 +573,16 @@ export default function VoiceCallDialog({
 
     const roughSize = body.reduce((acc, b) => acc + (b?.size || 0), 0)
     const minBytes = isMobile ? 2600 : 2200
-    if (roughSize < minBytes) return
+    if (roughSize < minBytes) {
+      if (debugParams.sttDebug) sttDebugRef.current.rejectReason = `too_small:${roughSize}b`
+      return
+    }
 
     const blob = new Blob([header, ...body], { type: header.type || body[0]?.type || "audio/webm" })
-    if (blob.size < minBytes) return
+    if (blob.size < minBytes) {
+      if (debugParams.sttDebug) sttDebugRef.current.rejectReason = `blob_small:${blob.size}b`
+      return
+    }
 
     try {
       isSttBusyRef.current = true
@@ -606,21 +617,26 @@ export default function VoiceCallDialog({
       utterStartIdxRef.current = keepHeader ? 1 : 0
 
       const fullText = (data.text || "").toString().trim()
+      if (debugParams.sttDebug) { sttDebugRef.current.lastLen = fullText.length; sttDebugRef.current.rejectReason = "" }
       if (!fullText) return
 
       let delta = fullText
       delta = stripLeadingEchoOfPrev(delta, lastUserSentNormRef.current, lastUserSentTsRef.current)
       delta = sanitizeUserText(delta)
 
-      if (!delta) return
-      if (isMostlyGarbage(delta)) return
-      if (shouldDedupUser(delta)) return
+      if (!delta) { if (debugParams.sttDebug) sttDebugRef.current.rejectReason = "empty_after_sanitize"; return }
+      if (isMostlyGarbage(delta)) { if (debugParams.sttDebug) sttDebugRef.current.rejectReason = "garbage"; return }
+      if (shouldDedupUser(delta)) { if (debugParams.sttDebug) sttDebugRef.current.rejectReason = "dedup"; return }
 
       lastUserSentNormRef.current = normalizeUtterance(delta)
       lastUserSentTsRef.current = Date.now()
 
       if (debugParams.debug) {
         console.log("[STT]", { reason, startIdx, fullText, delta })
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[Voice perf] Final transcript captured:", delta.slice(0, 40))
       }
 
       const userMsg: VoiceMessage = {
@@ -662,7 +678,7 @@ export default function VoiceCallDialog({
       pendingSttStartIdxRef.current = null
       pendingSttTimerRef.current = null
       void maybeSendStt(r, si)
-    }, 220)
+    }, 120)
   }
 
   function pickMime(): string | null {
@@ -692,7 +708,7 @@ export default function VoiceCallDialog({
     const data = new Uint8Array(analyser.fftSize)
 
     const baseThr = isMobile ? 0.014 : 0.01
-    const hangoverMs = 2000
+    const hangoverMs = 3000
     const maxUtteranceMs = 25000
     const onFramesNeeded = isMobile ? 4 : 3
     const thrMult = isMobile ? 5.0 : 4.6
@@ -717,7 +733,7 @@ export default function VoiceCallDialog({
       const voiceNow = rms > thr
 
       if (!st.voice) {
-        st.voiceOnCount = voiceNow ? Math.min(onFramesNeeded + 2, st.voiceOnCount + 1) : 0
+        st.voiceOnCount = voiceNow ? Math.min(onFramesNeeded + 2, st.voiceOnCount + 1) : Math.max(0, st.voiceOnCount - 2)
         if (st.voiceOnCount >= onFramesNeeded) {
           st.voiceOnCount = 0
           st.voice = true
@@ -732,7 +748,11 @@ export default function VoiceCallDialog({
           const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
           st.voice = false
           st.utteranceStartTs = 0
-          if (voiceMs >= MIN_UTTERANCE_MS) void flushAndSendStt("vad_end", utterStartIdxRef.current)
+          if (voiceMs >= MIN_UTTERANCE_MS) {
+            void flushAndSendStt("vad_end", utterStartIdxRef.current)
+          } else if (voiceMs > 0 && debugParams.sttDebug) {
+            sttDebugRef.current.rejectReason = `too_short:${voiceMs}ms`
+          }
         }
 
         if (st.voice && st.utteranceStartTs && now - st.utteranceStartTs > maxUtteranceMs) {
@@ -740,6 +760,16 @@ export default function VoiceCallDialog({
           void flushAndSendStt("max_utt", utterStartIdxRef.current)
           utterStartIdxRef.current = Math.max(1, audioChunksRef.current.length - 1)
         }
+      }
+
+      // sttDebug overlay update (~4 Hz to avoid perf overhead)
+      if (debugParams.sttDebug && now % 250 < 17) {
+        const d = sttDebugRef.current
+        d.state = st.voice ? "voice" : "silence"
+        d.uttMs = st.voice && st.utteranceStartTs ? now - st.utteranceStartTs : 0
+        d.rms = Math.round(rms * 10000) / 10000
+        d.thr = Math.round(thr * 10000) / 10000
+        setSttDebugTick(t => t + 1)
       }
 
       rafRef.current = requestAnimationFrame(tick)
@@ -789,7 +819,11 @@ export default function VoiceCallDialog({
       // только актуальный запрос может сбрасывать состояние
       if (seq !== ttsSeqRef.current) return
 
-      ttsCooldownUntilRef.current = Date.now() + 900
+      ttsCooldownUntilRef.current = Date.now() + 700
+
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[Voice perf] TTS playback finished, resuming mic after 150ms cooldown")
+      }
 
       setIsAiSpeaking(false)
       isAiSpeakingRef.current = false
@@ -800,18 +834,19 @@ export default function VoiceCallDialog({
           try {
             rec.resume()
           } catch {}
-        }, 260)
+        }, 150)
       }
     }
 
     const begin = () => {
-      // стопаем прошлое аудио сразу, чтобы не было наложения/“двоения”
+      // стопаем прошлое аудио сразу, чтобы не было наложения/"двоения"
       stopTtsAudio()
 
+      setIsThinking(false)
       setIsAiSpeaking(true)
       isAiSpeakingRef.current = true
 
-      ttsCooldownUntilRef.current = Date.now() + 900
+      ttsCooldownUntilRef.current = Date.now() + 700
 
       const hdr = audioChunksRef.current?.[0]
       audioChunksRef.current = hdr ? [hdr] : []
@@ -899,6 +934,9 @@ export default function VoiceCallDialog({
         }
 
         try {
+          if (process.env.NODE_ENV === "development") {
+            console.debug("[Voice perf] TTS audio playback starting")
+          }
           await a.play()
         } catch {
           finishOnce()
@@ -921,6 +959,9 @@ export default function VoiceCallDialog({
     }
 
     isAgentBusyRef.current = true
+    setIsThinking(true)
+
+    const _t0 = performance.now()
 
     const resolvedWebhook =
       (webhookUrl && webhookUrl.trim()) ||
@@ -928,6 +969,13 @@ export default function VoiceCallDialog({
       FALLBACK_CHAT_API
 
     try {
+      if (process.env.NODE_ENV === "development") {
+        const g = voiceGenderRef.current
+        if (!g || (g !== "male" && g !== "female")) {
+          console.warn("[Voice] gender is missing or invalid:", g)
+        }
+        console.debug("[Voice perf] Agent request sent at", new Date().toISOString())
+      }
       const res = await fetch(resolvedWebhook, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -940,11 +988,16 @@ export default function VoiceCallDialog({
             email: effectiveEmail,
           }),
           gender: voiceGenderRef.current,
+          roleGender: voiceGenderRef.current,
           voiceLanguage: voiceLangCode,
         }),
       })
 if (res.status === 402) {
-  window.location.href = "/pricing"
+  if (window.__IS_MOBILE_WEBVIEW && window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: "paywall" }))
+  } else {
+    window.location.href = "/pricing"
+  }
   return
 }
 
@@ -957,13 +1010,17 @@ if (res.status === 402) {
         data = JSON.parse(raw)
       } catch {}
 
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[Voice perf] Agent response received in", Math.round(performance.now() - _t0), "ms")
+      }
+
       let answer = extractAnswer(data)
       if (!answer) answer = t("I'm sorry, I couldn't process your message. Please try again.")
 
       answer = sanitizeAssistantText(answer)
 
-      if (!answer) return
-      if (shouldDedupAssistant(answer)) return
+      if (!answer) { setIsThinking(false); return }
+      if (shouldDedupAssistant(answer)) { setIsThinking(false); return }
 
       lastAssistantSentNormRef.current = normalizeUtterance(answer)
       lastAssistantSentTsRef.current = Date.now()
@@ -979,6 +1036,7 @@ if (res.status === 402) {
       speakText(answer, voiceLangCode)
     } catch (e: any) {
       console.error(e)
+      setIsThinking(false)
       setNetworkError(t("Connection error. Please try again."))
       if (onError && e instanceof Error) onError(e)
     } finally {
@@ -1158,6 +1216,7 @@ if (res.status === 402) {
     setIsListening(false)
     setIsMicMuted(false)
     setIsAiSpeaking(false)
+    setIsThinking(false)
     setNetworkError(null)
 
     pendingSttReasonRef.current = null
@@ -1227,11 +1286,13 @@ if (res.status === 402) {
     ? t("In crisis situations, please contact local emergency services immediately.")
     : isAiSpeaking
       ? t("Assistant is speaking...")
-      : isMicMuted
-        ? t("Paused. Turn on microphone to continue.")
-        : isListening
-          ? t("Listening… you can speak.")
-          : t("Waiting... you can start speaking at any moment.")
+      : isThinking
+        ? t("Assistant is thinking...")
+        : isMicMuted
+          ? t("Paused. Turn on microphone to continue.")
+          : isListening
+            ? t("Listening… you can speak.")
+            : t("Waiting... you can start speaking at any moment.")
 
   const __props: any = (typeof arguments !== "undefined" ? (arguments as any)[0] : undefined)
   const controlledOpen: boolean | undefined = typeof __props?.open === "boolean" ? __props.open : undefined
@@ -1245,6 +1306,12 @@ if (res.status === 402) {
     >
       <DialogContent className="border-none bg-transparent p-0 w-[calc(100vw-1.5rem)] max-w-[520px] sm:w-full sm:max-w-xl">
         <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-900/10">
+          {debugParams.sttDebug && (
+            <div style={{ position: "absolute", top: 4, right: 4, zIndex: 9999, background: "rgba(0,0,0,0.8)", color: "#0f0", fontSize: 10, fontFamily: "monospace", padding: "4px 6px", borderRadius: 4, pointerEvents: "none", lineHeight: 1.4 }}>
+              {sttDebugRef.current.state} | utt:{sttDebugRef.current.uttMs}ms | rms:{sttDebugRef.current.rms} thr:{sttDebugRef.current.thr}<br/>
+              last:{sttDebugRef.current.lastLen}ch {sttDebugRef.current.rejectReason && <>| rej:{sttDebugRef.current.rejectReason}</>}
+            </div>
+          )}
           <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
             <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10">

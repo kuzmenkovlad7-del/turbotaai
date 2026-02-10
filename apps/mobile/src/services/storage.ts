@@ -41,6 +41,27 @@ export async function ensureDeviceHash(): Promise<string> {
   return hash
 }
 
+/* ── Session ID (persistent within conversation, reset on New Chat) ── */
+
+export async function getSessionId(): Promise<string> {
+  const existing = await SecureStore.getItemAsync(STORAGE_KEYS.SESSION_ID)
+  if (existing) return existing
+  const id = generateUUID()
+  await SecureStore.setItemAsync(STORAGE_KEYS.SESSION_ID, id)
+  return id
+}
+
+export async function setSessionId(id: string): Promise<void> {
+  await SecureStore.setItemAsync(STORAGE_KEYS.SESSION_ID, id)
+}
+
+/** Reset session — generates and persists a new sessionId (explicit New Chat) */
+export async function resetSessionId(): Promise<string> {
+  const id = generateUUID()
+  await SecureStore.setItemAsync(STORAGE_KEYS.SESSION_ID, id)
+  return id
+}
+
 /** Clear all stored credentials */
 export async function clearAll(): Promise<void> {
   await Promise.all([clearAuthToken(), clearRefreshToken()])

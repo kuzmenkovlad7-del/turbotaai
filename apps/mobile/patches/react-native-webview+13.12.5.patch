@@ -1,0 +1,10 @@
+diff --git a/node_modules/react-native-webview/index.js b/node_modules/react-native-webview/index.js
+index 55a1a38..9e0e834 100644
+--- a/node_modules/react-native-webview/index.js
++++ b/node_modules/react-native-webview/index.js
+@@ -1,4 +1,4 @@
+-import WebView from './lib/WebView';
++import WebView from './lib/WebView.js';
+ 
+ export { WebView };
+ export default WebView;
