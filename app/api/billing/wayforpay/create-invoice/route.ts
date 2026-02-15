@@ -88,6 +88,15 @@ export async function POST(req: NextRequest) {
     const hostNoPort = host.split(":")[0]
     const domain = cookieDomainFromHost(hostNoPort)
 
+    // Stable merchantDomainName: must match what is registered in the WayForPay merchant account.
+    // Do NOT derive from request host — x-forwarded-host may be a Vercel preview URL or
+    // differ in www-prefix from the registered domain, breaking the HMAC-MD5 signature.
+    const merchantDomainName = env("WAYFORPAY_DOMAIN") || "turbotaai.com"
+
+    // Stable base URL for callback and return URLs (must be reachable HTTPS in production).
+    // Falls back to request origin only when env is not configured (e.g. local dev).
+    const appBase = env("NEXT_PUBLIC_APP_URL") || env("APP_URL") || origin
+
     const userId = summary.userId
 
     const orderReference = `TA-${Date.now()}-${randomUUID().slice(0, 8)}`
@@ -97,9 +106,12 @@ export async function POST(req: NextRequest) {
     const productCount = "1"
     const productPrice = amountStr
 
+    // Signature field order per WayForPay docs:
+    // merchantAccount;merchantDomainName;orderReference;orderDate;amount;currency;
+    // productName;productCount;productPrice
     const signString = [
       merchantAccount,
-      hostNoPort,
+      merchantDomainName,
       orderReference,
       String(orderDate),
       amountStr,
@@ -111,8 +123,8 @@ export async function POST(req: NextRequest) {
 
     const merchantSignature = hmacMd5Hex(signString, secretKey)
 
-    const returnUrl = `${origin}/payment/return?orderReference=${encodeURIComponent(orderReference)}`
-    const serviceUrl = `${origin}/api/billing/wayforpay/callback`
+    const returnUrl = `${appBase}/payment/return?orderReference=${encodeURIComponent(orderReference)}`
+    const serviceUrl = `${appBase}/api/billing/wayforpay/callback`
 
     const admin = sbAdmin()
 
@@ -129,7 +141,8 @@ export async function POST(req: NextRequest) {
         planId,
         amount: amountStr,
         currency,
-        origin,
+        merchantDomainName,
+        appBase,
         serviceUrl,
         returnUrl,
       },
@@ -139,7 +152,7 @@ export async function POST(req: NextRequest) {
 
     const form = new URLSearchParams()
     form.set("merchantAccount", merchantAccount)
-    form.set("merchantDomainName", hostNoPort)
+    form.set("merchantDomainName", merchantDomainName)
     form.set("orderReference", orderReference)
     form.set("orderDate", String(orderDate))
     form.set("amount", amountStr)
@@ -175,6 +188,9 @@ export async function POST(req: NextRequest) {
             amount: amountStr,
             currency,
             planId,
+            merchantDomainName,
+            serviceUrl,
+            returnUrl,
           },
           response: j,
           httpStatus: r.status,
