@@ -702,10 +702,10 @@ export default function VoiceCallDialog({
     const data = new Uint8Array(analyser.fftSize)
 
     const baseThr = isMobile ? 0.014 : 0.01
-    const hangoverMs = 3000
+    const hangoverMs = 1200
     const maxUtteranceMs = 25000
     const onFramesNeeded = isMobile ? 4 : 3
-    const thrMult = isMobile ? 5.0 : 4.6
+    const thrMult = isMobile ? 3.8 : 3.4
 
     const tick = () => {
       analyser.getByteTimeDomainData(data)

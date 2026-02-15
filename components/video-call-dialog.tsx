@@ -519,7 +519,7 @@ export default function VideoCallDialog({
   const ttsObjectUrlRef = useRef<string | null>(null)
 
   const MIN_UTTERANCE_MS = 200
-  const hangoverMs = 2800
+  const hangoverMs = 1200
   const maxUtteranceMs = 20000
 
   const startListeningInFlightRef = useRef(false)
@@ -901,7 +901,7 @@ export default function VideoCallDialog({
       const st = vad.current
 
       if (!st.voice) st.noiseFloor = st.noiseFloor * 0.995 + rms * 0.005
-      const thr = Math.max(baseThr, st.noiseFloor * 3.6)
+      const thr = Math.max(baseThr, st.noiseFloor * 3.4)
       const voiceNow = rms > thr
 
       if (voiceNow) {
