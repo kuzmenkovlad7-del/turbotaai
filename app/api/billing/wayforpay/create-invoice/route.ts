@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 
 const DEVICE_COOKIE = "ta_device_hash"
 const LAST_ORDER_COOKIE = "ta_last_order"
-const WFP_OFFLINE_URL = "https://secure.wayforpay.com/pay?behavior=offline"
+const WFP_API_URL = "https://api.wayforpay.com/api"
 
 function env(name: string) {
   return String(process.env[name] || "").trim()
@@ -150,31 +150,34 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
     } as any)
 
-    const form = new URLSearchParams()
-    form.set("merchantAccount", merchantAccount)
-    form.set("merchantDomainName", merchantDomainName)
-    form.set("orderReference", orderReference)
-    form.set("orderDate", String(orderDate))
-    form.set("amount", amountStr)
-    form.set("currency", currency)
-    form.append("productName[]", productName)
-    form.append("productCount[]", productCount)
-    form.append("productPrice[]", productPrice)
-    form.set("merchantSignature", merchantSignature)
-    form.set("apiVersion", "1")
-    form.set("language", String(body?.language || "UA"))
-    form.set("returnUrl", returnUrl)
-    form.set("serviceUrl", serviceUrl)
+    const wfpBody = {
+      transactionType: "CREATE_INVOICE",
+      merchantAccount,
+      merchantAuthType: "SimpleSignature",
+      merchantDomainName,
+      merchantSignature,
+      apiVersion: 1,
+      language: String(body?.language || "UA"),
+      orderReference,
+      orderDate,
+      amount: Number(amountStr),
+      currency,
+      productName: [productName],
+      productCount: [Number(productCount)],
+      productPrice: [Number(productPrice)],
+      returnUrl,
+      serviceUrl,
+    }
 
-    const r = await fetch(WFP_OFFLINE_URL, {
+    const r = await fetch(WFP_API_URL, {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: form.toString(),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(wfpBody),
       cache: "no-store",
     })
 
     const j: any = await r.json().catch(() => ({}))
-    const invoiceUrl = String(j?.url || "").trim()
+    const invoiceUrl = String(j?.invoiceUrl || j?.url || "").trim()
 
     await admin
       .from("billing_orders")
@@ -201,7 +204,13 @@ export async function POST(req: NextRequest) {
 
     if (!r.ok || !invoiceUrl) {
       return NextResponse.json(
-        { ok: false, error: "wayforpay_offline_failed", httpStatus: r.status, details: j },
+        {
+          ok: false,
+          error: "wayforpay_offline_failed",
+          reason: String(j?.reason || ""),
+          reasonCode: j?.reasonCode ?? null,
+          httpStatus: r.status,
+        },
         { status: 502, headers: { "cache-control": "no-store" } }
       )
     }
