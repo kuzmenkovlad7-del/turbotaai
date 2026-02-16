@@ -13,6 +13,7 @@ import Header from "@/components/header"
 import Footer from "@/components/footer"
 import { APP_NAME } from "@/lib/app-config"
 import AssistantFab from "@/components/assistant-fab"
+import Analytics from "@/components/analytics"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -98,6 +99,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         className={`${inter.className} min-h-screen bg-background text-foreground antialiased`}
         suppressHydrationWarning
       >
+        <Analytics />
         <Suspense fallback={null}>
           <AuthProvider>
             <LanguageProvider>
