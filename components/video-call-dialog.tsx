@@ -17,7 +17,6 @@ import {
 } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
-import { buildWebPayload, normalizeGender } from "@/lib/payload"
 import {
   getLocaleForLanguage,
   getNativeSpeechParameters,
@@ -43,18 +42,10 @@ interface AICharacter {
 /** Bump this when avatar videos are replaced to bust Vercel CDN cache */
 const AVATAR_VER = "v2"
 
-/** Map legacy saved avatar ids to canonical ids */
-const LEGACY_ID_MAP: Record<string, string> = {
-  "dr-alexander": "leo",
-  "dr-maria": "mia",
-  "dr-sophia": "alex",
-  "dr-alex": "alex",
-}
-
 const AI_CHARACTERS: AICharacter[] = [
   {
-    id: "leo",
-    name: "Лео",
+    id: "dr-alexander",
+    name: "Leo",
     gender: "male",
     description:
       "Calm AI companion for everyday conversations and support",
@@ -64,8 +55,8 @@ const AI_CHARACTERS: AICharacter[] = [
     speakingVideo: `/avatars/avatar3_speaking.mp4?${AVATAR_VER}`,
   },
   {
-    id: "mia",
-    name: "Миа",
+    id: "dr-maria",
+    name: "Mia",
     gender: "female",
     description:
       "Warm AI companion for supportive conversations",
@@ -75,8 +66,8 @@ const AI_CHARACTERS: AICharacter[] = [
     speakingVideo: `/avatars/avatar1_speaking.mp4?${AVATAR_VER}`,
   },
   {
-    id: "alex",
-    name: "Алекс",
+    id: "dr-sophia",
+    name: "Alex",
     gender: "female",
     description:
       "Clinical specialist specializing in anxiety, depression, and workplace stress management",
@@ -441,8 +432,6 @@ export default function VideoCallDialog({
   const [selectedCharacter, setSelectedCharacter] = useState<AICharacter>(
     AI_CHARACTERS[1] || AI_CHARACTERS[0],
   )
-  const selectedCharacterRef = useRef(selectedCharacter)
-  selectedCharacterRef.current = selectedCharacter
 
   const [isCallActive, setIsCallActive] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
@@ -529,8 +518,8 @@ export default function VideoCallDialog({
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
   const ttsObjectUrlRef = useRef<string | null>(null)
 
-  const MIN_UTTERANCE_MS = 200
-  const hangoverMs = 2800
+  const MIN_UTTERANCE_MS = 250
+  const hangoverMs = 700
   const maxUtteranceMs = 20000
 
   const startListeningInFlightRef = useRef(false)
@@ -583,6 +572,9 @@ export default function VideoCallDialog({
     voice: false,
     voiceUntilTs: 0,
     utteranceStartTs: 0,
+    voiceOnCount: 0,
+    lastVoiceTs: 0,
+    shortGuardUsed: false,
   })
 
   const sttDebugRef = useRef({ state: "idle", uttMs: 0, rms: 0, thr: 0, rejectReason: "", lastLen: 0 })
@@ -829,6 +821,9 @@ export default function VideoCallDialog({
       voice: false,
       voiceUntilTs: 0,
       utteranceStartTs: 0,
+      voiceOnCount: 0,
+      lastVoiceTs: 0,
+      shortGuardUsed: false,
     }
   }
 
@@ -877,6 +872,8 @@ export default function VideoCallDialog({
 
     const data = new Uint8Array(analyser.fftSize)
     const baseThr = isMobile ? 0.012 : 0.008
+    const onFramesNeeded = isMobile ? 4 : 3
+    const thrMult = 3.4
 
     const tick = () => {
       rafRef.current = requestAnimationFrame(tick)
@@ -896,6 +893,7 @@ export default function VideoCallDialog({
         st.voice = false
         st.voiceUntilTs = 0
         st.utteranceStartTs = 0
+        st.voiceOnCount = 0
         return
       }
 
@@ -911,25 +909,42 @@ export default function VideoCallDialog({
       const now = Date.now()
       const st = vad.current
 
-      if (!st.voice) st.noiseFloor = st.noiseFloor * 0.995 + rms * 0.005
-      const thr = Math.max(baseThr, st.noiseFloor * 3.6)
+      if (!st.voice && rms < baseThr) st.noiseFloor = st.noiseFloor * 0.995 + rms * 0.005
+      const thr = Math.max(baseThr, st.noiseFloor * thrMult)
       const voiceNow = rms > thr
 
-      if (voiceNow) {
-        st.voiceUntilTs = now + hangoverMs
-        if (!st.voice) {
+      if (!st.voice) {
+        st.voiceOnCount = voiceNow ? Math.min(onFramesNeeded + 2, st.voiceOnCount + 1) : Math.max(0, st.voiceOnCount - 2)
+        if (st.voiceOnCount >= onFramesNeeded) {
+          st.voiceOnCount = 0
           st.voice = true
+          st.voiceUntilTs = now + hangoverMs
           st.utteranceStartTs = now
+          st.lastVoiceTs = now
+          st.shortGuardUsed = false
         }
       } else {
-        if (st.voice && now > st.voiceUntilTs) {
-          const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
-          st.voice = false
-          st.utteranceStartTs = 0
-          if (voiceMs >= MIN_UTTERANCE_MS) {
-            void flushAndSendStt("vad_end")
-          } else if (voiceMs > 0 && sttDebugEnabled) {
-            sttDebugRef.current.rejectReason = `too_short:${voiceMs}ms`
+        if (voiceNow) {
+          st.voiceUntilTs = now + hangoverMs
+          st.lastVoiceTs = now
+        }
+
+        if (!voiceNow && now > st.voiceUntilTs) {
+          const actualSpeechMs = st.lastVoiceTs > st.utteranceStartTs
+            ? st.lastVoiceTs - st.utteranceStartTs
+            : 0
+          if (actualSpeechMs >= MIN_UTTERANCE_MS && actualSpeechMs < 400 && !st.shortGuardUsed) {
+            st.voiceUntilTs = now + 200
+            st.shortGuardUsed = true
+          } else {
+            st.voice = false
+            st.utteranceStartTs = 0
+            st.shortGuardUsed = false
+            if (actualSpeechMs >= MIN_UTTERANCE_MS) {
+              void flushAndSendStt("vad_end")
+            } else if (actualSpeechMs > 0 && sttDebugEnabled) {
+              sttDebugRef.current.rejectReason = `too_short:${actualSpeechMs}ms`
+            }
           }
         }
       }
@@ -1109,7 +1124,7 @@ export default function VideoCallDialog({
       pendingSttReasonRef.current = null
       pendingSttTimerRef.current = null
       if (r) void maybeSendStt(r)
-    }, 250)
+    }, 150)
   }
 
   async function maybeSendStt(reason: string) {
@@ -1529,10 +1544,10 @@ export default function VideoCallDialog({
     stopAvatarSpeakingPlayback()
     setActivityStatus("thinking")
 
-    ttsCooldownUntilRef.current = Date.now() + 700
+    ttsCooldownUntilRef.current = Date.now() + 400
     resetVadState()
 
-    const gender: "male" | "female" = selectedCharacterRef.current.gender || "female"
+    const gender: "male" | "female" = selectedCharacter.gender || "female"
 
     let ttsWatchdog: any = null
     let started = false
@@ -1555,7 +1570,7 @@ export default function VideoCallDialog({
         ttsWatchdog = null
       }
 
-      ttsCooldownUntilRef.current = Date.now() + 700
+      ttsCooldownUntilRef.current = Date.now() + 400
       setIsAiSpeaking(false)
       isAiSpeakingRef.current = false
 
@@ -1573,7 +1588,7 @@ export default function VideoCallDialog({
             r.resume()
           } catch {}
           setIsListening(true)
-        }, 250)
+        }, 150)
       }
 
       if (isCallActiveRef.current && !isMicMutedRef.current) {
@@ -1615,32 +1630,17 @@ export default function VideoCallDialog({
         throw new Error("VIDEO_ASSISTANT_WEBHOOK_URL is not configured")
       }
 
-      // Read latest selected avatar via ref to avoid stale closure
-      const avatar = selectedCharacterRef.current
-      const genderResolved = normalizeGender(avatar.gender)
-
-      if (process.env.NODE_ENV === "development") {
-        if (genderResolved === null) {
-          console.warn("[Video] gender resolved to null — source:", avatar.gender, "avatar:", avatar.id)
-        }
-        console.debug("[Video diag] source=avatar:%s, raw=%s, final=%s", avatar.id, avatar.gender, genderResolved)
-      }
-
       const _agentStart = performance.now()
       const res = await fetch(VIDEO_ASSISTANT_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...buildWebPayload({
-            query: trimmed,
-            language: langForBackend,
-            mode: "video",
-            userId: user?.id,
-            email: user?.email,
-          }),
-          characterId: avatar.id,
-          gender: genderResolved,
-          roleGender: genderResolved,
+          query: trimmed,
+          language: langForBackend,
+          email: user?.email || "guest@example.com",
+          mode: "video",
+          characterId: selectedCharacter.id,
+          gender: selectedCharacter.gender,
         }),
       })
 if (res.status === 402) {

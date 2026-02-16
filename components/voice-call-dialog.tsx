@@ -13,7 +13,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Phone, Brain, Mic, MicOff, Loader2, Sparkles } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
-import { buildWebPayload, normalizeGender } from "@/lib/payload"
 
 interface VoiceCallDialogProps {
   isOpen: boolean
@@ -290,12 +289,11 @@ export default function VoiceCallDialog({
   const [isListening, setIsListening] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(false)
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
-  const [isThinking, setIsThinking] = useState(false)
   const [messages, setMessages] = useState<VoiceMessage[]>([])
   const [networkError, setNetworkError] = useState<string | null>(null)
 
   const voiceGenderRef = useRef<"female" | "male">("female")
-  const effectiveEmail = userEmail || user?.email || undefined
+  const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
   // фиксируем язык на момент старта звонка (STT/TTS/агент)
   const sessionVoiceLangRef = useRef<string>("uk-UA")
@@ -319,7 +317,7 @@ export default function VoiceCallDialog({
   const pendingSttTimerRef = useRef<number | null>(null)
   const pendingSttStartIdxRef = useRef<number | null>(null)
 
-  const MIN_UTTERANCE_MS = 200
+  const MIN_UTTERANCE_MS = 250
   const isSttBusyRef = useRef(false)
 
   const lastUserSentNormRef = useRef("")
@@ -343,9 +341,9 @@ export default function VoiceCallDialog({
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const debugParams = useMemo(() => {
-    if (typeof window === "undefined") return { debug: false, sttDebug: false }
+    if (typeof window === "undefined") return { debug: false, sttDebug: false, voiceDebug: false }
     const qs = new URLSearchParams(window.location.search)
-    return { debug: qs.get("debugAudio") === "1", sttDebug: qs.get("sttDebug") === "1" }
+    return { debug: qs.get("debugAudio") === "1", sttDebug: qs.get("sttDebug") === "1", voiceDebug: qs.get("voiceDebug") === "1" }
   }, [])
 
   const isMobile = useMemo(() => {
@@ -433,6 +431,8 @@ export default function VoiceCallDialog({
     voiceUntilTs: 0,
     utteranceStartTs: 0,
     voiceOnCount: 0,
+    lastVoiceTs: 0,
+    shortGuardUsed: false,
   })
 
   // sttDebug overlay state (ref to avoid re-renders on every frame)
@@ -586,6 +586,7 @@ export default function VoiceCallDialog({
 
     try {
       isSttBusyRef.current = true
+      const _sttStart = debugParams.voiceDebug ? performance.now() : 0
 
       const sttLang = getSessionVoiceLang()
 
@@ -635,14 +636,15 @@ export default function VoiceCallDialog({
         console.log("[STT]", { reason, startIdx, fullText, delta })
       }
 
-      if (process.env.NODE_ENV === "development") {
-        console.debug("[Voice perf] Final transcript captured:", delta.slice(0, 40))
-      }
-
       const userMsg: VoiceMessage = {
         id: `${Date.now()}-user`,
         role: "user",
         text: delta,
+      }
+
+      if (debugParams.voiceDebug) {
+        const _asrMs = Math.round(performance.now() - _sttStart)
+        console.log(`[VOICE_DEBUG] speech_end→asr_done: ${_asrMs}ms | "${delta.slice(0, 50)}"`)
       }
 
       setMessages((prevMsgs) => [...prevMsgs, userMsg])
@@ -678,7 +680,7 @@ export default function VoiceCallDialog({
       pendingSttStartIdxRef.current = null
       pendingSttTimerRef.current = null
       void maybeSendStt(r, si)
-    }, 120)
+    }, 150)
   }
 
   function pickMime(): string | null {
@@ -708,10 +710,10 @@ export default function VoiceCallDialog({
     const data = new Uint8Array(analyser.fftSize)
 
     const baseThr = isMobile ? 0.014 : 0.01
-    const hangoverMs = 3000
+    const hangoverMs = 700
     const maxUtteranceMs = 25000
     const onFramesNeeded = isMobile ? 4 : 3
-    const thrMult = isMobile ? 5.0 : 4.6
+    const thrMult = isMobile ? 3.8 : 3.4
 
     const tick = () => {
       analyser.getByteTimeDomainData(data)
@@ -739,19 +741,33 @@ export default function VoiceCallDialog({
           st.voice = true
           st.voiceUntilTs = now + hangoverMs
           st.utteranceStartTs = now
+          st.lastVoiceTs = now
+          st.shortGuardUsed = false
           utterStartIdxRef.current = Math.max(1, audioChunksRef.current.length - 1)
         }
       } else {
-        if (voiceNow) st.voiceUntilTs = now + hangoverMs
+        if (voiceNow) {
+          st.voiceUntilTs = now + hangoverMs
+          st.lastVoiceTs = now
+        }
 
         if (!voiceNow && now > st.voiceUntilTs) {
-          const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
-          st.voice = false
-          st.utteranceStartTs = 0
-          if (voiceMs >= MIN_UTTERANCE_MS) {
-            void flushAndSendStt("vad_end", utterStartIdxRef.current)
-          } else if (voiceMs > 0 && debugParams.sttDebug) {
-            sttDebugRef.current.rejectReason = `too_short:${voiceMs}ms`
+          const actualSpeechMs = st.lastVoiceTs > st.utteranceStartTs
+            ? st.lastVoiceTs - st.utteranceStartTs
+            : 0
+          if (actualSpeechMs >= MIN_UTTERANCE_MS && actualSpeechMs < 400 && !st.shortGuardUsed) {
+            // Short utterance guard: wait 200ms more before finalizing to avoid cutting brief phrases
+            st.voiceUntilTs = now + 200
+            st.shortGuardUsed = true
+          } else {
+            st.voice = false
+            st.utteranceStartTs = 0
+            st.shortGuardUsed = false
+            if (actualSpeechMs >= MIN_UTTERANCE_MS) {
+              void flushAndSendStt("vad_end", utterStartIdxRef.current)
+            } else if (actualSpeechMs > 0 && debugParams.sttDebug) {
+              sttDebugRef.current.rejectReason = `too_short:${actualSpeechMs}ms`
+            }
           }
         }
 
@@ -819,11 +835,7 @@ export default function VoiceCallDialog({
       // только актуальный запрос может сбрасывать состояние
       if (seq !== ttsSeqRef.current) return
 
-      ttsCooldownUntilRef.current = Date.now() + 700
-
-      if (process.env.NODE_ENV === "development") {
-        console.debug("[Voice perf] TTS playback finished, resuming mic after 150ms cooldown")
-      }
+      ttsCooldownUntilRef.current = Date.now() + 400
 
       setIsAiSpeaking(false)
       isAiSpeakingRef.current = false
@@ -839,14 +851,13 @@ export default function VoiceCallDialog({
     }
 
     const begin = () => {
-      // стопаем прошлое аудио сразу, чтобы не было наложения/"двоения"
+      // стопаем прошлое аудио сразу, чтобы не было наложения/“двоения”
       stopTtsAudio()
 
-      setIsThinking(false)
       setIsAiSpeaking(true)
       isAiSpeakingRef.current = true
 
-      ttsCooldownUntilRef.current = Date.now() + 700
+      ttsCooldownUntilRef.current = Date.now() + 400
 
       const hdr = audioChunksRef.current?.[0]
       audioChunksRef.current = hdr ? [hdr] : []
@@ -881,6 +892,7 @@ export default function VoiceCallDialog({
 
     ;(async () => {
       begin()
+      const _ttsStart = debugParams.voiceDebug ? performance.now() : 0
 
       try {
         const res = await fetch("/api/tts", {
@@ -914,6 +926,15 @@ export default function VoiceCallDialog({
         objectUrl = base64ToObjectUrl(data.audioContent, ct)
         a.src = objectUrl
 
+        if (debugParams.voiceDebug) {
+          const _ttsMs = Math.round(performance.now() - _ttsStart)
+          console.log(`[VOICE_DEBUG] tts_ready: ${_ttsMs}ms`)
+          a.onplay = () => {
+            const _playMs = Math.round(performance.now() - _ttsStart)
+            console.log(`[VOICE_DEBUG] first_audio_play: ${_playMs}ms from tts_start`)
+          }
+        }
+
         a.onended = () => finishOnce()
         a.onerror = () => finishOnce()
 
@@ -934,9 +955,6 @@ export default function VoiceCallDialog({
         }
 
         try {
-          if (process.env.NODE_ENV === "development") {
-            console.debug("[Voice perf] TTS audio playback starting")
-          }
           await a.play()
         } catch {
           finishOnce()
@@ -959,41 +977,24 @@ export default function VoiceCallDialog({
     }
 
     isAgentBusyRef.current = true
-    setIsThinking(true)
-
-    const _t0 = performance.now()
 
     const resolvedWebhook =
       (webhookUrl && webhookUrl.trim()) ||
       TURBOTA_AGENT_WEBHOOK_URL.trim() ||
       FALLBACK_CHAT_API
 
-    try {
-      const genderResolved = normalizeGender(voiceGenderRef.current)
+    const _agentStart = debugParams.voiceDebug ? performance.now() : 0
 
-      if (process.env.NODE_ENV === "development") {
-        if (genderResolved === null) {
-          console.warn("[Voice] gender resolved to null — source:", voiceGenderRef.current)
-        }
-        if (genderResolved !== null && genderResolved !== "male" && genderResolved !== "female") {
-          console.warn("[Voice] gender is not male/female/null:", genderResolved)
-        }
-        console.debug("[Voice diag] source=voiceGenderRef, raw=%s, final=%s", voiceGenderRef.current, genderResolved)
-        console.debug("[Voice perf] Agent request sent at", new Date().toISOString())
-      }
+    try {
       const res = await fetch(resolvedWebhook, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...buildWebPayload({
-            query: text,
-            language: agentLang,
-            mode: "voice",
-            userId: user?.id,
-            email: effectiveEmail,
-          }),
-          gender: genderResolved,
-          roleGender: genderResolved,
+          query: text,
+          language: agentLang,
+          email: effectiveEmail,
+          mode: "voice",
+          gender: voiceGenderRef.current,
           voiceLanguage: voiceLangCode,
         }),
       })
@@ -1015,17 +1016,13 @@ if (res.status === 402) {
         data = JSON.parse(raw)
       } catch {}
 
-      if (process.env.NODE_ENV === "development") {
-        console.debug("[Voice perf] Agent response received in", Math.round(performance.now() - _t0), "ms")
-      }
-
       let answer = extractAnswer(data)
       if (!answer) answer = t("I'm sorry, I couldn't process your message. Please try again.")
 
       answer = sanitizeAssistantText(answer)
 
-      if (!answer) { setIsThinking(false); return }
-      if (shouldDedupAssistant(answer)) { setIsThinking(false); return }
+      if (!answer) return
+      if (shouldDedupAssistant(answer)) return
 
       lastAssistantSentNormRef.current = normalizeUtterance(answer)
       lastAssistantSentTsRef.current = Date.now()
@@ -1037,11 +1034,15 @@ if (res.status === 402) {
         gender: voiceGenderRef.current,
       }
 
+      if (debugParams.voiceDebug) {
+        const _agentMs = Math.round(performance.now() - _agentStart)
+        console.log(`[VOICE_DEBUG] llm_done: ${_agentMs}ms | "${answer.slice(0, 50)}"`)
+      }
+
       setMessages((prev) => [...prev, assistantMsg])
       speakText(answer, voiceLangCode)
     } catch (e: any) {
       console.error(e)
-      setIsThinking(false)
       setNetworkError(t("Connection error. Please try again."))
       if (onError && e instanceof Error) onError(e)
     } finally {
@@ -1134,6 +1135,8 @@ if (res.status === 402) {
         voiceUntilTs: 0,
         utteranceStartTs: 0,
         voiceOnCount: 0,
+        lastVoiceTs: 0,
+        shortGuardUsed: false,
       }
 
       pendingSttReasonRef.current = null
@@ -1221,7 +1224,6 @@ if (res.status === 402) {
     setIsListening(false)
     setIsMicMuted(false)
     setIsAiSpeaking(false)
-    setIsThinking(false)
     setNetworkError(null)
 
     pendingSttReasonRef.current = null
@@ -1291,13 +1293,11 @@ if (res.status === 402) {
     ? t("In crisis situations, please contact local emergency services immediately.")
     : isAiSpeaking
       ? t("Assistant is speaking...")
-      : isThinking
-        ? t("Assistant is thinking...")
-        : isMicMuted
-          ? t("Paused. Turn on microphone to continue.")
-          : isListening
-            ? t("Listening… you can speak.")
-            : t("Waiting... you can start speaking at any moment.")
+      : isMicMuted
+        ? t("Paused. Turn on microphone to continue.")
+        : isListening
+          ? t("Listening… you can speak.")
+          : t("Waiting... you can start speaking at any moment.")
 
   const __props: any = (typeof arguments !== "undefined" ? (arguments as any)[0] : undefined)
   const controlledOpen: boolean | undefined = typeof __props?.open === "boolean" ? __props.open : undefined
