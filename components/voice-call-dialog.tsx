@@ -317,7 +317,7 @@ export default function VoiceCallDialog({
   const pendingSttTimerRef = useRef<number | null>(null)
   const pendingSttStartIdxRef = useRef<number | null>(null)
 
-  const MIN_UTTERANCE_MS = 200
+  const MIN_UTTERANCE_MS = 250
   const isSttBusyRef = useRef(false)
 
   const lastUserSentNormRef = useRef("")
@@ -341,9 +341,9 @@ export default function VoiceCallDialog({
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const debugParams = useMemo(() => {
-    if (typeof window === "undefined") return { debug: false, sttDebug: false }
+    if (typeof window === "undefined") return { debug: false, sttDebug: false, voiceDebug: false }
     const qs = new URLSearchParams(window.location.search)
-    return { debug: qs.get("debugAudio") === "1", sttDebug: qs.get("sttDebug") === "1" }
+    return { debug: qs.get("debugAudio") === "1", sttDebug: qs.get("sttDebug") === "1", voiceDebug: qs.get("voiceDebug") === "1" }
   }, [])
 
   const isMobile = useMemo(() => {
@@ -431,6 +431,8 @@ export default function VoiceCallDialog({
     voiceUntilTs: 0,
     utteranceStartTs: 0,
     voiceOnCount: 0,
+    lastVoiceTs: 0,
+    shortGuardUsed: false,
   })
 
   // sttDebug overlay state (ref to avoid re-renders on every frame)
@@ -584,6 +586,7 @@ export default function VoiceCallDialog({
 
     try {
       isSttBusyRef.current = true
+      const _sttStart = debugParams.voiceDebug ? performance.now() : 0
 
       const sttLang = getSessionVoiceLang()
 
@@ -639,6 +642,11 @@ export default function VoiceCallDialog({
         text: delta,
       }
 
+      if (debugParams.voiceDebug) {
+        const _asrMs = Math.round(performance.now() - _sttStart)
+        console.log(`[VOICE_DEBUG] speech_end→asr_done: ${_asrMs}ms | "${delta.slice(0, 50)}"`)
+      }
+
       setMessages((prevMsgs) => [...prevMsgs, userMsg])
       await handleUserText(delta, sttLang)
     } catch (e: any) {
@@ -672,7 +680,7 @@ export default function VoiceCallDialog({
       pendingSttStartIdxRef.current = null
       pendingSttTimerRef.current = null
       void maybeSendStt(r, si)
-    }, 220)
+    }, 150)
   }
 
   function pickMime(): string | null {
@@ -702,7 +710,7 @@ export default function VoiceCallDialog({
     const data = new Uint8Array(analyser.fftSize)
 
     const baseThr = isMobile ? 0.014 : 0.01
-    const hangoverMs = 1200
+    const hangoverMs = 700
     const maxUtteranceMs = 25000
     const onFramesNeeded = isMobile ? 4 : 3
     const thrMult = isMobile ? 3.8 : 3.4
@@ -733,19 +741,33 @@ export default function VoiceCallDialog({
           st.voice = true
           st.voiceUntilTs = now + hangoverMs
           st.utteranceStartTs = now
+          st.lastVoiceTs = now
+          st.shortGuardUsed = false
           utterStartIdxRef.current = Math.max(1, audioChunksRef.current.length - 1)
         }
       } else {
-        if (voiceNow) st.voiceUntilTs = now + hangoverMs
+        if (voiceNow) {
+          st.voiceUntilTs = now + hangoverMs
+          st.lastVoiceTs = now
+        }
 
         if (!voiceNow && now > st.voiceUntilTs) {
-          const voiceMs = st.utteranceStartTs ? now - st.utteranceStartTs : 0
-          st.voice = false
-          st.utteranceStartTs = 0
-          if (voiceMs >= MIN_UTTERANCE_MS) {
-            void flushAndSendStt("vad_end", utterStartIdxRef.current)
-          } else if (voiceMs > 0 && debugParams.sttDebug) {
-            sttDebugRef.current.rejectReason = `too_short:${voiceMs}ms`
+          const actualSpeechMs = st.lastVoiceTs > st.utteranceStartTs
+            ? st.lastVoiceTs - st.utteranceStartTs
+            : 0
+          if (actualSpeechMs >= MIN_UTTERANCE_MS && actualSpeechMs < 400 && !st.shortGuardUsed) {
+            // Short utterance guard: wait 200ms more before finalizing to avoid cutting brief phrases
+            st.voiceUntilTs = now + 200
+            st.shortGuardUsed = true
+          } else {
+            st.voice = false
+            st.utteranceStartTs = 0
+            st.shortGuardUsed = false
+            if (actualSpeechMs >= MIN_UTTERANCE_MS) {
+              void flushAndSendStt("vad_end", utterStartIdxRef.current)
+            } else if (actualSpeechMs > 0 && debugParams.sttDebug) {
+              sttDebugRef.current.rejectReason = `too_short:${actualSpeechMs}ms`
+            }
           }
         }
 
@@ -813,7 +835,7 @@ export default function VoiceCallDialog({
       // только актуальный запрос может сбрасывать состояние
       if (seq !== ttsSeqRef.current) return
 
-      ttsCooldownUntilRef.current = Date.now() + 900
+      ttsCooldownUntilRef.current = Date.now() + 400
 
       setIsAiSpeaking(false)
       isAiSpeakingRef.current = false
@@ -824,7 +846,7 @@ export default function VoiceCallDialog({
           try {
             rec.resume()
           } catch {}
-        }, 260)
+        }, 150)
       }
     }
 
@@ -835,7 +857,7 @@ export default function VoiceCallDialog({
       setIsAiSpeaking(true)
       isAiSpeakingRef.current = true
 
-      ttsCooldownUntilRef.current = Date.now() + 900
+      ttsCooldownUntilRef.current = Date.now() + 400
 
       const hdr = audioChunksRef.current?.[0]
       audioChunksRef.current = hdr ? [hdr] : []
@@ -870,6 +892,7 @@ export default function VoiceCallDialog({
 
     ;(async () => {
       begin()
+      const _ttsStart = debugParams.voiceDebug ? performance.now() : 0
 
       try {
         const res = await fetch("/api/tts", {
@@ -902,6 +925,15 @@ export default function VoiceCallDialog({
         const ct = (data.contentType || "audio/mpeg") as string
         objectUrl = base64ToObjectUrl(data.audioContent, ct)
         a.src = objectUrl
+
+        if (debugParams.voiceDebug) {
+          const _ttsMs = Math.round(performance.now() - _ttsStart)
+          console.log(`[VOICE_DEBUG] tts_ready: ${_ttsMs}ms`)
+          a.onplay = () => {
+            const _playMs = Math.round(performance.now() - _ttsStart)
+            console.log(`[VOICE_DEBUG] first_audio_play: ${_playMs}ms from tts_start`)
+          }
+        }
 
         a.onended = () => finishOnce()
         a.onerror = () => finishOnce()
@@ -951,6 +983,8 @@ export default function VoiceCallDialog({
       TURBOTA_AGENT_WEBHOOK_URL.trim() ||
       FALLBACK_CHAT_API
 
+    const _agentStart = debugParams.voiceDebug ? performance.now() : 0
+
     try {
       const res = await fetch(resolvedWebhook, {
         method: "POST",
@@ -998,6 +1032,11 @@ if (res.status === 402) {
         role: "assistant",
         text: answer,
         gender: voiceGenderRef.current,
+      }
+
+      if (debugParams.voiceDebug) {
+        const _agentMs = Math.round(performance.now() - _agentStart)
+        console.log(`[VOICE_DEBUG] llm_done: ${_agentMs}ms | "${answer.slice(0, 50)}"`)
       }
 
       setMessages((prev) => [...prev, assistantMsg])
@@ -1096,6 +1135,8 @@ if (res.status === 402) {
         voiceUntilTs: 0,
         utteranceStartTs: 0,
         voiceOnCount: 0,
+        lastVoiceTs: 0,
+        shortGuardUsed: false,
       }
 
       pendingSttReasonRef.current = null
