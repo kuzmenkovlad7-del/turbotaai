@@ -103,22 +103,28 @@ export async function POST(req: NextRequest) {
     const orderDate = Math.floor(Date.now() / 1000)
 
     const productName = body?.productName ? String(body.productName) : "TurbotaAI subscription"
-    const productCount = "1"
-    const productPrice = amountStr
+
+    // IMPORTANT: use the same numeric values for HMAC signature AND JSON body.
+    // JSON serializes 499.00 as 499 (no trailing zeros). WayForPay verifies
+    // the signature against the values it receives, so String(Number("499.00"))
+    // = "499" must be in both the sign string and the JSON payload.
+    const amountNum = Number(amountStr)
+    const productPriceNum = amountNum
+    const productCountNum = 1
 
     // Signature field order per WayForPay docs:
     // merchantAccount;merchantDomainName;orderReference;orderDate;amount;currency;
-    // productName;productCount;productPrice
+    // productName[0];...;productCount[0];...;productPrice[0];...
     const signString = [
       merchantAccount,
       merchantDomainName,
       orderReference,
       String(orderDate),
-      amountStr,
+      String(amountNum),
       currency,
       productName,
-      productCount,
-      productPrice,
+      String(productCountNum),
+      String(productPriceNum),
     ].join(";")
 
     const merchantSignature = hmacMd5Hex(signString, secretKey)
@@ -132,19 +138,20 @@ export async function POST(req: NextRequest) {
       order_reference: orderReference,
       status: "created",
       plan_id: planId,
-      amount: Number(amountStr),
+      amount: amountNum,
       currency,
       user_id: userId,
       device_hash: deviceHash,
       raw: {
         __event: "create_invoice_request",
         planId,
-        amount: amountStr,
+        amount: amountNum,
         currency,
         merchantDomainName,
         appBase,
         serviceUrl,
         returnUrl,
+        signString,
       },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -160,11 +167,11 @@ export async function POST(req: NextRequest) {
       language: String(body?.language || "UA"),
       orderReference,
       orderDate,
-      amount: Number(amountStr),
+      amount: amountNum,
       currency,
       productName: [productName],
-      productCount: [Number(productCount)],
-      productPrice: [Number(productPrice)],
+      productCount: [productCountNum],
+      productPrice: [productPriceNum],
       returnUrl,
       serviceUrl,
     }
@@ -188,12 +195,13 @@ export async function POST(req: NextRequest) {
           request: {
             orderReference,
             orderDate,
-            amount: amountStr,
+            amount: amountNum,
             currency,
             planId,
             merchantDomainName,
             serviceUrl,
             returnUrl,
+            signString,
           },
           response: j,
           httpStatus: r.status,
