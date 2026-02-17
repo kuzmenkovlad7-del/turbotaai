@@ -2,35 +2,66 @@
 /**
  * verify-pixel-strict.mjs
  *
- * Strict verification of Meta Pixel initialisation.
- * Combines source-code analysis with optional live-page fetching.
+ * Playwright-based verification of Meta Pixel integration.
+ * Opens /pricing in a real browser, collects network requests and console
+ * logs, then validates pixel initialisation and tracking fire.
  *
  * Usage:
- *   node scripts/verify-pixel-strict.mjs [baseUrl] [expectedPixelId]
+ *   node scripts/verify-pixel-strict.mjs <baseUrl> <expectedPixelId>
  *
- * Exit 0  => OK
- * Exit 1  => one or more checks FAILED
+ * Example:
+ *   node scripts/verify-pixel-strict.mjs https://www.turbotaai.com 1231870625080038
+ *
+ * Exit 0  => OK   (all checks passed)
+ * Exit 1  => FAIL (one or more checks failed, reasons printed)
  */
 
-import { readFileSync, existsSync } from "node:fs"
-import { resolve } from "node:path"
+// Playwright may be installed globally (e.g. /opt/node22/lib/node_modules).
+// Use createRequire to resolve it from either local or global node_modules.
+import { createRequire } from "node:module"
 
-const [, , baseUrl, expectedPixelId] = process.argv
+let chromium
+try {
+  // Try local first
+  ;({ chromium } = await import("playwright"))
+} catch {
+  // Fall back to global installation
+  const globalRoot = "/opt/node22/lib/node_modules"
+  const require = createRequire(globalRoot + "/playwright/index.js")
+  ;({ chromium } = require("."))
+}
 
-const ROOT = resolve(import.meta.dirname, "..")
+// ---------------------------------------------------------------------------
+// Args
+// ---------------------------------------------------------------------------
+
+const [, , rawBaseUrl, expectedPixelId] = process.argv
+
+if (!rawBaseUrl || !expectedPixelId) {
+  console.error(
+    "Usage: node scripts/verify-pixel-strict.mjs <baseUrl> <expectedPixelId>"
+  )
+  process.exit(2)
+}
+
+const baseUrl = rawBaseUrl.replace(/\/$/, "")
+
+// ---------------------------------------------------------------------------
+// Colour helpers
+// ---------------------------------------------------------------------------
 
 const RED = "\x1b[31m"
 const GREEN = "\x1b[32m"
 const YELLOW = "\x1b[33m"
 const RESET = "\x1b[0m"
 
+// ---------------------------------------------------------------------------
+// Result tracking
+// ---------------------------------------------------------------------------
+
 let passed = 0
 let failed = 0
 const failures = []
-
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
 
 function pass(label) {
   console.log(`${GREEN}PASS${RESET} ${label}`)
@@ -43,211 +74,251 @@ function fail(label, reason) {
   failed++
 }
 
-function checkSource(label, filePath, pattern) {
-  const full = resolve(ROOT, filePath)
-  if (!existsSync(full)) {
-    fail(label, `file not found: ${filePath}`)
-    return
-  }
-  const content = readFileSync(full, "utf8")
-  // pattern must be a RegExp (never use string-based flags that could be invalid)
-  if (!(pattern instanceof RegExp)) {
-    fail(label, "INTERNAL: pattern must be a RegExp")
-    return
-  }
-  if (pattern.test(content)) {
-    pass(label)
-  } else {
-    fail(label, `pattern /${pattern.source}/${pattern.flags} not found in ${filePath}`)
-  }
-}
-
-function checkSourceNot(label, filePath, pattern) {
-  const full = resolve(ROOT, filePath)
-  if (!existsSync(full)) {
-    fail(label, `file not found: ${filePath}`)
-    return
-  }
-  const content = readFileSync(full, "utf8")
-  if (!(pattern instanceof RegExp)) {
-    fail(label, "INTERNAL: pattern must be a RegExp")
-    return
-  }
-  if (!pattern.test(content)) {
-    pass(label)
-  } else {
-    fail(label, `forbidden pattern /${pattern.source}/${pattern.flags} found in ${filePath}`)
-  }
-}
-
 // ---------------------------------------------------------------------------
-// Static source analysis
+// Main
 // ---------------------------------------------------------------------------
 
-console.log(`\n${YELLOW}=== Meta Pixel Strict Verification ===${RESET}\n`)
-console.log(`${YELLOW}[1/3] Source code checks${RESET}\n`)
+console.log(`\n${YELLOW}=== Meta Pixel Strict Verification (Playwright) ===${RESET}`)
+console.log(`  baseUrl:         ${baseUrl}`)
+console.log(`  expectedPixelId: ${expectedPixelId}\n`)
 
-// analytics.tsx: pixel id trimmed and validated before use
-checkSource(
-  "analytics.tsx: trims pixel ID before use",
-  "components/analytics.tsx",
-  /normalise.*[Pp]ixel[Ii]d|normalize.*[Pp]ixel[Ii]d|trim\(\).*null|null.*trim\(\)|(raw\s*\?\?.*)\s*\.trim\(\)/
-)
+const browser = await chromium.launch({ headless: true })
 
-checkSource(
-  "analytics.tsx: rejects null / undefined / empty pixel ID",
-  "components/analytics.tsx",
-  /null.*undefined|invalid_id|reject.*pixel|pixelId.*null|null.*pixelId|validPixelId|isValidPixel/i
-)
+try {
+  const context = await browser.newContext({
+    ignoreHTTPSErrors: true,
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  })
 
-checkSource(
-  "analytics.tsx: has global __fbPixelInited guard",
-  "components/analytics.tsx",
-  /__fbPixelInited/
-)
+  const page = await context.newPage()
 
-checkSource(
-  "analytics.tsx: tracks pixelInitReason",
-  "components/analytics.tsx",
-  /pixelInitReason/
-)
+  // -------------------------------------------------------------------------
+  // Collectors
+  // -------------------------------------------------------------------------
 
-checkSource(
-  "analytics.tsx: tracks pixelInitSuccess",
-  "components/analytics.tsx",
-  /pixelInitSuccess/
-)
+  /** URLs that loaded fbevents.js */
+  const fbeventsRequests = []
 
-checkSource(
-  "analytics.tsx: tracks pixelInitAttempted",
-  "components/analytics.tsx",
-  /pixelInitAttempted/
-)
+  /** URLs matching facebook.com/tr (pixel fire requests) */
+  const trRequests = []
 
-// tracking.ts: fbq missing guard with reason
-checkSource(
-  "tracking.ts: fbq missing guard logs reason",
-  "lib/tracking.ts",
-  /fbq_missing|fbq.*missing|pixelInitReason|fbPixelInited/
-)
+  /** All console messages */
+  const consoleLogs = []
 
-// No unconditional init with potentially-null ID
-checkSourceNot(
-  "analytics.tsx: no fbq('init', null) call",
-  "components/analytics.tsx",
-  /fbq\s*\(\s*["']init["']\s*,\s*null\s*\)/
-)
+  page.on("request", (req) => {
+    const url = req.url()
+    if (/connect\.facebook\.net\/.*fbevents\.js/.test(url)) {
+      fbeventsRequests.push(url)
+    }
+    if (/facebook\.com\/tr\b/.test(url)) {
+      trRequests.push(url)
+    }
+  })
 
-// ---------------------------------------------------------------------------
-// Live page checks (optional, only when baseUrl is provided)
-// ---------------------------------------------------------------------------
+  page.on("console", (msg) => {
+    consoleLogs.push({ type: msg.type(), text: msg.text() })
+  })
 
-if (baseUrl) {
-  console.log(`\n${YELLOW}[2/3] Live page checks — ${baseUrl}${RESET}\n`)
+  // -------------------------------------------------------------------------
+  // Navigate to /pricing
+  // -------------------------------------------------------------------------
 
-  const pricingUrl = baseUrl.replace(/\/$/, "") + "/pricing"
+  const pricingUrl = `${baseUrl}/pricing`
+  console.log(`${YELLOW}[1/4] Opening ${pricingUrl}${RESET}\n`)
 
-  let html = null
+  let loadOk = false
   try {
-    const resp = await fetch(pricingUrl, {
-      headers: { "Accept": "text/html" },
-      signal: AbortSignal.timeout(15_000),
+    const response = await page.goto(pricingUrl, {
+      waitUntil: "networkidle",
+      timeout: 30_000,
     })
-    if (!resp.ok) {
-      fail("fetch /pricing", `HTTP ${resp.status}`)
+    if (response && response.ok()) {
+      pass(`GET /pricing returned ${response.status()}`)
+      loadOk = true
     } else {
-      html = await resp.text()
-      pass("fetch /pricing returns 200")
+      fail("GET /pricing", `HTTP ${response?.status() ?? "no response"}`)
     }
   } catch (err) {
-    fail("fetch /pricing", String(err))
+    fail("GET /pricing", String(err))
   }
 
-  if (html) {
-    // Check that fbevents.js is referenced (either inline script or next/script src)
-    const hasFbevents =
-      /connect\.facebook\.net[^"']*fbevents\.js/.test(html) ||
-      /fbevents/.test(html)
-
-    if (hasFbevents) {
-      pass("HTML references connect.facebook.net/…/fbevents.js")
-    } else {
-      // Next.js may lazy-load fbevents.js from client JS bundles, not inline HTML.
-      // This is expected — treat as info, not hard failure.
-      pass("fbevents.js loaded dynamically by client JS (not in SSR HTML — expected for Next.js)")
-    }
-
-    // Check that "Invalid PixelID" string does NOT appear in the SSR HTML
-    if (/Invalid\s*PixelID/i.test(html)) {
-      fail("SSR HTML must not contain 'Invalid PixelID'", "found in HTML response")
-    } else {
-      pass("SSR HTML does not contain 'Invalid PixelID'")
-    }
-
-    // If expected pixel id provided, check it appears in the HTML (e.g. noscript fallback)
-    if (expectedPixelId) {
-      if (html.includes(expectedPixelId)) {
-        pass(`Pixel ID ${expectedPixelId} found in SSR HTML`)
-      } else {
-        // May be absent in SSR if script is deferred — not a hard fail
-        pass(`Pixel ID ${expectedPixelId} not in SSR HTML — expected (Next.js deferred init)`)
-      }
-
-      // Confirm pixel is never initialised with a literal "null" or empty in SSR
-      const badInit = new RegExp(`fbq\\s*\\(\\s*['"]init['"]\\s*,\\s*['"]?null['"]?\\s*\\)`)
-      if (badInit.test(html)) {
-        fail("SSR HTML must not call fbq('init', null)", "found literal null init")
-      } else {
-        pass("SSR HTML has no fbq('init', null) call")
-      }
-    }
+  // Give pixel a moment to fire after networkidle
+  if (loadOk) {
+    await page.waitForTimeout(2000)
   }
 
-  // ---------------------------------------------------------------------------
-  // facebook.com/tr pixel fire check via noscript fallback
-  // ---------------------------------------------------------------------------
-  console.log(`\n${YELLOW}[3/3] Pixel fire URL checks${RESET}\n`)
+  // -------------------------------------------------------------------------
+  // Check 1: fbevents.js loaded
+  // -------------------------------------------------------------------------
 
-  if (html && expectedPixelId) {
-    // Noscript fallback: <img src="https://www.facebook.com/tr?id=PIXEL_ID&...">
-    const trPattern = new RegExp(
-      `facebook\\.com/tr\\?id=${expectedPixelId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
+  console.log(`\n${YELLOW}[2/4] Network request checks${RESET}\n`)
+
+  if (fbeventsRequests.length > 0) {
+    pass(
+      `fbevents.js loaded (${fbeventsRequests.length} request${fbeventsRequests.length > 1 ? "s" : ""})`
     )
-    if (trPattern.test(html)) {
-      pass(`Noscript fallback contains facebook.com/tr?id=${expectedPixelId}`)
+  } else {
+    fail("fbevents.js load", "no request to connect.facebook.net/*/fbevents.js detected")
+  }
+
+  // -------------------------------------------------------------------------
+  // Check 2: facebook.com/tr fired with expected pixel ID
+  // -------------------------------------------------------------------------
+
+  if (trRequests.length > 0) {
+    pass(
+      `facebook.com/tr fired (${trRequests.length} request${trRequests.length > 1 ? "s" : ""})`
+    )
+
+    // Extract id= from each tr URL and check expectedPixelId exists
+    const escapedId = expectedPixelId.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&"
+    )
+    const idPattern = new RegExp(`[?&]id=${escapedId}(?:&|$)`)
+
+    const hasCorrectId = trRequests.some((url) => idPattern.test(url))
+    if (hasCorrectId) {
+      pass(`tr?id contains expected pixel ID ${expectedPixelId}`)
     } else {
-      // May be absent if pixel init is purely client-side (valid for Next.js)
-      pass(`Noscript fallback with pixel ID not found — acceptable if JS-only init`)
+      fail(
+        `tr?id contains expected pixel ID`,
+        `none of the ${trRequests.length} tr requests contain id=${expectedPixelId}`
+      )
     }
 
-    // Verify no tr?id=null in HTML
-    if (/facebook\.com\/tr\?id=null/.test(html)) {
-      fail("HTML must not have facebook.com/tr?id=null", "found null pixel fire URL")
+    // Check none have id=null
+    const hasNullId = trRequests.some((url) => /[?&]id=null(?:&|$)/.test(url))
+    if (!hasNullId) {
+      pass("no tr request has id=null")
     } else {
-      pass("No facebook.com/tr?id=null in HTML")
+      fail("tr?id=null check", "found facebook.com/tr request with id=null")
     }
-  } else if (!expectedPixelId) {
-    console.log(`  ${YELLOW}(skipping pixel ID checks — no expectedPixelId provided)${RESET}`)
+  } else {
+    fail("facebook.com/tr fire", "no request to facebook.com/tr detected")
   }
-} else {
-  console.log(`\n${YELLOW}[2/3] Live checks skipped (no baseUrl provided)${RESET}`)
-  console.log(`${YELLOW}[3/3] Pixel fire URL checks skipped${RESET}`)
-}
 
-// ---------------------------------------------------------------------------
-// Summary
-// ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // Check 3: Console must NOT contain "Invalid PixelID: null"
+  // -------------------------------------------------------------------------
 
-console.log(
-  `\n${YELLOW}Results:${RESET} ${GREEN}${passed} passed${RESET}, ${failed > 0 ? RED : GREEN}${failed} failed${RESET}`
-)
+  console.log(`\n${YELLOW}[3/4] Console log checks${RESET}\n`)
 
-if (failures.length > 0) {
-  console.log(`\n${RED}Failures:${RESET}`)
-  for (const f of failures) {
-    console.log(`  ${RED}✗${RESET} ${f.label}: ${f.reason}`)
+  const invalidPixelLogs = consoleLogs.filter((l) =>
+    /Invalid\s*PixelID.*null/i.test(l.text)
+  )
+  if (invalidPixelLogs.length === 0) {
+    pass('console has no "Invalid PixelID: null" messages')
+  } else {
+    fail(
+      '"Invalid PixelID: null" in console',
+      `found ${invalidPixelLogs.length} occurrence(s): ${invalidPixelLogs.map((l) => l.text).join(" | ")}`
+    )
   }
-  console.log()
+
+  // Also flag any Meta Pixel error console messages
+  const metaPixelErrors = consoleLogs.filter(
+    (l) =>
+      l.type === "error" &&
+      /meta\s*pixel|fbq|facebook/i.test(l.text)
+  )
+  if (metaPixelErrors.length === 0) {
+    pass("no Meta Pixel console errors")
+  } else {
+    // Warn but don't hard-fail for generic pixel errors (e.g. network issues)
+    console.log(
+      `  ${YELLOW}WARN${RESET} ${metaPixelErrors.length} Meta Pixel console error(s) detected (not a hard failure)`
+    )
+    for (const e of metaPixelErrors) {
+      console.log(`    ${e.text.slice(0, 200)}`)
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Check 4: __trackingDebug is populated
+  // -------------------------------------------------------------------------
+
+  console.log(`\n${YELLOW}[4/4] __trackingDebug diagnostics${RESET}\n`)
+
+  let debugObj = null
+  try {
+    debugObj = await page.evaluate(() => (window).__trackingDebug)
+  } catch {
+    // ignore
+  }
+
+  if (debugObj) {
+    pass("window.__trackingDebug is populated")
+
+    if (debugObj.pixelInitAttempted === true) {
+      pass("pixelInitAttempted = true")
+    } else {
+      fail("pixelInitAttempted", `expected true, got ${debugObj.pixelInitAttempted}`)
+    }
+
+    if (debugObj.pixelInitSuccess === true) {
+      pass("pixelInitSuccess = true")
+    } else {
+      fail("pixelInitSuccess", `expected true, got ${debugObj.pixelInitSuccess}`)
+    }
+
+    if (debugObj.pixelInitReason === "ok") {
+      pass('pixelInitReason = "ok"')
+    } else {
+      fail("pixelInitReason", `expected "ok", got "${debugObj.pixelInitReason}"`)
+    }
+
+    if (debugObj.pixelIdMasked && debugObj.pixelIdMasked !== "(none)") {
+      pass(`pixelIdMasked = "${debugObj.pixelIdMasked}"`)
+    } else {
+      fail("pixelIdMasked", `expected a masked ID, got "${debugObj.pixelIdMasked}"`)
+    }
+  } else {
+    fail("window.__trackingDebug", "not found on page")
+  }
+
+  // -------------------------------------------------------------------------
+  // Structured JSON result
+  // -------------------------------------------------------------------------
+
+  const result = {
+    url: pricingUrl,
+    expectedPixelId,
+    fbeventsLoaded: fbeventsRequests.length > 0,
+    trRequestCount: trRequests.length,
+    trUrls: trRequests,
+    invalidPixelIdConsole: invalidPixelLogs.length,
+    trackingDebug: debugObj,
+    passed,
+    failed,
+    failures,
+  }
+
+  console.log(`\n${YELLOW}--- Structured Result ---${RESET}`)
+  console.log(JSON.stringify(result, null, 2))
+
+  // -------------------------------------------------------------------------
+  // Summary
+  // -------------------------------------------------------------------------
+
+  console.log(
+    `\n${YELLOW}Results:${RESET} ${GREEN}${passed} passed${RESET}, ${
+      failed > 0 ? RED : GREEN
+    }${failed} failed${RESET}`
+  )
+
+  if (failures.length > 0) {
+    console.log(`\n${RED}FAIL${RESET} — reasons:`)
+    for (const f of failures) {
+      console.log(`  ${RED}✗${RESET} ${f.label}: ${f.reason}`)
+    }
+    console.log()
+  } else {
+    console.log(`\n${GREEN}OK${RESET}\n`)
+  }
+} finally {
+  await browser.close()
 }
 
 process.exit(failed > 0 ? 1 : 0)
