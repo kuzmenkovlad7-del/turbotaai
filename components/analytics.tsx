@@ -47,8 +47,8 @@ function log(...args: any[]) {
 
 function maskPixelId(id: string | null): string {
   if (!id) return "(none)"
-  if (id.length <= 6) return "***"
-  return id.slice(0, 3) + "***" + id.slice(-3)
+  if (id.length <= 4) return "***"
+  return "***" + id.slice(-4)
 }
 
 export default function Analytics() {

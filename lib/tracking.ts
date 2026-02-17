@@ -63,6 +63,9 @@ function fb(eventName: string, params?: Record<string, any>) {
   const w = typeof window !== "undefined" ? (window as any) : null
   if (!w?.fbq) {
     log("fb skip — fbq_missing", eventName)
+    if (w) {
+      w.__trackingDebug = { ...(w.__trackingDebug ?? {}), pixelInitReason: "fbq_missing" }
+    }
     return
   }
   if (!w.__fbPixelInited) {
@@ -201,6 +204,9 @@ export function trackFbPageView(path: string) {
   const w = typeof window !== "undefined" ? (window as any) : null
   if (!w?.fbq) {
     log("fb PageView skip — fbq_missing", path)
+    if (w) {
+      w.__trackingDebug = { ...(w.__trackingDebug ?? {}), pixelInitReason: "fbq_missing" }
+    }
     return
   }
   if (!w.__fbPixelInited) {
