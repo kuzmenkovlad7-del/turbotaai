@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { BrandMark } from "@/components/brand/BrandMark"
+import { trackLogin } from "@/lib/tracking"
 
 export default function LoginPage() {
   const { currentLanguage } = useLanguage()
@@ -87,6 +88,7 @@ export default function LoginPage() {
         throw new Error(d?.error || copy.error)
       }
 
+      trackLogin("email")
       router.refresh()
       router.push(next)
     } catch (e: any) {

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { useLanguage } from "@/lib/i18n/language-context"
+import { trackPurchase } from "@/lib/tracking"
 
 type OrderStatus = "pending" | "paid" | "failed"
 
@@ -158,6 +159,28 @@ export default function PaymentResultPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderReference])
+
+  // Track purchase conversion once when status becomes "paid"
+  const purchaseTrackedRef = useRef(false)
+  useEffect(() => {
+    if (status === "paid" && orderReference && !purchaseTrackedRef.current) {
+      purchaseTrackedRef.current = true
+      // Read region cookie to determine currency
+      const regionCookie = typeof document !== "undefined"
+        ? (document.cookie.match(/(?:^|;\s*)ta_region=([^;]+)/)?.[1] || "INTL")
+        : "INTL"
+      const currency = regionCookie === "UA" ? "UAH" : "USD"
+      const value = currency === "UAH"
+        ? Number(process.env.NEXT_PUBLIC_PRICE_UAH || "499")
+        : Number(process.env.NEXT_PUBLIC_PRICE_USD || "12")
+
+      trackPurchase({
+        transaction_id: orderReference,
+        value,
+        currency,
+      })
+    }
+  }, [status, orderReference])
 
   const showPaid = status === "paid"
   const showFailed = status === "failed"

@@ -16,6 +16,7 @@ import AIChatDialog from "@/components/ai-chat-dialog"
 import VoiceCallDialog from "@/components/voice-call-dialog"
 import VideoCallDialog from "@/components/video-call-dialog"
 import { useLanguage } from "@/lib/i18n/language-context"
+import { trackLeadClick } from "@/lib/tracking"
 import { ShineBorder } from "@/components/ui/shine-border"
 import { RainbowButton } from "@/components/ui/rainbow-button"
 
@@ -28,6 +29,7 @@ export default function Home() {
 
   // Открываем модалки сразу
   const openChat = () => {
+    trackLeadClick("chat")
     setIsChatOpen(true)
   }
 
@@ -47,6 +49,7 @@ export default function Home() {
       )
     }
 
+    trackLeadClick("voice")
     setIsVoiceCallOpen(true)
   }
 
@@ -59,6 +62,7 @@ export default function Home() {
       )
     }
 
+    trackLeadClick("video")
     setIsVideoCallOpen(true)
   }
 
