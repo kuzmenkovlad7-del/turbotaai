@@ -8,7 +8,7 @@ import { Menu } from "lucide-react"
 import { RainbowButton } from "@/components/ui/rainbow-button"
 import { Banner } from "@/components/ui/banner"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet"
 import { LanguageSelector } from "@/components/language-selector"
 
 import { useLanguage } from "@/lib/i18n/language-context"
@@ -428,6 +428,8 @@ export default function Header() {
           </SheetTrigger>
 
           <SheetContent side="left" className="w-[300px] border-border bg-white">
+            <SheetTitle className="sr-only">Navigation menu</SheetTitle>
+            <SheetDescription className="sr-only">Site navigation links</SheetDescription>
             <div className="flex flex-col gap-6 pt-6">
               <div className="flex items-center gap-2">
                 <Logo />

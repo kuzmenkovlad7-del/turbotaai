@@ -28,9 +28,13 @@ function pushDebugEvent(event: string, params?: Record<string, any>) {
 /** Refresh window.__trackingDebug with current state */
 export function updateTrackingDebug() {
   if (typeof window === "undefined") return
-  ;(window as any).__trackingDebug = {
-    gaLoaded: typeof (window as any).gtag === "function",
-    fbLoaded: typeof (window as any).fbq === "function",
+  const w = window as any
+  const prev = w.__trackingDebug ?? {}
+  w.__trackingDebug = {
+    // Preserve pixel init fields written by Analytics component
+    ...prev,
+    gaLoaded: typeof w.gtag === "function",
+    fbLoaded: typeof w.fbq === "function",
     lastEvents: _lastEvents.slice(),
     counters: { ..._counters },
   }
@@ -57,7 +61,14 @@ function ga(eventName: string, params?: Record<string, any>) {
 
 function fb(eventName: string, params?: Record<string, any>) {
   const w = typeof window !== "undefined" ? (window as any) : null
-  if (!w?.fbq) return
+  if (!w?.fbq) {
+    log("fb skip — fbq_missing", eventName)
+    return
+  }
+  if (!w.__fbPixelInited) {
+    log("fb skip — pixel not initialized", eventName)
+    return
+  }
   w.fbq("track", eventName, params)
   log("fb", eventName, params)
 }
@@ -188,7 +199,14 @@ export function trackPageView(path: string) {
 /** Meta Pixel PageView (used by Analytics component) */
 export function trackFbPageView(path: string) {
   const w = typeof window !== "undefined" ? (window as any) : null
-  if (!w?.fbq) return
+  if (!w?.fbq) {
+    log("fb PageView skip — fbq_missing", path)
+    return
+  }
+  if (!w.__fbPixelInited) {
+    log("fb PageView skip — pixel not initialized", path)
+    return
+  }
   w.fbq("track", "PageView")
   log("fb PageView", path)
 }
