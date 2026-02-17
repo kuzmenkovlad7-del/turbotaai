@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react"
 import { usePathname } from "next/navigation"
 import Script from "next/script"
+import { trackPageView, trackFbPageView, updateTrackingDebug } from "@/lib/tracking"
 
 const GA_ID = "G-RRMR2Y3VGJ"
 const FB_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID || ""
@@ -14,26 +15,17 @@ declare global {
     dataLayer?: any[]
     fbq?: (...args: any[]) => void
     _fbq?: any
-    __trackingDebug?: { gaLoaded: boolean; fbLoaded: boolean }
+    __trackingDebug?: {
+      gaLoaded: boolean
+      fbLoaded: boolean
+      lastEvents?: any[]
+      counters?: Record<string, number>
+    }
   }
 }
 
 function log(...args: any[]) {
   if (DEBUG) console.log("[tracking]", ...args)
-}
-
-/** Fires GA4 page_view for the given path */
-function gaPageView(path: string) {
-  if (typeof window === "undefined" || !window.gtag) return
-  window.gtag("config", GA_ID, { page_path: path })
-  log("ga4 page_view", path)
-}
-
-/** Fires Meta Pixel PageView (deduped via eventID) */
-function fbPageView(path: string) {
-  if (typeof window === "undefined" || !window.fbq || !FB_PIXEL_ID) return
-  window.fbq("track", "PageView")
-  log("fb PageView", path)
 }
 
 export default function Analytics() {
@@ -95,22 +87,15 @@ export default function Analytics() {
     if (pathname === prevPathRef.current) return
     prevPathRef.current = pathname
 
-    gaPageView(pathname)
-    fbPageView(pathname)
+    trackPageView(pathname)
+    trackFbPageView(pathname)
   }, [pathname])
 
-  // Debug helper
+  // Debug helper — updates every 2s
   useEffect(() => {
     if (typeof window === "undefined") return
-    const update = () => {
-      window.__trackingDebug = {
-        gaLoaded: typeof window.gtag === "function",
-        fbLoaded: typeof window.fbq === "function",
-      }
-    }
-    update()
-    // Re-check after scripts load
-    const timer = window.setInterval(update, 2000)
+    updateTrackingDebug()
+    const timer = window.setInterval(updateTrackingDebug, 2000)
     return () => window.clearInterval(timer)
   }, [])
 

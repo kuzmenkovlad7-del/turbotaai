@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { BrandMark } from "@/components/brand/BrandMark"
 import { useLanguage } from "@/lib/i18n/language-context"
+import { trackSignup, trackTrialStart } from "@/lib/tracking"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -121,6 +122,9 @@ export default function RegisterPage() {
         setErrorText(data?.error || copy.errGeneric)
         return
       }
+
+      trackSignup("email")
+      trackTrialStart()
 
       const r2 = await fetch("/api/auth/login", {
         method: "POST",

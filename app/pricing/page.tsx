@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useLanguage } from "@/lib/i18n/language-context"
+import { trackCheckoutStart, trackAddPaymentInfo } from "@/lib/tracking"
 
 type AnyObj = Record<string, any>
 
@@ -266,6 +267,9 @@ export default function PricingPage() {
     setPayMsg(null)
     setPayLoading(true)
 
+    const currency = isUA ? "UAH" : "USD"
+    trackCheckoutStart({ value: displayPrice, currency })
+
     try {
       // Server determines amount + currency from ta_region cookie — we only send planId
       const r = await fetch("/api/billing/wayforpay/create-invoice", {
@@ -283,6 +287,7 @@ export default function PricingPage() {
       }
       if (!r.ok || !d?.invoiceUrl) throw new Error(d?.error || copy.payFailed)
 
+      trackAddPaymentInfo({ value: displayPrice, currency })
       window.location.assign(String(d.invoiceUrl))
       setPayMsg(copy.invoiceOpened)
     } catch (e: any) {

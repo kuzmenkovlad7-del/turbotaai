@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/language-context"
+import { trackContactFormSubmit } from "@/lib/tracking"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -58,6 +59,7 @@ export default function ContactForm() {
         throw new Error("Failed to send")
       }
 
+      trackContactFormSubmit()
       setSuccess(
         t(
           "Your message has been sent. We will reply to you as soon as possible.",
