@@ -117,7 +117,16 @@ try {
   })
 
   page.on("console", (msg) => {
-    consoleLogs.push({ type: msg.type(), text: msg.text() })
+    let location = null
+    try {
+      const loc = msg.location()
+      if (loc && (loc.url || loc.lineNumber != null)) {
+        location = { url: loc.url ?? null, lineNumber: loc.lineNumber ?? null }
+      }
+    } catch {
+      // location() may throw in some Playwright versions — ignore
+    }
+    consoleLogs.push({ type: msg.type(), text: msg.text(), location })
   })
 
   // -------------------------------------------------------------------------
@@ -211,9 +220,18 @@ try {
   if (invalidPixelLogs.length === 0) {
     pass('console has no "Invalid PixelID: null" messages')
   } else {
+    const details = invalidPixelLogs
+      .map((l) => {
+        let info = l.text
+        if (l.location?.url) {
+          info += ` (source: ${l.location.url}:${l.location.lineNumber ?? "?"})`
+        }
+        return info
+      })
+      .join(" | ")
     fail(
       '"Invalid PixelID: null" in console',
-      `found ${invalidPixelLogs.length} occurrence(s): ${invalidPixelLogs.map((l) => l.text).join(" | ")}`
+      `found ${invalidPixelLogs.length} occurrence(s): ${details}`
     )
   }
 
@@ -289,6 +307,11 @@ try {
     trRequestCount: trRequests.length,
     trUrls: trRequests,
     invalidPixelIdConsole: invalidPixelLogs.length,
+    invalidPixelIdSources: invalidPixelLogs.map((l) => ({
+      text: l.text,
+      sourceUrl: l.location?.url ?? null,
+      lineNumber: l.location?.lineNumber ?? null,
+    })),
     trackingDebug: debugObj,
     passed,
     failed,
