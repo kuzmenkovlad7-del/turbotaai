@@ -191,6 +191,53 @@ export function trackTrialStart() {
   updateTrackingDebug()
 }
 
+// ---------------------------------------------------------------------------
+// UTM helper — reads current URL search params (client-only)
+// ---------------------------------------------------------------------------
+
+function getUtmParams(): Record<string, string> | undefined {
+  if (typeof window === "undefined") return undefined
+  const sp = new URLSearchParams(window.location.search)
+  const utmKeys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"]
+  const result: Record<string, string> = {}
+  for (const key of utmKeys) {
+    const val = sp.get(key)
+    if (val) result[key] = val
+  }
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
+// ---------------------------------------------------------------------------
+// Modal CTA click events — URL does not change when modal opens
+// ---------------------------------------------------------------------------
+
+/** Start chat CTA clicked — chat modal opens, URL unchanged */
+export function trackStartChatClick() {
+  const utmParams = getUtmParams()
+  ga("start_chat_click", utmParams)
+  fb("Lead", { content_name: "start_chat_click", ...utmParams })
+  pushDebugEvent("start_chat_click", utmParams)
+  updateTrackingDebug()
+}
+
+/** Start voice call CTA clicked — voice modal opens, URL unchanged */
+export function trackStartVoiceClick() {
+  const utmParams = getUtmParams()
+  ga("start_voice_click", utmParams)
+  fb("Lead", { content_name: "start_voice_click", ...utmParams })
+  pushDebugEvent("start_voice_click", utmParams)
+  updateTrackingDebug()
+}
+
+/** Start video call CTA clicked — video modal opens, URL unchanged */
+export function trackStartVideoClick() {
+  const utmParams = getUtmParams()
+  ga("start_video_click", utmParams)
+  fb("Lead", { content_name: "start_video_click", ...utmParams })
+  pushDebugEvent("start_video_click", utmParams)
+  updateTrackingDebug()
+}
+
 /** GA4 page_view (used by Analytics component) */
 export function trackPageView(path: string) {
   const w = typeof window !== "undefined" ? (window as any) : null
