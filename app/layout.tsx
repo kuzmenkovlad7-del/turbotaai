@@ -78,6 +78,9 @@ export const metadata: Metadata = {
   alternates: {
     canonical: siteUrl,
   },
+  other: {
+    "facebook-domain-verification": "bqqiilr7wt85794ofs5ddw97b8pugg",
+  },
 }
 
 export const viewport: Viewport = {

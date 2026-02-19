@@ -162,6 +162,7 @@ export type MessagePayload = {
   deviceId: string
   clientMessageId: string
   timestamp: string
+  user?: string
   email?: string
 }
 
@@ -175,6 +176,9 @@ function validatePayload(payload: MessagePayload): void {
   if (!payload.timestamp) issues.push("timestamp is empty")
   if (!payload.language) issues.push("language is empty")
   if (payload.userId === "") issues.push("userId is empty string (should be null)")
+  if (!["chat", "voice", "video"].includes(payload.mode)) issues.push("mode is invalid")
+  if (!payload.user) issues.push("user compat field is missing")
+  if (payload.user === "guest@example.com") issues.push("user must not be guest@example.com")
   if (issues.length > 0) {
     console.warn("[PayloadValidator] Issues before send:", issues.join(", "), payload)
   }
@@ -222,6 +226,7 @@ export async function sendMessage(payload: MessagePayload & { user?: string }): 
       deviceId: payload.deviceId,
       clientMessageId: payload.clientMessageId,
       timestamp: payload.timestamp,
+      user: payload.user || undefined,
       email: payload.email || undefined,
       user: payload.user || payload.userId || `guest:${payload.sessionId}`,
     }),

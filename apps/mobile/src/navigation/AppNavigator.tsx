@@ -48,12 +48,14 @@ import ConversationDetailScreen from "@/screens/ConversationDetailScreen"
 import AccountScreen from "@/screens/AccountScreen"
 import VideoAssistantScreen from "@/screens/VideoAssistantScreen"
 import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen"
+import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen"
 
 /* ── Type definitions ── */
 
 export type AuthStackParams = {
   Login: undefined
   Register: undefined
+  ForgotPassword: undefined
 }
 
 export type AppStackParams = {
@@ -207,6 +209,7 @@ export default function AppNavigator() {
               <LoginScreen
                 onLogin={login}
                 onGoToRegister={() => navigation.navigate("Register")}
+                onGoToForgotPassword={() => navigation.navigate("ForgotPassword")}
                 loading={loading}
                 error={error}
               />
@@ -220,6 +223,11 @@ export default function AppNavigator() {
                 loading={loading}
                 error={error}
               />
+            )}
+          </AuthStack.Screen>
+          <AuthStack.Screen name="ForgotPassword">
+            {({ navigation }) => (
+              <ForgotPasswordScreen onBack={() => navigation.goBack()} />
             )}
           </AuthStack.Screen>
         </AuthStack.Navigator>

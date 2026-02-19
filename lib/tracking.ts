@@ -28,9 +28,13 @@ function pushDebugEvent(event: string, params?: Record<string, any>) {
 /** Refresh window.__trackingDebug with current state */
 export function updateTrackingDebug() {
   if (typeof window === "undefined") return
-  ;(window as any).__trackingDebug = {
-    gaLoaded: typeof (window as any).gtag === "function",
-    fbLoaded: typeof (window as any).fbq === "function",
+  const w = window as any
+  const prev = w.__trackingDebug ?? {}
+  w.__trackingDebug = {
+    // Preserve pixel init fields written by Analytics component
+    ...prev,
+    gaLoaded: typeof w.gtag === "function",
+    fbLoaded: typeof w.fbq === "function",
     lastEvents: _lastEvents.slice(),
     counters: { ..._counters },
   }
@@ -57,7 +61,17 @@ function ga(eventName: string, params?: Record<string, any>) {
 
 function fb(eventName: string, params?: Record<string, any>) {
   const w = typeof window !== "undefined" ? (window as any) : null
-  if (!w?.fbq) return
+  if (!w?.fbq) {
+    log("fb skip — fbq_missing", eventName)
+    if (w) {
+      w.__trackingDebug = { ...(w.__trackingDebug ?? {}), pixelInitReason: "fbq_missing" }
+    }
+    return
+  }
+  if (!w.__fbPixelInited) {
+    log("fb skip — pixel not initialized", eventName)
+    return
+  }
   w.fbq("track", eventName, params)
   log("fb", eventName, params)
 }
@@ -177,6 +191,53 @@ export function trackTrialStart() {
   updateTrackingDebug()
 }
 
+// ---------------------------------------------------------------------------
+// UTM helper — reads current URL search params (client-only)
+// ---------------------------------------------------------------------------
+
+function getUtmParams(): Record<string, string> | undefined {
+  if (typeof window === "undefined") return undefined
+  const sp = new URLSearchParams(window.location.search)
+  const utmKeys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"]
+  const result: Record<string, string> = {}
+  for (const key of utmKeys) {
+    const val = sp.get(key)
+    if (val) result[key] = val
+  }
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
+// ---------------------------------------------------------------------------
+// Modal CTA click events — URL does not change when modal opens
+// ---------------------------------------------------------------------------
+
+/** Start chat CTA clicked — chat modal opens, URL unchanged */
+export function trackStartChatClick() {
+  const utmParams = getUtmParams()
+  ga("start_chat_click", utmParams)
+  fb("Lead", { content_name: "start_chat_click", ...utmParams })
+  pushDebugEvent("start_chat_click", utmParams)
+  updateTrackingDebug()
+}
+
+/** Start voice call CTA clicked — voice modal opens, URL unchanged */
+export function trackStartVoiceClick() {
+  const utmParams = getUtmParams()
+  ga("start_voice_click", utmParams)
+  fb("Lead", { content_name: "start_voice_click", ...utmParams })
+  pushDebugEvent("start_voice_click", utmParams)
+  updateTrackingDebug()
+}
+
+/** Start video call CTA clicked — video modal opens, URL unchanged */
+export function trackStartVideoClick() {
+  const utmParams = getUtmParams()
+  ga("start_video_click", utmParams)
+  fb("Lead", { content_name: "start_video_click", ...utmParams })
+  pushDebugEvent("start_video_click", utmParams)
+  updateTrackingDebug()
+}
+
 /** GA4 page_view (used by Analytics component) */
 export function trackPageView(path: string) {
   const w = typeof window !== "undefined" ? (window as any) : null
@@ -188,7 +249,17 @@ export function trackPageView(path: string) {
 /** Meta Pixel PageView (used by Analytics component) */
 export function trackFbPageView(path: string) {
   const w = typeof window !== "undefined" ? (window as any) : null
-  if (!w?.fbq) return
+  if (!w?.fbq) {
+    log("fb PageView skip — fbq_missing", path)
+    if (w) {
+      w.__trackingDebug = { ...(w.__trackingDebug ?? {}), pixelInitReason: "fbq_missing" }
+    }
+    return
+  }
+  if (!w.__fbPixelInited) {
+    log("fb PageView skip — pixel not initialized", path)
+    return
+  }
   w.fbq("track", "PageView")
   log("fb PageView", path)
 }
