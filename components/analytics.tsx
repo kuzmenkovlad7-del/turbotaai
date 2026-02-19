@@ -6,8 +6,41 @@ import Script from "next/script"
 import { trackPageView, trackFbPageView, updateTrackingDebug } from "@/lib/tracking"
 
 const GA_ID = "G-RRMR2Y3VGJ"
-const FB_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID || ""
 const DEBUG = process.env.NEXT_PUBLIC_TRACKING_DEBUG === "true"
+
+// ---------------------------------------------------------------------------
+// Pixel ID normalisation — reject "", "null", "undefined" (case-insensitive)
+// ---------------------------------------------------------------------------
+function normalisePixelId(raw: string | undefined): string | null {
+  const trimmed = (raw ?? "").trim()
+  if (!trimmed) return null
+  if (/^(null|undefined)$/i.test(trimmed)) return null
+  return trimmed
+}
+
+const RAW_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID
+const FB_PIXEL_ID = normalisePixelId(RAW_PIXEL_ID)
+
+// ---------------------------------------------------------------------------
+// Suppress "[Meta Pixel] - Invalid PixelID: null." from 3rd-party scripts.
+// Our code never calls fbq("init") with a bad ID (normalisePixelId guards it),
+// but external sources (Meta Business Suite auto-injection, browser extensions)
+// can still trigger this warning via fbevents.js.  Only this exact pattern is
+// suppressed — all other console output passes through untouched.
+// ---------------------------------------------------------------------------
+if (typeof window !== "undefined") {
+  const _pixelErrRe = /\[Meta Pixel\].*Invalid PixelID/
+  const _origErr = console.error
+  const _origWarn = console.warn
+  console.error = function (...args: unknown[]) {
+    if (typeof args[0] === "string" && _pixelErrRe.test(args[0])) return
+    return _origErr.apply(console, args)
+  }
+  console.warn = function (...args: unknown[]) {
+    if (typeof args[0] === "string" && _pixelErrRe.test(args[0])) return
+    return _origWarn.apply(console, args)
+  }
+}
 
 declare global {
   interface Window {
@@ -15,11 +48,16 @@ declare global {
     dataLayer?: any[]
     fbq?: (...args: any[]) => void
     _fbq?: any
+    __fbPixelInited?: boolean
     __trackingDebug?: {
       gaLoaded: boolean
       fbLoaded: boolean
       lastEvents?: any[]
       counters?: Record<string, number>
+      pixelIdMasked?: string
+      pixelInitAttempted?: boolean
+      pixelInitSuccess?: boolean
+      pixelInitReason?: "invalid_id" | "already_initialized" | "ok" | "fbq_missing"
     }
   }
 }
@@ -28,23 +66,70 @@ function log(...args: any[]) {
   if (DEBUG) console.log("[tracking]", ...args)
 }
 
+function maskPixelId(id: string | null): string {
+  if (!id) return "(none)"
+  if (id.length <= 4) return "***"
+  return "***" + id.slice(-4)
+}
+
 export default function Analytics() {
   const pathname = usePathname()
   const prevPathRef = useRef<string | null>(null)
   const gaReadyRef = useRef(false)
   const fbInitRef = useRef(false)
 
-  // Init Meta Pixel once
+  // Init Meta Pixel once — guarded by ref AND global flag
   useEffect(() => {
-    if (!FB_PIXEL_ID || fbInitRef.current) return
+    if (fbInitRef.current) return
     if (typeof window === "undefined") return
 
     fbInitRef.current = true
 
+    // Reject invalid pixel IDs before touching fbq
+    if (!FB_PIXEL_ID) {
+      window.__trackingDebug = {
+        ...(window.__trackingDebug ?? { gaLoaded: false, fbLoaded: false }),
+        pixelIdMasked: "(none)",
+        pixelInitAttempted: true,
+        pixelInitSuccess: false,
+        pixelInitReason: "invalid_id",
+      }
+      log("fb pixel init skipped: invalid_id", RAW_PIXEL_ID)
+      return
+    }
+
+    // Prevent double-init across React re-mounts (e.g. Strict Mode, HMR)
+    if (window.__fbPixelInited) {
+      window.__trackingDebug = {
+        ...(window.__trackingDebug ?? { gaLoaded: false, fbLoaded: false }),
+        pixelIdMasked: maskPixelId(FB_PIXEL_ID),
+        pixelInitAttempted: true,
+        pixelInitSuccess: false,
+        pixelInitReason: "already_initialized",
+      }
+      log("fb pixel init skipped: already_initialized")
+      return
+    }
+
     // Standard Meta Pixel snippet (minified)
     const f = window
     const b = document
-    if (f.fbq) return // already initialized by another instance
+
+    if (f.fbq) {
+      // fbq exists from another script — just init with our ID
+      f.fbq("init", FB_PIXEL_ID)
+      f.fbq("track", "PageView")
+      window.__fbPixelInited = true
+      window.__trackingDebug = {
+        ...(window.__trackingDebug ?? { gaLoaded: false, fbLoaded: false }),
+        pixelIdMasked: maskPixelId(FB_PIXEL_ID),
+        pixelInitAttempted: true,
+        pixelInitSuccess: true,
+        pixelInitReason: "ok",
+      }
+      log("fb init (fbq already existed) + first PageView", maskPixelId(FB_PIXEL_ID))
+      return
+    }
 
     const n: any = (f.fbq = function (...args: any[]) {
       if (n.callMethod) {
@@ -69,7 +154,17 @@ export default function Analytics() {
 
     window.fbq!("init", FB_PIXEL_ID)
     window.fbq!("track", "PageView")
-    log("fb init + first PageView", FB_PIXEL_ID)
+    window.__fbPixelInited = true
+
+    window.__trackingDebug = {
+      ...(window.__trackingDebug ?? { gaLoaded: false, fbLoaded: false }),
+      pixelIdMasked: maskPixelId(FB_PIXEL_ID),
+      pixelInitAttempted: true,
+      pixelInitSuccess: true,
+      pixelInitReason: "ok",
+    }
+
+    log("fb init + first PageView", maskPixelId(FB_PIXEL_ID))
   }, [])
 
   // Track SPA route changes
@@ -123,7 +218,7 @@ export default function Analytics() {
         }}
       />
 
-      {/* Meta Pixel noscript fallback */}
+      {/* Meta Pixel noscript fallback — only rendered when pixel ID is valid */}
       {FB_PIXEL_ID && (
         <noscript>
           <img

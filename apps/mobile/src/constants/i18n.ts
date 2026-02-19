@@ -32,6 +32,19 @@ const en = {
   loginErrPassword: "Please enter your password",
   loginErrFailed: "Login failed. Check your connection.",
 
+  // Forgot password
+  forgotPasswordLink: "Forgot password?",
+  forgotPasswordTitle: "Reset password",
+  forgotPasswordDesc: "Enter your email and we'll send you a link to reset your password.",
+  forgotPasswordSubmit: "Send reset link",
+  forgotPasswordSent: "Check your email! We sent you a password reset link.",
+  forgotPasswordError: "Could not send reset link. Try again.",
+  forgotPasswordBackToLogin: "Back to Sign In",
+
+  // OAuth
+  oauthGoogle: "Sign in with Google",
+  oauthComingSoon: "Google sign-in is coming soon.",
+
   // Register
   registerTagline: "Create your account",
   registerPassword: "Password",
@@ -61,6 +74,7 @@ const en = {
   homeAccountDesc: "Manage your profile and subscription",
 
   // Chat
+  newChat: "New Chat",
   chatStart: "Start a conversation",
   chatSubtitle: "Ask anything — your AI companion is here to help.",
   chatPlaceholder: "Type a message...",
@@ -170,6 +184,17 @@ const uk: typeof en = {
   loginErrPassword: "Введіть пароль",
   loginErrFailed: "Помилка входу. Перевірте з'єднання.",
 
+  forgotPasswordLink: "Забули пароль?",
+  forgotPasswordTitle: "Відновити пароль",
+  forgotPasswordDesc: "Введіть email і ми надішлемо посилання для відновлення пароля.",
+  forgotPasswordSubmit: "Надіслати посилання",
+  forgotPasswordSent: "Перевірте пошту! Ми надіслали посилання для відновлення пароля.",
+  forgotPasswordError: "Не вдалося надіслати посилання. Спробуйте ще раз.",
+  forgotPasswordBackToLogin: "Повернутися до входу",
+
+  oauthGoogle: "Увійти через Google",
+  oauthComingSoon: "Вхід через Google скоро буде доступний.",
+
   registerTagline: "Створити акаунт",
   registerPassword: "Пароль",
   registerPasswordPlaceholder: "Мінімум 6 символів",
@@ -196,6 +221,7 @@ const uk: typeof en = {
   homeAccount: "Акаунт",
   homeAccountDesc: "Керуйте профілем та підпискою",
 
+  newChat: "Новий чат",
   chatStart: "Почніть розмову",
   chatSubtitle: "Запитуйте що завгодно — ваш AI-помічник тут.",
   chatPlaceholder: "Введіть повідомлення...",
@@ -300,6 +326,17 @@ const ru: typeof en = {
   loginErrPassword: "Введите пароль",
   loginErrFailed: "Ошибка входа. Проверьте соединение.",
 
+  forgotPasswordLink: "Забыли пароль?",
+  forgotPasswordTitle: "Восстановить пароль",
+  forgotPasswordDesc: "Введите email и мы отправим ссылку для восстановления пароля.",
+  forgotPasswordSubmit: "Отправить ссылку",
+  forgotPasswordSent: "Проверьте почту! Мы отправили ссылку для восстановления пароля.",
+  forgotPasswordError: "Не удалось отправить ссылку. Попробуйте ещё раз.",
+  forgotPasswordBackToLogin: "Вернуться к входу",
+
+  oauthGoogle: "Войти через Google",
+  oauthComingSoon: "Вход через Google скоро будет доступен.",
+
   registerTagline: "Создать аккаунт",
   registerPassword: "Пароль",
   registerPasswordPlaceholder: "Минимум 6 символов",
@@ -326,6 +363,7 @@ const ru: typeof en = {
   homeAccount: "Аккаунт",
   homeAccountDesc: "Управляйте профилем и подпиской",
 
+  newChat: "Новый чат",
   chatStart: "Начните разговор",
   chatSubtitle: "Спрашивайте что угодно — ваш AI-помощник здесь.",
   chatPlaceholder: "Введите сообщение...",

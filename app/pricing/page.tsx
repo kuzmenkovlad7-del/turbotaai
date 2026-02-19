@@ -63,6 +63,7 @@ export default function PricingPage() {
         opening: "Відкриваємо оплату...",
         invoiceOpened: "Оплата відкрита. Завершіть оплату у WayForPay.",
         payFailed: "Не вдалося створити оплату",
+        payUnavailable: "Оплата тимчасово недоступна. Спробуйте пізніше або напишіть нам на support@turbotaai.com.",
         profileTitle: "Ваш профіль",
         profileDesc: "Перевірити доступ і історію",
         status: "Статус",
@@ -108,6 +109,7 @@ export default function PricingPage() {
         opening: "Открываем оплату...",
         invoiceOpened: "Оплата открыта. Завершите оплату в WayForPay.",
         payFailed: "Не удалось создать оплату",
+        payUnavailable: "Оплата временно недоступна. Попробуйте позже или напишите нам на support@turbotaai.com.",
         profileTitle: "Ваш профиль",
         profileDesc: "Проверить доступ и историю",
         status: "Статус",
@@ -153,6 +155,7 @@ export default function PricingPage() {
         opening: "Opening...",
         invoiceOpened: "Payment opened. Complete it in WayForPay.",
         payFailed: "Payment init failed",
+        payUnavailable: "Payment is temporarily unavailable. Try again later or contact support@turbotaai.com.",
         profileTitle: "Your profile",
         profileDesc: "Check access and history",
         status: "Status",
@@ -285,7 +288,14 @@ export default function PricingPage() {
         setPayLoading(false)
         return
       }
-      if (!r.ok || !d?.invoiceUrl) throw new Error(d?.error || copy.payFailed)
+      if (!r.ok || !d?.invoiceUrl) {
+        const errCode = String(d?.error || "")
+        const localizedErr =
+          errCode === "wayforpay_offline_failed"
+            ? copy.payUnavailable
+            : copy.payFailed
+        throw new Error(localizedErr)
+      }
 
       trackAddPaymentInfo({ value: displayPrice, currency })
       window.location.assign(String(d.invoiceUrl))

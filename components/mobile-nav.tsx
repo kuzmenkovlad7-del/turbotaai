@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation"
 import { useLanguage } from "@/lib/i18n/language-context"
 import { useAuth } from "@/lib/auth/auth-context"
 import { LanguageSelector } from "./language-selector"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, X, User, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -34,9 +34,10 @@ export default function MobileNav() {
         </SheetTrigger>
 
         <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-white">
+          <SheetDescription className="sr-only">Site navigation links</SheetDescription>
           <div className="flex flex-col h-full">
             <div className="flex justify-between items-center py-4">
-              <h2 className="text-lg font-semibold text-slate-900">Menu</h2>
+              <SheetTitle className="text-lg font-semibold text-slate-900">Menu</SheetTitle>
               <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
                 <X className="h-6 w-6" />
                 <span className="sr-only">Close menu</span>

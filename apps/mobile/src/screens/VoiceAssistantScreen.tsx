@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from "react"
+import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react"
 import {
   View,
   Text,
@@ -9,15 +9,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  useColorScheme,
 } from "react-native"
+import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
-import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
 import * as api from "@/services/api"
-import { generateUUID, getDeviceHash, getSessionId } from "@/services/storage"
-import { colors, darkColors, fontSize, spacing, radii } from "@/constants/theme"
+import { generateUUID, getSessionId, setSessionId } from "@/services/storage"
+import { buildMessagePayload } from "@/services/messagePayload"
+import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 type Message = {
   id: string
@@ -27,20 +27,16 @@ type Message = {
 }
 
 /**
- * Voice Assistant — voice-first native screen.
+ * Voice Assistant — native app-side screen.
  *
- * Primary interaction: tap-to-speak mic button with live STT transcript.
- * Fallback: text input for typing.
+ * Uses the same sendMessage API as ChatScreen with mode="voice".
  * No WebView, no embedded web page — purely native RN UI.
  */
 export default function VoiceAssistantScreen() {
+  const navigation = useNavigation()
   const insets = useSafeAreaInsets()
-  const { user, refreshAccess } = useAuth()
+  const { user } = useAuth()
   const { t, locale } = useT()
-  const scheme = useColorScheme()
-  const isDark = scheme === "dark"
-  const c = isDark ? darkColors : colors
-
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
@@ -50,152 +46,126 @@ export default function VoiceAssistantScreen() {
   const sendingRef = useRef(false)
   const isNearBottomRef = useRef(true)
 
-  // Load persistent sessionId on mount (no new ID on remount)
+  // Load or create persistent sessionId
   useEffect(() => {
-    getSessionId().then((id) => { sessionIdRef.current = id })
+    ;(async () => {
+      const stored = await getSessionId("voice")
+      if (stored) {
+        sessionIdRef.current = stored
+      } else {
+        const newId = generateUUID()
+        sessionIdRef.current = newId
+        await setSessionId("voice", newId)
+      }
+    })()
   }, [])
 
-  const {
-    voiceState,
-    liveTranscript,
-    finalTranscript,
-    error: voiceError,
-    startListening,
-    stopListening,
-    reset: resetVoice,
-  } = useVoiceRecorder(locale)
+  // New Chat — reset session, messages, conversation
+  const resetSession = useCallback(async () => {
+    const newId = generateUUID()
+    sessionIdRef.current = newId
+    await setSessionId("voice", newId)
+    conversationIdRef.current = null
+    setMessages([])
+    setInput("")
+  }, [])
 
-  // Auto-send when we get a final transcript
-  useEffect(() => {
-    if (finalTranscript && !sendingRef.current) {
-      doSend(finalTranscript)
-      resetVoice()
-    }
-  }, [finalTranscript])
+  // Add New Chat button to header
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={resetSession} style={styles.newChatBtn} activeOpacity={0.7}>
+          <Text style={styles.newChatText}>{t.newChat}</Text>
+        </TouchableOpacity>
+      ),
+    })
+  }, [navigation, resetSession, t])
 
-  const doSend = useCallback(
-    async (text: string) => {
-      const trimmed = text.trim()
-      if (!trimmed || sendingRef.current) return
+  const sendMessage = useCallback(async () => {
+    const text = input.trim()
+    if (!text || sendingRef.current || !sessionIdRef.current) return
 
-      sendingRef.current = true
-      setSending(true)
+    sendingRef.current = true
+    setSending(true)
 
-      const userMsg: Message = { id: `u-${Date.now()}`, role: "user", text: trimmed }
-      setMessages((prev) => [...prev, userMsg])
-      setInput("")
+    const userMsg: Message = { id: `u-${Date.now()}`, role: "user", text }
+    setMessages((prev) => [...prev, userMsg])
+    setInput("")
 
-      try {
-        const deviceId = (await getDeviceHash()) || ""
-        if (!sessionIdRef.current) sessionIdRef.current = await getSessionId()
-        const payload = api.buildMessagePayload({
-          query: trimmed,
-          language: locale,
-          mode: "voice",
-          userId: user?.id,
-          sessionId: sessionIdRef.current,
-          deviceId,
-          email: user?.email,
-        })
-        const data = await api.sendMessage(payload)
-        const reply = api.extractReplyText(data)
-        const isError = data?.ok === false
+    try {
+      const payload = await buildMessagePayload({
+        query: text,
+        language: locale,
+        mode: "voice",
+        userId: user?.id || null,
+        sessionId: sessionIdRef.current,
+        email: user?.email,
+      })
+      const data = await api.sendMessage(payload)
+      const reply = api.extractReplyText(data)
+      const isError = data?.ok === false
 
-        const aiMsg: Message = {
-          id: `a-${Date.now()}`,
-          role: "assistant",
-          text: reply,
-          isError,
-        }
-        setMessages((prev) => [...prev, aiMsg])
-
-        // Refresh access state so trial counter stays in sync (fire-and-forget)
-        refreshAccess().catch(() => {})
-
-        // Save to history (fire-and-forget)
-        if (!isError) {
-          const isFirstMessage = !conversationIdRef.current
-          const convId = conversationIdRef.current || generateUUID()
-          conversationIdRef.current = convId
-          api
-            .saveConversation({
-              conversationId: convId,
-              messages: [
-                { role: "user", content: trimmed },
-                { role: "assistant", content: reply },
-              ],
-              mode: "voice",
-              title: isFirstMessage ? trimmed.slice(0, 64) : undefined,
-            })
-            .catch(() => {})
-        }
-      } catch (e: any) {
-        const errText =
-          e?.message === "Network request failed" ? t.chatNoInternet : t.chatError
-        setMessages((prev) => [
-          ...prev,
-          { id: `e-${Date.now()}`, role: "assistant", text: errText, isError: true },
-        ])
-      } finally {
-        sendingRef.current = false
-        setSending(false)
+      const aiMsg: Message = {
+        id: `a-${Date.now()}`,
+        role: "assistant",
+        text: reply,
+        isError,
       }
-    },
-    [user, t, locale, refreshAccess],
-  )
+      setMessages((prev) => [...prev, aiMsg])
 
-  const handleSendText = useCallback(() => {
-    doSend(input)
-  }, [input, doSend])
-
-  const handleMicPress = useCallback(() => {
-    if (voiceState === "listening") {
-      stopListening()
-    } else if (voiceState === "idle" || voiceState === "error") {
-      startListening()
+      // Save to history (fire-and-forget)
+      if (!isError) {
+        const isFirstMessage = !conversationIdRef.current
+        const convId = conversationIdRef.current || generateUUID()
+        conversationIdRef.current = convId
+        api
+          .saveConversation({
+            conversationId: convId,
+            messages: [
+              { role: "user", content: text },
+              { role: "assistant", content: reply },
+            ],
+            mode: "voice",
+            title: isFirstMessage ? text.slice(0, 64) : undefined,
+          })
+          .catch(() => {})
+      }
+    } catch (e: any) {
+      const errText =
+        e?.message === "Network request failed"
+          ? t.chatNoInternet
+          : t.chatError
+      setMessages((prev) => [
+        ...prev,
+        { id: `e-${Date.now()}`, role: "assistant", text: errText, isError: true },
+      ])
+    } finally {
+      sendingRef.current = false
+      setSending(false)
     }
-  }, [voiceState, startListening, stopListening])
-
-  const voiceErrorLabel = voiceError === "not-allowed"
-    ? t.voiceMicDenied
-    : voiceError === "too_short"
-    ? t.voiceTooShort
-    : voiceError
-    ? t.voiceSttError
-    : null
+  }, [input, user, t, locale])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => (
       <View
         style={[
           styles.bubble,
-          item.role === "user"
-            ? [styles.userBubble, { backgroundColor: c.userBubble }]
-            : [styles.aiBubble, { backgroundColor: c.aiBubble, borderColor: c.aiBubbleBorder }],
-          item.isError && [styles.errorBubble, { backgroundColor: c.errorLight, borderColor: c.error }],
+          item.role === "user" ? styles.userBubble : styles.aiBubble,
+          item.isError && styles.errorBubble,
         ]}
       >
         {item.role === "assistant" && !item.isError && (
-          <Text style={[styles.aiLabel, { color: c.success }]}>TurbotaAI</Text>
+          <Text style={styles.aiLabel}>TurbotaAI</Text>
         )}
-        {item.isError && <Text style={[styles.errorLabel, { color: c.error }]}>Error</Text>}
-        <Text style={item.role === "user" ? styles.userText : [styles.aiText, { color: c.text }]}>
-          {item.text}
-        </Text>
+        {item.isError && <Text style={styles.errorLabel}>Error</Text>}
+        <Text style={item.role === "user" ? styles.userText : styles.aiText}>{item.text}</Text>
       </View>
     ),
-    [c],
+    [],
   )
 
-  // Mic button color/icon based on state
-  const micBg =
-    voiceState === "listening" ? "#ef4444" : // red while recording
-    voiceState === "requesting" || voiceState === "processing" ? c.textMuted :
-    "#10b981" // green idle
-  const micDisabled = voiceState === "requesting" || voiceState === "processing" || sending
-
   return (
-    <View style={[styles.root, { backgroundColor: c.background, paddingBottom: insets.bottom }]}>
+    <View style={[styles.root, { paddingBottom: insets.bottom }]}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -221,70 +191,29 @@ export default function VoiceAssistantScreen() {
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyIcon}>{"\uD83C\uDF99\uFE0F"}</Text>
-              <Text style={[styles.emptyTitle, { color: c.textSecondary }]}>{t.voiceStart}</Text>
-              <Text style={[styles.emptySubtitle, { color: c.textMuted }]}>{t.voiceTapToSpeak}</Text>
+              <Text style={styles.emptyTitle}>{t.voiceStart}</Text>
+              <Text style={styles.emptySubtitle}>{t.voiceSubtitle}</Text>
             </View>
           }
         />
 
-        {/* Live transcript preview */}
-        {voiceState === "listening" && liveTranscript.length > 0 && (
-          <View style={[styles.transcriptBar, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}>
-            <Text style={[styles.transcriptText, { color: c.text }]} numberOfLines={2}>
-              {liveTranscript}
-            </Text>
-          </View>
-        )}
-
-        {/* Voice status / error */}
-        {voiceState === "listening" && liveTranscript.length === 0 && (
-          <View style={styles.statusBar}>
-            <Text style={[styles.statusText, { color: c.primary }]}>{t.voiceListening}</Text>
-          </View>
-        )}
-        {voiceErrorLabel && voiceState !== "listening" && (
-          <View style={styles.statusBar}>
-            <Text style={[styles.statusText, { color: c.error }]}>{voiceErrorLabel}</Text>
-          </View>
-        )}
-
-        {/* Input area: mic button + text fallback */}
-        <View style={[styles.inputRow, { borderTopColor: c.border, backgroundColor: c.surface }]}>
-          {/* Mic button */}
-          <TouchableOpacity
-            style={[styles.micBtn, { backgroundColor: micBg }, micDisabled && styles.micBtnDisabled]}
-            onPress={handleMicPress}
-            disabled={micDisabled}
-            activeOpacity={0.7}
-          >
-            {voiceState === "requesting" || (voiceState === "processing" && !sending) ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.micIcon}>
-                {voiceState === "listening" ? "\u23F9" : "\uD83C\uDF99"}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Text fallback input */}
+        <View style={styles.inputRow}>
           <TextInput
-            style={[styles.input, { backgroundColor: c.surfaceAlt, color: c.text }]}
+            style={styles.input}
             value={input}
             onChangeText={setInput}
             placeholder={t.voicePlaceholder}
-            placeholderTextColor={c.textMuted}
+            placeholderTextColor={colors.textMuted}
             multiline
             maxLength={2000}
-            editable={!sending && voiceState !== "listening"}
+            editable={!sending}
             returnKeyType="send"
             blurOnSubmit={false}
-            onSubmitEditing={handleSendText}
+            onSubmitEditing={sendMessage}
           />
-
-          {/* Send text button */}
           <TouchableOpacity
-            style={[styles.sendBtn, { backgroundColor: c.primary }, (!input.trim() || sending) && styles.sendBtnDisabled]}
-            onPress={handleSendText}
+            style={[styles.sendBtn, (!input.trim() || sending) && styles.sendBtnDisabled]}
+            onPress={sendMessage}
             disabled={!input.trim() || sending}
             activeOpacity={0.7}
           >
@@ -301,7 +230,7 @@ export default function VoiceAssistantScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   list: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   listEmpty: { flexGrow: 1 },
@@ -311,26 +240,32 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
-  userBubble: { alignSelf: "flex-end" },
+  userBubble: { alignSelf: "flex-end", backgroundColor: colors.userBubble },
   aiBubble: {
     alignSelf: "flex-start",
+    backgroundColor: colors.aiBubble,
     borderWidth: 1,
+    borderColor: colors.aiBubbleBorder,
   },
   errorBubble: {
+    backgroundColor: colors.errorLight,
     borderWidth: 1,
+    borderColor: colors.error,
   },
   aiLabel: {
     fontSize: fontSize.xs,
     fontWeight: "600",
+    color: colors.success,
     marginBottom: 4,
   },
   errorLabel: {
     fontSize: fontSize.xs,
     fontWeight: "600",
+    color: colors.error,
     marginBottom: 4,
   },
   userText: { color: "#fff", fontSize: fontSize.md, lineHeight: 22 },
-  aiText: { fontSize: fontSize.md, lineHeight: 22 },
+  aiText: { color: colors.text, fontSize: fontSize.md, lineHeight: 22 },
   emptyWrap: {
     flex: 1,
     justifyContent: "center",
@@ -338,64 +273,35 @@ const styles = StyleSheet.create({
     padding: spacing.xxl,
   },
   emptyIcon: { fontSize: 48, marginBottom: spacing.md },
-  emptyTitle: { fontSize: fontSize.lg, fontWeight: "600" },
+  emptyTitle: { fontSize: fontSize.lg, fontWeight: "600", color: colors.textSecondary },
   emptySubtitle: {
     fontSize: fontSize.sm,
+    color: colors.textMuted,
     textAlign: "center",
     marginTop: spacing.xs,
     maxWidth: 260,
   },
-
-  // Live transcript
-  transcriptBar: {
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.xs,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 1,
-  },
-  transcriptText: {
-    fontSize: fontSize.md,
-    fontStyle: "italic",
-  },
-
-  // Status
-  statusBar: {
-    alignItems: "center",
-    paddingVertical: spacing.xs,
-  },
-  statusText: {
-    fontSize: fontSize.sm,
-    fontWeight: "600",
-  },
-
-  // Input row
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
   },
-  micBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: radii.full,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: spacing.sm,
-  },
-  micBtnDisabled: { opacity: 0.4 },
-  micIcon: { fontSize: 22 },
   input: {
     flex: 1,
+    backgroundColor: colors.surfaceAlt,
     borderRadius: radii.xl,
     paddingHorizontal: spacing.lg,
     paddingVertical: Platform.OS === "ios" ? 12 : 8,
     fontSize: fontSize.md,
+    color: colors.text,
     maxHeight: 100,
   },
   sendBtn: {
+    backgroundColor: "#10b981",
     width: 40,
     height: 40,
     borderRadius: radii.full,
@@ -405,4 +311,6 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: { opacity: 0.4 },
   sendIcon: { color: "#fff", fontSize: 20, fontWeight: "700" },
+  newChatBtn: { marginRight: 12 },
+  newChatText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: "600" },
 })
