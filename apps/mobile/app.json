@@ -17,10 +17,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.turbotaai.app",
       "buildNumber": "1",
-      "infoPlist": {
-        "NSMicrophoneUsageDescription": "TurbotaAI needs microphone access for voice conversations with your AI companion.",
-        "NSCameraUsageDescription": "TurbotaAI needs camera access for video consultations with your AI companion."
-      }
+      "infoPlist": {}
     },
     "android": {
       "adaptiveIcon": {
@@ -29,7 +26,7 @@
       },
       "package": "com.turbotaai.app",
       "versionCode": 1,
-      "permissions": ["RECORD_AUDIO", "CAMERA"]
+      "permissions": []
     },
     "plugins": [
       "expo-secure-store",
