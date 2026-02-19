@@ -160,7 +160,10 @@ const en = {
   badgeNone: "No access",
 } as const
 
-const uk: typeof en = {
+/** Widen literal string types to `string` while preserving function signatures */
+type Translations = { [K in keyof typeof en]: (typeof en)[K] extends (...args: infer A) => infer R ? (...args: A) => R : string }
+
+const uk: Translations = {
   appName: "TurbotaAI",
   guest: "Гість",
   retry: "Повторити",
@@ -297,7 +300,7 @@ const uk: typeof en = {
   badgeNone: "Немає доступу",
 }
 
-const ru: typeof en = {
+const ru: Translations = {
   appName: "TurbotaAI",
   guest: "Гость",
   retry: "Повторить",
@@ -434,4 +437,4 @@ const ru: typeof en = {
   badgeNone: "Нет доступа",
 }
 
-export const translations: Record<Locale, typeof en> = { en, uk, ru }
+export const translations: Record<Locale, Translations> = { en, uk, ru }

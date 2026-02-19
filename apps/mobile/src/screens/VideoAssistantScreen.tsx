@@ -26,12 +26,54 @@ type Message = {
   isError?: boolean
 }
 
-/**
- * Video Assistant — native app-side screen.
- *
- * Uses the same sendMessage API as ChatScreen with mode="video".
- * No WebView, no embedded web page — purely native RN UI.
- */
+/* ── Typewriter reveal for AI responses ── */
+
+const STREAM_CHARS = 3
+const STREAM_MS = 20
+
+function StreamingText({ fullText, onComplete }: { fullText: string; onComplete: () => void }) {
+  const [len, setLen] = useState(0)
+  const doneRef = useRef(false)
+
+  useEffect(() => {
+    if (doneRef.current) return
+    if (len >= fullText.length) {
+      doneRef.current = true
+      onComplete()
+      return
+    }
+    const t = setTimeout(() => setLen((l) => Math.min(l + STREAM_CHARS, fullText.length)), STREAM_MS)
+    return () => clearTimeout(t)
+  }, [len, fullText.length, onComplete])
+
+  return (
+    <Text style={styles.aiText}>
+      {fullText.slice(0, len)}
+      {len < fullText.length ? "\u2588" : ""}
+    </Text>
+  )
+}
+
+/* ── Typing indicator (pulsing dots) ── */
+
+function TypingIndicator() {
+  const [dots, setDots] = useState("")
+
+  useEffect(() => {
+    const t = setInterval(() => setDots((d) => (d.length >= 3 ? "" : d + ".")), 400)
+    return () => clearInterval(t)
+  }, [])
+
+  return (
+    <View style={[styles.bubble, styles.aiBubble]}>
+      <Text style={styles.aiLabel}>TurbotaAI</Text>
+      <Text style={styles.typingDots}>{dots || "."}</Text>
+    </View>
+  )
+}
+
+/* ── Main screen ── */
+
 export default function VideoAssistantScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
@@ -43,6 +85,7 @@ export default function VideoAssistantScreen() {
   const flatListRef = useRef<FlatList>(null)
   const conversationIdRef = useRef<string | null>(null)
   const sessionIdRef = useRef<string>("")
+  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null)
   const sendingRef = useRef(false)
   const isNearBottomRef = useRef(true)
 
@@ -68,6 +111,7 @@ export default function VideoAssistantScreen() {
     conversationIdRef.current = null
     setMessages([])
     setInput("")
+    setStreamingMsgId(null)
   }, [])
 
   // Add New Chat button to header
@@ -80,6 +124,10 @@ export default function VideoAssistantScreen() {
       ),
     })
   }, [navigation, resetSession, t])
+
+  const handleStreamComplete = useCallback(() => {
+    setStreamingMsgId(null)
+  }, [])
 
   const sendMessage = useCallback(async () => {
     const text = input.trim()
@@ -112,6 +160,11 @@ export default function VideoAssistantScreen() {
         isError,
       }
       setMessages((prev) => [...prev, aiMsg])
+
+      // Trigger typewriter animation for non-error responses
+      if (!isError) {
+        setStreamingMsgId(aiMsg.id)
+      }
 
       // Save to history (fire-and-forget)
       if (!isError) {
@@ -146,22 +199,30 @@ export default function VideoAssistantScreen() {
   }, [input, user, t, locale])
 
   const renderMessage = useCallback(
-    ({ item }: { item: Message }) => (
-      <View
-        style={[
-          styles.bubble,
-          item.role === "user" ? styles.userBubble : styles.aiBubble,
-          item.isError && styles.errorBubble,
-        ]}
-      >
-        {item.role === "assistant" && !item.isError && (
-          <Text style={styles.aiLabel}>TurbotaAI</Text>
-        )}
-        {item.isError && <Text style={styles.errorLabel}>Error</Text>}
-        <Text style={item.role === "user" ? styles.userText : styles.aiText}>{item.text}</Text>
-      </View>
-    ),
-    [],
+    ({ item }: { item: Message }) => {
+      const isStreaming = item.id === streamingMsgId && !item.isError
+
+      return (
+        <View
+          style={[
+            styles.bubble,
+            item.role === "user" ? styles.userBubble : styles.aiBubble,
+            item.isError && styles.errorBubble,
+          ]}
+        >
+          {item.role === "assistant" && !item.isError && (
+            <Text style={styles.aiLabel}>TurbotaAI</Text>
+          )}
+          {item.isError && <Text style={styles.errorLabel}>Error</Text>}
+          {isStreaming ? (
+            <StreamingText fullText={item.text} onComplete={handleStreamComplete} />
+          ) : (
+            <Text style={item.role === "user" ? styles.userText : styles.aiText}>{item.text}</Text>
+          )}
+        </View>
+      )
+    },
+    [streamingMsgId, handleStreamComplete],
   )
 
   return (
@@ -176,6 +237,7 @@ export default function VideoAssistantScreen() {
           data={messages}
           renderItem={renderMessage}
           keyExtractor={(m) => m.id}
+          extraData={streamingMsgId}
           contentContainerStyle={[styles.list, messages.length === 0 && styles.listEmpty]}
           onContentSizeChange={() => {
             if (isNearBottomRef.current) {
@@ -195,6 +257,7 @@ export default function VideoAssistantScreen() {
               <Text style={styles.emptySubtitle}>{t.videoSubtitle}</Text>
             </View>
           }
+          ListFooterComponent={sending ? <TypingIndicator /> : null}
         />
 
         <View style={styles.inputRow}>
@@ -266,6 +329,12 @@ const styles = StyleSheet.create({
   },
   userText: { color: "#fff", fontSize: fontSize.md, lineHeight: 22 },
   aiText: { color: colors.text, fontSize: fontSize.md, lineHeight: 22 },
+  typingDots: {
+    color: colors.textMuted,
+    fontSize: fontSize.lg,
+    fontWeight: "600",
+    letterSpacing: 2,
+  },
   emptyWrap: {
     flex: 1,
     justifyContent: "center",
