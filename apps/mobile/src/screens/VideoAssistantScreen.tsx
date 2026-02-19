@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from "react"
+import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react"
 import {
   View,
   Text,
@@ -10,11 +10,13 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native"
+import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import * as api from "@/services/api"
-import { generateUUID, getDeviceHash, getSessionId } from "@/services/storage"
+import { generateUUID, getSessionId, setSessionId } from "@/services/storage"
+import { buildMessagePayload } from "@/services/messagePayload"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 type Message = {
@@ -24,15 +26,58 @@ type Message = {
   isError?: boolean
 }
 
-/**
- * Video Assistant — native app-side screen.
- *
- * Uses the same sendMessage API as ChatScreen with mode="video".
- * No WebView, no embedded web page — purely native RN UI.
- */
+/* ── Typewriter reveal for AI responses ── */
+
+const STREAM_CHARS = 3
+const STREAM_MS = 20
+
+function StreamingText({ fullText, onComplete }: { fullText: string; onComplete: () => void }) {
+  const [len, setLen] = useState(0)
+  const doneRef = useRef(false)
+
+  useEffect(() => {
+    if (doneRef.current) return
+    if (len >= fullText.length) {
+      doneRef.current = true
+      onComplete()
+      return
+    }
+    const t = setTimeout(() => setLen((l) => Math.min(l + STREAM_CHARS, fullText.length)), STREAM_MS)
+    return () => clearTimeout(t)
+  }, [len, fullText.length, onComplete])
+
+  return (
+    <Text style={styles.aiText}>
+      {fullText.slice(0, len)}
+      {len < fullText.length ? "\u2588" : ""}
+    </Text>
+  )
+}
+
+/* ── Typing indicator (pulsing dots) ── */
+
+function TypingIndicator() {
+  const [dots, setDots] = useState("")
+
+  useEffect(() => {
+    const t = setInterval(() => setDots((d) => (d.length >= 3 ? "" : d + ".")), 400)
+    return () => clearInterval(t)
+  }, [])
+
+  return (
+    <View style={[styles.bubble, styles.aiBubble]}>
+      <Text style={styles.aiLabel}>TurbotaAI</Text>
+      <Text style={styles.typingDots}>{dots || "."}</Text>
+    </View>
+  )
+}
+
+/* ── Main screen ── */
+
 export default function VideoAssistantScreen() {
+  const navigation = useNavigation()
   const insets = useSafeAreaInsets()
-  const { user, refreshAccess } = useAuth()
+  const { user } = useAuth()
   const { t, locale } = useT()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -40,17 +85,53 @@ export default function VideoAssistantScreen() {
   const flatListRef = useRef<FlatList>(null)
   const conversationIdRef = useRef<string | null>(null)
   const sessionIdRef = useRef<string>("")
+  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null)
   const sendingRef = useRef(false)
   const isNearBottomRef = useRef(true)
 
-  // Load persistent sessionId on mount (no new ID on remount)
+  // Load or create persistent sessionId
   useEffect(() => {
-    getSessionId().then((id) => { sessionIdRef.current = id })
+    ;(async () => {
+      const stored = await getSessionId("video")
+      if (stored) {
+        sessionIdRef.current = stored
+      } else {
+        const newId = generateUUID()
+        sessionIdRef.current = newId
+        await setSessionId("video", newId)
+      }
+    })()
+  }, [])
+
+  // New Chat — reset session, messages, conversation
+  const resetSession = useCallback(async () => {
+    const newId = generateUUID()
+    sessionIdRef.current = newId
+    await setSessionId("video", newId)
+    conversationIdRef.current = null
+    setMessages([])
+    setInput("")
+    setStreamingMsgId(null)
+  }, [])
+
+  // Add New Chat button to header
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={resetSession} style={styles.newChatBtn} activeOpacity={0.7}>
+          <Text style={styles.newChatText}>{t.newChat}</Text>
+        </TouchableOpacity>
+      ),
+    })
+  }, [navigation, resetSession, t])
+
+  const handleStreamComplete = useCallback(() => {
+    setStreamingMsgId(null)
   }, [])
 
   const sendMessage = useCallback(async () => {
     const text = input.trim()
-    if (!text || sendingRef.current) return
+    if (!text || sendingRef.current || !sessionIdRef.current) return
 
     sendingRef.current = true
     setSending(true)
@@ -60,15 +141,12 @@ export default function VideoAssistantScreen() {
     setInput("")
 
     try {
-      const deviceId = (await getDeviceHash()) || ""
-      if (!sessionIdRef.current) sessionIdRef.current = await getSessionId()
-      const payload = api.buildMessagePayload({
+      const payload = await buildMessagePayload({
         query: text,
         language: locale,
         mode: "video",
-        userId: user?.id,
+        userId: user?.id || null,
         sessionId: sessionIdRef.current,
-        deviceId,
         email: user?.email,
       })
       const data = await api.sendMessage(payload)
@@ -83,8 +161,10 @@ export default function VideoAssistantScreen() {
       }
       setMessages((prev) => [...prev, aiMsg])
 
-      // Refresh access state so trial counter stays in sync (fire-and-forget)
-      refreshAccess().catch(() => {})
+      // Trigger typewriter animation for non-error responses
+      if (!isError) {
+        setStreamingMsgId(aiMsg.id)
+      }
 
       // Save to history (fire-and-forget)
       if (!isError) {
@@ -119,22 +199,30 @@ export default function VideoAssistantScreen() {
   }, [input, user, t, locale])
 
   const renderMessage = useCallback(
-    ({ item }: { item: Message }) => (
-      <View
-        style={[
-          styles.bubble,
-          item.role === "user" ? styles.userBubble : styles.aiBubble,
-          item.isError && styles.errorBubble,
-        ]}
-      >
-        {item.role === "assistant" && !item.isError && (
-          <Text style={styles.aiLabel}>TurbotaAI</Text>
-        )}
-        {item.isError && <Text style={styles.errorLabel}>Error</Text>}
-        <Text style={item.role === "user" ? styles.userText : styles.aiText}>{item.text}</Text>
-      </View>
-    ),
-    [],
+    ({ item }: { item: Message }) => {
+      const isStreaming = item.id === streamingMsgId && !item.isError
+
+      return (
+        <View
+          style={[
+            styles.bubble,
+            item.role === "user" ? styles.userBubble : styles.aiBubble,
+            item.isError && styles.errorBubble,
+          ]}
+        >
+          {item.role === "assistant" && !item.isError && (
+            <Text style={styles.aiLabel}>TurbotaAI</Text>
+          )}
+          {item.isError && <Text style={styles.errorLabel}>Error</Text>}
+          {isStreaming ? (
+            <StreamingText fullText={item.text} onComplete={handleStreamComplete} />
+          ) : (
+            <Text style={item.role === "user" ? styles.userText : styles.aiText}>{item.text}</Text>
+          )}
+        </View>
+      )
+    },
+    [streamingMsgId, handleStreamComplete],
   )
 
   return (
@@ -149,6 +237,7 @@ export default function VideoAssistantScreen() {
           data={messages}
           renderItem={renderMessage}
           keyExtractor={(m) => m.id}
+          extraData={streamingMsgId}
           contentContainerStyle={[styles.list, messages.length === 0 && styles.listEmpty]}
           onContentSizeChange={() => {
             if (isNearBottomRef.current) {
@@ -168,6 +257,7 @@ export default function VideoAssistantScreen() {
               <Text style={styles.emptySubtitle}>{t.videoSubtitle}</Text>
             </View>
           }
+          ListFooterComponent={sending ? <TypingIndicator /> : null}
         />
 
         <View style={styles.inputRow}>
@@ -239,6 +329,12 @@ const styles = StyleSheet.create({
   },
   userText: { color: "#fff", fontSize: fontSize.md, lineHeight: 22 },
   aiText: { color: colors.text, fontSize: fontSize.md, lineHeight: 22 },
+  typingDots: {
+    color: colors.textMuted,
+    fontSize: fontSize.lg,
+    fontWeight: "600",
+    letterSpacing: 2,
+  },
   emptyWrap: {
     flex: 1,
     justifyContent: "center",
@@ -284,4 +380,6 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: { opacity: 0.4 },
   sendIcon: { color: "#fff", fontSize: 20, fontWeight: "700" },
+  newChatBtn: { marginRight: 12 },
+  newChatText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: "600" },
 })

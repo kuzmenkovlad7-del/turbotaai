@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "scheme": "turbotaai",
     "newArchEnabled": false,
     "splash": {
@@ -19,7 +19,6 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "TurbotaAI needs microphone access for voice conversations with your AI companion.",
-        "NSSpeechRecognitionUsageDescription": "TurbotaAI uses speech recognition to convert your voice to text for the AI assistant.",
         "NSCameraUsageDescription": "TurbotaAI needs camera access for video consultations with your AI companion."
       }
     },
@@ -35,8 +34,7 @@
     "plugins": [
       "expo-secure-store",
       "expo-font",
-      "expo-localization",
-      "expo-speech-recognition"
+      "expo-localization"
     ]
   }
 }

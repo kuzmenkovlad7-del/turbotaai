@@ -29,7 +29,7 @@ export const STORAGE_KEYS = {
   AUTH_TOKEN: "turbotaai_auth_token",
   REFRESH_TOKEN: "turbotaai_refresh_token",
   DEVICE_HASH: "turbotaai_device_hash",
-  SESSION_ID: "turbotaai_session_id",
+  SESSION_PREFIX: "turbotaai_session_",
   REGION: "turbotaai_region",
   LANGUAGE: "turbotaai_language",
 } as const

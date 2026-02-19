@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Linking,
-  useColorScheme,
 } from "react-native"
 import ScreenWrapper from "@/components/ScreenWrapper"
 import Button from "@/components/Button"
@@ -19,7 +18,7 @@ import { useSubscription } from "@/hooks/useSubscription"
 import { redeemPromo, cancelAutoRenew, resumeAutoRenew } from "@/services/api"
 import { API_BASE_URL, IAP_PRODUCTS } from "@/constants/config"
 import { LOCALE_LABELS, type Locale } from "@/constants/i18n"
-import { colors, darkColors, fontSize, spacing, radii } from "@/constants/theme"
+import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 const LOCALES: Locale[] = ["en", "uk", "ru"]
 
@@ -35,9 +34,6 @@ export default function AccountScreen() {
     iapEnabled,
     error: iapError,
   } = useSubscription()
-  const scheme = useColorScheme()
-  const isDark = scheme === "dark"
-  const c = isDark ? darkColors : colors
 
   // Promo code state
   const [promoCode, setPromoCode] = useState("")
@@ -149,22 +145,21 @@ export default function AccountScreen() {
   const isPaid = accessInfo?.access === "paid"
   const isPromo = accessInfo?.access === "promo"
   const isTrial = accessInfo?.access === "trial"
-  // Only show subscribe CTA for users without unlimited/paid/promo access
-  const showSubscribeCTA = !isPaid && !isPromo && !accessInfo?.unlimited
+  const showSubscribeCTA = !accessInfo?.unlimited
 
   return (
     <ScreenWrapper>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.screenTitle, { color: c.text }]}>{t.accountTitle}</Text>
+        <Text style={styles.screenTitle}>{t.accountTitle}</Text>
 
         {/* Profile card */}
-        <View style={[styles.card, { backgroundColor: c.surface }]}>
-          <View style={[styles.avatarCircle, { backgroundColor: c.primaryLight }]}>
-            <Text style={[styles.avatarLetter, { color: c.primary }]}>
+        <View style={styles.card}>
+          <View style={styles.avatarCircle}>
+            <Text style={styles.avatarLetter}>
               {user?.email ? user.email[0].toUpperCase() : "?"}
             </Text>
           </View>
-          <Text style={[styles.email, { color: c.textSecondary }]}>{user?.email ?? t.guest}</Text>
+          <Text style={styles.email}>{user?.email ?? t.guest}</Text>
           {user && (
             <Button
               title={t.accountSignOut}
@@ -176,25 +171,17 @@ export default function AccountScreen() {
         </View>
 
         {/* Language card */}
-        <View style={[styles.card, { backgroundColor: c.surface }]}>
-          <Text style={[styles.sectionTitle, { color: c.text }]}>{t.accountLanguage}</Text>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{t.accountLanguage}</Text>
           <View style={styles.langRow}>
             {LOCALES.map((l) => (
               <TouchableOpacity
                 key={l}
-                style={[
-                  styles.langBtn,
-                  { borderColor: c.border },
-                  l === locale && { borderColor: c.primary, backgroundColor: c.primaryLight },
-                ]}
+                style={[styles.langBtn, l === locale && styles.langBtnActive]}
                 onPress={() => setLocale(l)}
                 activeOpacity={0.7}
               >
-                <Text style={[
-                  styles.langLabel,
-                  { color: c.textSecondary },
-                  l === locale && { color: c.primary },
-                ]}>
+                <Text style={[styles.langLabel, l === locale && styles.langLabelActive]}>
                   {LOCALE_LABELS[l]}
                 </Text>
               </TouchableOpacity>
@@ -203,22 +190,22 @@ export default function AccountScreen() {
         </View>
 
         {/* Subscription card */}
-        <View style={[styles.card, { backgroundColor: c.surface }]}>
-          <Text style={[styles.sectionTitle, { color: c.text }]}>{t.accountSubscription}</Text>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{t.accountSubscription}</Text>
 
           {!accessInfo ? (
-            <ActivityIndicator size="small" color={c.primary} style={{ marginVertical: spacing.lg }} />
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
           ) : isPaid ? (
-            <View style={[styles.activeBox, { backgroundColor: c.successLight }]}>
-              <Text style={[styles.activeLabel, { color: c.success }]}>{t.accountPremium}</Text>
+            <View style={styles.activeBox}>
+              <Text style={styles.activeLabel}>{t.accountPremium}</Text>
               {accessInfo.paidUntil && (
-                <Text style={[styles.activeDate, { color: c.success }]}>
+                <Text style={styles.activeDate}>
                   {t.accountUntil(fmtDate(accessInfo.paidUntil)!)}
                 </Text>
               )}
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: c.success }]}>{t.accountAutoRenew}:</Text>
-                <Text style={[styles.detailValue, { color: accessInfo.autoRenew ? c.success : c.textMuted }]}>
+                <Text style={styles.detailLabel}>{t.accountAutoRenew}:</Text>
+                <Text style={[styles.detailValue, { color: accessInfo.autoRenew ? colors.success : colors.textMuted }]}>
                   {accessInfo.autoRenew ? t.accountAutoRenewOn : t.accountAutoRenewOff}
                 </Text>
               </View>
@@ -233,16 +220,16 @@ export default function AccountScreen() {
               )}
             </View>
           ) : isTrial ? (
-            <View style={[styles.trialBox, { backgroundColor: c.primaryLight }]}>
-              <Text style={[styles.trialLabel, { color: c.primary }]}>{t.accountTrial}</Text>
-              <Text style={[styles.trialCount, { color: c.primary }]}>
+            <View style={styles.trialBox}>
+              <Text style={styles.trialLabel}>{t.accountTrial}</Text>
+              <Text style={styles.trialCount}>
                 {t.accountTrialCount(accessInfo.trialLeft)}
               </Text>
             </View>
           ) : (
-            <View style={[styles.noAccessBox, { backgroundColor: c.errorLight }]}>
-              <Text style={[styles.noAccessLabel, { color: c.error }]}>{t.accountNoPlan}</Text>
-              <Text style={[styles.noAccessDesc, { color: c.error }]}>{t.accountNoPlanDesc}</Text>
+            <View style={styles.noAccessBox}>
+              <Text style={styles.noAccessLabel}>{t.accountNoPlan}</Text>
+              <Text style={styles.noAccessDesc}>{t.accountNoPlanDesc}</Text>
             </View>
           )}
 
@@ -265,7 +252,7 @@ export default function AccountScreen() {
                 />
               )}
               {actionMsg && (
-                <Text style={[styles.actionFeedback, { color: actionMsg.ok ? c.success : c.error }]}>
+                <Text style={[styles.actionFeedback, { color: actionMsg.ok ? colors.success : colors.error }]}>
                   {actionMsg.text}
                 </Text>
               )}
@@ -308,7 +295,7 @@ export default function AccountScreen() {
                   style={{ marginBottom: spacing.sm }}
                 />
               )}
-              {iapError && <Text style={[styles.error, { color: c.error }]}>{iapError}</Text>}
+              {iapError && <Text style={styles.error}>{iapError}</Text>}
             </View>
           )}
 
@@ -333,15 +320,15 @@ export default function AccountScreen() {
           </View>
 
           {/* Promo code input */}
-          <View style={[styles.promoSection, { borderTopColor: c.border }]}>
-            <Text style={[styles.promoSectionTitle, { color: c.textSecondary }]}>{t.accountApplyPromo}</Text>
+          <View style={styles.promoSection}>
+            <Text style={styles.promoSectionTitle}>{t.accountApplyPromo}</Text>
             <View style={styles.promoRow}>
               <TextInput
-                style={[styles.promoInput, { borderColor: c.border, color: c.text, backgroundColor: c.background }]}
+                style={styles.promoInput}
                 value={promoCode}
                 onChangeText={setPromoCode}
                 placeholder={t.accountPromoPlaceholder}
-                placeholderTextColor={c.textMuted}
+                placeholderTextColor={colors.textMuted}
                 autoCapitalize="characters"
                 autoCorrect={false}
                 editable={!promoLoading}
@@ -356,7 +343,7 @@ export default function AccountScreen() {
               />
             </View>
             {promoMsg && (
-              <Text style={[styles.promoFeedback, { color: promoMsg.ok ? c.success : c.error }]}>
+              <Text style={[styles.promoFeedback, { color: promoMsg.ok ? colors.success : colors.error }]}>
                 {promoMsg.text}
               </Text>
             )}
@@ -372,10 +359,12 @@ const styles = StyleSheet.create({
   screenTitle: {
     fontSize: fontSize.xl,
     fontWeight: "700",
+    color: colors.text,
     paddingTop: spacing.lg,
     paddingBottom: spacing.lg,
   },
   card: {
+    backgroundColor: colors.surface,
     borderRadius: radii.lg,
     padding: spacing.xl,
     marginBottom: spacing.lg,
@@ -389,37 +378,45 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
+    backgroundColor: colors.primaryLight,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
     marginBottom: spacing.md,
   },
-  avatarLetter: { fontSize: fontSize.xxl, fontWeight: "700" },
-  email: { fontSize: fontSize.md, textAlign: "center" },
-  sectionTitle: { fontSize: fontSize.lg, fontWeight: "700", marginBottom: spacing.md },
+  avatarLetter: { fontSize: fontSize.xxl, fontWeight: "700", color: colors.primary },
+  email: { fontSize: fontSize.md, color: colors.textSecondary, textAlign: "center" },
+  sectionTitle: { fontSize: fontSize.lg, fontWeight: "700", color: colors.text, marginBottom: spacing.md },
   langRow: { flexDirection: "row", gap: spacing.sm },
   langBtn: {
     flex: 1,
     paddingVertical: spacing.md,
     borderRadius: radii.md,
     borderWidth: 1,
+    borderColor: colors.border,
     alignItems: "center",
   },
-  langLabel: { fontSize: fontSize.sm, fontWeight: "600" },
+  langBtnActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  langLabel: { fontSize: fontSize.sm, fontWeight: "600", color: colors.textSecondary },
+  langLabelActive: { color: colors.primary },
 
   // Status boxes
   activeBox: {
+    backgroundColor: colors.successLight,
     borderRadius: radii.md,
     padding: spacing.lg,
   },
-  activeLabel: { fontSize: fontSize.md, fontWeight: "700" },
-  activeDate: { fontSize: fontSize.sm, marginTop: 4 },
+  activeLabel: { fontSize: fontSize.md, fontWeight: "700", color: colors.success },
+  activeDate: { fontSize: fontSize.sm, color: colors.success, marginTop: 4 },
   detailRow: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: spacing.sm,
   },
-  detailLabel: { fontSize: fontSize.sm, marginRight: spacing.xs },
+  detailLabel: { fontSize: fontSize.sm, color: colors.success, marginRight: spacing.xs },
   detailValue: { fontSize: fontSize.sm, fontWeight: "600" },
   promoBox: {
     backgroundColor: "#fef3c7",
@@ -429,17 +426,19 @@ const styles = StyleSheet.create({
   promoLabel: { fontSize: fontSize.md, fontWeight: "700", color: "#d97706" },
   promoDate: { fontSize: fontSize.sm, color: "#d97706", marginTop: 4 },
   trialBox: {
+    backgroundColor: colors.primaryLight,
     borderRadius: radii.md,
     padding: spacing.lg,
   },
-  trialLabel: { fontSize: fontSize.md, fontWeight: "700" },
-  trialCount: { fontSize: fontSize.sm, marginTop: 4 },
+  trialLabel: { fontSize: fontSize.md, fontWeight: "700", color: colors.primary },
+  trialCount: { fontSize: fontSize.sm, color: colors.primary, marginTop: 4 },
   noAccessBox: {
+    backgroundColor: colors.errorLight,
     borderRadius: radii.md,
     padding: spacing.lg,
   },
-  noAccessLabel: { fontSize: fontSize.md, fontWeight: "700" },
-  noAccessDesc: { fontSize: fontSize.sm, marginTop: 4 },
+  noAccessLabel: { fontSize: fontSize.md, fontWeight: "700", color: colors.error },
+  noAccessDesc: { fontSize: fontSize.sm, color: colors.error, marginTop: 4 },
 
   // Action sections
   actionSection: { marginTop: spacing.lg },
@@ -450,6 +449,7 @@ const styles = StyleSheet.create({
   },
   error: {
     fontSize: fontSize.sm,
+    color: colors.error,
     marginTop: spacing.md,
     textAlign: "center",
   },
@@ -459,10 +459,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     paddingTop: spacing.lg,
     borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   promoSectionTitle: {
     fontSize: fontSize.sm,
     fontWeight: "600",
+    color: colors.textSecondary,
     marginBottom: spacing.sm,
   },
   promoRow: {
@@ -472,10 +474,13 @@ const styles = StyleSheet.create({
   promoInput: {
     flex: 1,
     borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     fontSize: fontSize.md,
+    color: colors.text,
+    backgroundColor: colors.background,
   },
   promoApplyBtn: {
     paddingHorizontal: spacing.lg,

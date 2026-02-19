@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "@/constants/config"
-import { getAuthToken, getDeviceHash, generateUUID } from "./storage"
+import { getAuthToken, getDeviceHash } from "./storage"
 
 /* ── Authenticated fetch wrapper ── */
 
@@ -162,6 +162,7 @@ export type MessagePayload = {
   deviceId: string
   clientMessageId: string
   timestamp: string
+  user?: string
   email?: string
 }
 
@@ -175,40 +176,15 @@ function validatePayload(payload: MessagePayload): void {
   if (!payload.timestamp) issues.push("timestamp is empty")
   if (!payload.language) issues.push("language is empty")
   if (payload.userId === "") issues.push("userId is empty string (should be null)")
+  if (!["chat", "voice", "video"].includes(payload.mode)) issues.push("mode is invalid")
+  if (!payload.user) issues.push("user compat field is missing")
+  if (payload.user === "guest@example.com") issues.push("user must not be guest@example.com")
   if (issues.length > 0) {
     console.warn("[PayloadValidator] Issues before send:", issues.join(", "), payload)
   }
 }
 
-/**
- * Shared payload builder for chat/voice/video screens.
- * Normalizes userId (empty string → null) and adds compatibility `user` field.
- */
-export function buildMessagePayload(opts: {
-  query: string
-  language: string
-  mode: "chat" | "voice" | "video"
-  userId: string | null | undefined
-  sessionId: string
-  deviceId: string
-  email?: string
-}): MessagePayload & { user: string } {
-  const normalizedUserId = opts.userId && opts.userId.trim() ? opts.userId : null
-  return {
-    query: opts.query,
-    language: opts.language,
-    mode: opts.mode,
-    userId: normalizedUserId,
-    sessionId: opts.sessionId,
-    deviceId: opts.deviceId,
-    clientMessageId: generateUUID(),
-    timestamp: new Date().toISOString(),
-    email: opts.email,
-    user: normalizedUserId ?? `guest:${opts.sessionId}`,
-  }
-}
-
-export async function sendMessage(payload: MessagePayload & { user?: string }): Promise<AgentResponse> {
+export async function sendMessage(payload: MessagePayload): Promise<AgentResponse> {
   validatePayload(payload)
   const res = await apiFetch("/api/turbotaai-agent", {
     method: "POST",
@@ -222,8 +198,8 @@ export async function sendMessage(payload: MessagePayload & { user?: string }): 
       deviceId: payload.deviceId,
       clientMessageId: payload.clientMessageId,
       timestamp: payload.timestamp,
+      user: payload.user || undefined,
       email: payload.email || undefined,
-      user: payload.user || payload.userId || `guest:${payload.sessionId}`,
     }),
   })
   const data = await safeJson(res, { ok: false, error: `HTTP ${res.status}` } as AgentResponse)

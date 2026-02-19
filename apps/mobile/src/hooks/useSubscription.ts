@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react"
 import { Platform, Alert, Linking } from "react-native"
 import { IAP_ENABLED, IAP_PRODUCTS } from "@/constants/config"
-import { useT } from "@/hooks/useLanguage"
 import * as api from "@/services/api"
 
 type SubState = {
@@ -23,7 +22,6 @@ type SubState = {
  * 4. Backend receipt validation implemented
  */
 export function useSubscription() {
-  const { t } = useT()
   const [state, setState] = useState<SubState>({
     purchasing: false,
     restoring: false,
@@ -33,8 +31,8 @@ export function useSubscription() {
   const purchase = useCallback(async (productId: string) => {
     if (!IAP_ENABLED) {
       Alert.alert(
-        t.accountSubscription,
-        t.accountIapSoon,
+        "Coming Soon",
+        "In-app purchases are not yet enabled. Subscriptions will be available in a future update.",
       )
       return
     }
@@ -68,13 +66,13 @@ export function useSubscription() {
     } catch (e: any) {
       setState(s => ({ ...s, purchasing: false, error: e?.message || "Purchase failed" }))
     }
-  }, [t])
+  }, [])
 
   const restorePurchases = useCallback(async () => {
     if (!IAP_ENABLED) {
       Alert.alert(
-        t.accountRestorePurchases,
-        t.accountIapSoon,
+        "Restore Purchases",
+        "In-app purchases are not yet enabled. If you subscribed via the web, your access is already linked to your account.",
       )
       return
     }
@@ -93,14 +91,17 @@ export function useSubscription() {
     } catch (e: any) {
       setState(s => ({ ...s, restoring: false, error: e?.message || "Restore failed" }))
     }
-  }, [t])
+  }, [])
 
   const manageSubscription = useCallback(() => {
     if (Platform.OS === "ios") {
+      // Opens the iOS subscription management sheet
       Linking.openURL("https://apps.apple.com/account/subscriptions").catch(() => {
+        // Fallback for older iOS
         Linking.openURL("itms-apps://apps.apple.com/account/subscriptions").catch(() => {})
       })
     } else {
+      // Opens Google Play subscription management
       Linking.openURL(
         "https://play.google.com/store/account/subscriptions?package=com.turbotaai.app",
       ).catch(() => {

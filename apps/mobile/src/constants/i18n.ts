@@ -32,6 +32,19 @@ const en = {
   loginErrPassword: "Please enter your password",
   loginErrFailed: "Login failed. Check your connection.",
 
+  // Forgot password
+  forgotPasswordLink: "Forgot password?",
+  forgotPasswordTitle: "Reset password",
+  forgotPasswordDesc: "Enter your email and we'll send you a link to reset your password.",
+  forgotPasswordSubmit: "Send reset link",
+  forgotPasswordSent: "Check your email! We sent you a password reset link.",
+  forgotPasswordError: "Could not send reset link. Try again.",
+  forgotPasswordBackToLogin: "Back to Sign In",
+
+  // OAuth
+  oauthGoogle: "Sign in with Google",
+  oauthComingSoon: "Google sign-in is coming soon.",
+
   // Register
   registerTagline: "Create your account",
   registerPassword: "Password",
@@ -61,6 +74,7 @@ const en = {
   homeAccountDesc: "Manage your profile and subscription",
 
   // Chat
+  newChat: "New Chat",
   chatStart: "Start a conversation",
   chatSubtitle: "Ask anything — your AI companion is here to help.",
   chatPlaceholder: "Type a message...",
@@ -79,11 +93,6 @@ const en = {
   assistantCharacterAlex: "Alex",
   voiceStart: "Voice conversation",
   voiceSubtitle: "Speak or type your question — your AI companion will answer.",
-  voiceTapToSpeak: "Tap the mic button and start speaking.",
-  voiceListening: "Listening...",
-  voiceMicDenied: "Microphone permission denied. Enable it in Settings.",
-  voiceTooShort: "Too short — please speak a full question.",
-  voiceSttError: "Could not recognize speech. Try again.",
   voicePlaceholder: "Type or speak your message...",
   videoStart: "Video consultation",
   videoSubtitle: "Ask your question — your AI companion will guide you.",
@@ -151,7 +160,10 @@ const en = {
   badgeNone: "No access",
 } as const
 
-const uk: typeof en = {
+/** Widen literal string types to `string` while preserving function signatures */
+type Translations = { [K in keyof typeof en]: (typeof en)[K] extends (...args: infer A) => infer R ? (...args: A) => R : string }
+
+const uk: Translations = {
   appName: "TurbotaAI",
   guest: "Гість",
   retry: "Повторити",
@@ -169,6 +181,17 @@ const uk: typeof en = {
   loginErrEmail: "Введіть email",
   loginErrPassword: "Введіть пароль",
   loginErrFailed: "Помилка входу. Перевірте з'єднання.",
+
+  forgotPasswordLink: "Забули пароль?",
+  forgotPasswordTitle: "Відновити пароль",
+  forgotPasswordDesc: "Введіть email і ми надішлемо посилання для відновлення пароля.",
+  forgotPasswordSubmit: "Надіслати посилання",
+  forgotPasswordSent: "Перевірте пошту! Ми надіслали посилання для відновлення пароля.",
+  forgotPasswordError: "Не вдалося надіслати посилання. Спробуйте ще раз.",
+  forgotPasswordBackToLogin: "Повернутися до входу",
+
+  oauthGoogle: "Увійти через Google",
+  oauthComingSoon: "Вхід через Google скоро буде доступний.",
 
   registerTagline: "Створити акаунт",
   registerPassword: "Пароль",
@@ -196,6 +219,7 @@ const uk: typeof en = {
   homeAccount: "Акаунт",
   homeAccountDesc: "Керуйте профілем та підпискою",
 
+  newChat: "Новий чат",
   chatStart: "Почніть розмову",
   chatSubtitle: "Запитуйте що завгодно — ваш AI-помічник тут.",
   chatPlaceholder: "Введіть повідомлення...",
@@ -213,11 +237,6 @@ const uk: typeof en = {
   assistantCharacterAlex: "Алекс",
   voiceStart: "Голосова розмова",
   voiceSubtitle: "Говоріть або пишіть запитання — AI-помічник відповість.",
-  voiceTapToSpeak: "Натисніть мікрофон і почніть говорити.",
-  voiceListening: "Слухаю...",
-  voiceMicDenied: "Доступ до мікрофону заборонено. Увімкніть у Налаштуваннях.",
-  voiceTooShort: "Занадто коротко — скажіть повне запитання.",
-  voiceSttError: "Не вдалося розпізнати мову. Спробуйте ще раз.",
   voicePlaceholder: "Введіть або скажіть повідомлення...",
   videoStart: "Відеоконсультація",
   videoSubtitle: "Задайте запитання — AI-помічник допоможе.",
@@ -281,7 +300,7 @@ const uk: typeof en = {
   badgeNone: "Немає доступу",
 }
 
-const ru: typeof en = {
+const ru: Translations = {
   appName: "TurbotaAI",
   guest: "Гость",
   retry: "Повторить",
@@ -299,6 +318,17 @@ const ru: typeof en = {
   loginErrEmail: "Введите email",
   loginErrPassword: "Введите пароль",
   loginErrFailed: "Ошибка входа. Проверьте соединение.",
+
+  forgotPasswordLink: "Забыли пароль?",
+  forgotPasswordTitle: "Восстановить пароль",
+  forgotPasswordDesc: "Введите email и мы отправим ссылку для восстановления пароля.",
+  forgotPasswordSubmit: "Отправить ссылку",
+  forgotPasswordSent: "Проверьте почту! Мы отправили ссылку для восстановления пароля.",
+  forgotPasswordError: "Не удалось отправить ссылку. Попробуйте ещё раз.",
+  forgotPasswordBackToLogin: "Вернуться к входу",
+
+  oauthGoogle: "Войти через Google",
+  oauthComingSoon: "Вход через Google скоро будет доступен.",
 
   registerTagline: "Создать аккаунт",
   registerPassword: "Пароль",
@@ -326,6 +356,7 @@ const ru: typeof en = {
   homeAccount: "Аккаунт",
   homeAccountDesc: "Управляйте профилем и подпиской",
 
+  newChat: "Новый чат",
   chatStart: "Начните разговор",
   chatSubtitle: "Спрашивайте что угодно — ваш AI-помощник здесь.",
   chatPlaceholder: "Введите сообщение...",
@@ -343,11 +374,6 @@ const ru: typeof en = {
   assistantCharacterAlex: "Алекс",
   voiceStart: "Голосовой разговор",
   voiceSubtitle: "Говорите или пишите вопрос — AI-помощник ответит.",
-  voiceTapToSpeak: "Нажмите микрофон и начните говорить.",
-  voiceListening: "Слушаю...",
-  voiceMicDenied: "Доступ к микрофону запрещён. Включите в Настройках.",
-  voiceTooShort: "Слишком коротко — скажите полный вопрос.",
-  voiceSttError: "Не удалось распознать речь. Попробуйте ещё раз.",
   voicePlaceholder: "Введите или скажите сообщение...",
   videoStart: "Видеоконсультация",
   videoSubtitle: "Задайте вопрос — AI-помощник поможет.",
@@ -411,4 +437,4 @@ const ru: typeof en = {
   badgeNone: "Нет доступа",
 }
 
-export const translations: Record<Locale, typeof en> = { en, uk, ru }
+export const translations: Record<Locale, Translations> = { en, uk, ru }
