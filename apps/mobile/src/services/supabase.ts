@@ -127,6 +127,14 @@ export async function refreshSession(): Promise<AuthResult> {
   }
 }
 
+/** Send password reset email via Supabase */
+export async function resetPassword(email: string): Promise<AuthResult> {
+  const sb = getSupabase()
+  const { error } = await sb.auth.resetPasswordForEmail(email)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 export async function signOut(): Promise<void> {
   await clearAll()
   try {

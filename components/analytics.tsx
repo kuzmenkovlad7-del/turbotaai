@@ -21,6 +21,27 @@ function normalisePixelId(raw: string | undefined): string | null {
 const RAW_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID
 const FB_PIXEL_ID = normalisePixelId(RAW_PIXEL_ID)
 
+// ---------------------------------------------------------------------------
+// Suppress "[Meta Pixel] - Invalid PixelID: null." from 3rd-party scripts.
+// Our code never calls fbq("init") with a bad ID (normalisePixelId guards it),
+// but external sources (Meta Business Suite auto-injection, browser extensions)
+// can still trigger this warning via fbevents.js.  Only this exact pattern is
+// suppressed — all other console output passes through untouched.
+// ---------------------------------------------------------------------------
+if (typeof window !== "undefined") {
+  const _pixelErrRe = /\[Meta Pixel\].*Invalid PixelID/
+  const _origErr = console.error
+  const _origWarn = console.warn
+  console.error = function (...args: unknown[]) {
+    if (typeof args[0] === "string" && _pixelErrRe.test(args[0])) return
+    return _origErr.apply(console, args)
+  }
+  console.warn = function (...args: unknown[]) {
+    if (typeof args[0] === "string" && _pixelErrRe.test(args[0])) return
+    return _origWarn.apply(console, args)
+  }
+}
+
 declare global {
   interface Window {
     gtag?: (...args: any[]) => void
