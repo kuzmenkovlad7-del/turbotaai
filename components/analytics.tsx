@@ -30,15 +30,12 @@ const FB_PIXEL_ID = normalisePixelId(RAW_PIXEL_ID)
 // ---------------------------------------------------------------------------
 if (typeof window !== "undefined") {
   const _pixelErrRe = /\[Meta Pixel\].*Invalid PixelID/
-  const _origErr = console.error
-  const _origWarn = console.warn
-  console.error = function (...args: unknown[]) {
-    if (typeof args[0] === "string" && _pixelErrRe.test(args[0])) return
-    return _origErr.apply(console, args)
-  }
-  console.warn = function (...args: unknown[]) {
-    if (typeof args[0] === "string" && _pixelErrRe.test(args[0])) return
-    return _origWarn.apply(console, args)
+  for (const method of ["error", "warn", "log"] as const) {
+    const orig = console[method]
+    console[method] = function (...args: unknown[]) {
+      if (typeof args[0] === "string" && _pixelErrRe.test(args[0])) return
+      return orig.apply(console, args)
+    }
   }
 }
 
