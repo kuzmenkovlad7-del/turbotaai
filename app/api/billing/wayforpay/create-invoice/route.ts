@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 
 const DEVICE_COOKIE = "ta_device_hash"
 const LAST_ORDER_COOKIE = "ta_last_order"
-const WFP_OFFLINE_URL = "https://secure.wayforpay.com/pay?behavior=offline"
+const WFP_API_URL = "https://api.wayforpay.com/api"
 
 function env(name: string) {
   return String(process.env[name] || "").trim()
@@ -88,31 +88,49 @@ export async function POST(req: NextRequest) {
     const hostNoPort = host.split(":")[0]
     const domain = cookieDomainFromHost(hostNoPort)
 
+    // Stable merchantDomainName: must match what is registered in the WayForPay merchant account.
+    // Do NOT derive from request host — x-forwarded-host may be a Vercel preview URL or
+    // differ in www-prefix from the registered domain, breaking the HMAC-MD5 signature.
+    const merchantDomainName = env("WAYFORPAY_DOMAIN") || "turbotaai.com"
+
+    // Stable base URL for callback and return URLs (must be reachable HTTPS in production).
+    // Falls back to request origin only when env is not configured (e.g. local dev).
+    const appBase = env("NEXT_PUBLIC_APP_URL") || env("APP_URL") || origin
+
     const userId = summary.userId
 
     const orderReference = `TA-${Date.now()}-${randomUUID().slice(0, 8)}`
     const orderDate = Math.floor(Date.now() / 1000)
 
     const productName = body?.productName ? String(body.productName) : "TurbotaAI subscription"
-    const productCount = "1"
-    const productPrice = amountStr
 
+    // IMPORTANT: use the same numeric values for HMAC signature AND JSON body.
+    // JSON serializes 499.00 as 499 (no trailing zeros). WayForPay verifies
+    // the signature against the values it receives, so String(Number("499.00"))
+    // = "499" must be in both the sign string and the JSON payload.
+    const amountNum = Number(amountStr)
+    const productPriceNum = amountNum
+    const productCountNum = 1
+
+    // Signature field order per WayForPay docs:
+    // merchantAccount;merchantDomainName;orderReference;orderDate;amount;currency;
+    // productName[0];...;productCount[0];...;productPrice[0];...
     const signString = [
       merchantAccount,
-      hostNoPort,
+      merchantDomainName,
       orderReference,
       String(orderDate),
-      amountStr,
+      String(amountNum),
       currency,
       productName,
-      productCount,
-      productPrice,
+      String(productCountNum),
+      String(productPriceNum),
     ].join(";")
 
     const merchantSignature = hmacMd5Hex(signString, secretKey)
 
-    const returnUrl = `${origin}/payment/return?orderReference=${encodeURIComponent(orderReference)}`
-    const serviceUrl = `${origin}/api/billing/wayforpay/callback`
+    const returnUrl = `${appBase}/payment/return?orderReference=${encodeURIComponent(orderReference)}`
+    const serviceUrl = `${appBase}/api/billing/wayforpay/callback`
 
     const admin = sbAdmin()
 
@@ -120,48 +138,53 @@ export async function POST(req: NextRequest) {
       order_reference: orderReference,
       status: "created",
       plan_id: planId,
-      amount: Number(amountStr),
+      amount: amountNum,
       currency,
       user_id: userId,
       device_hash: deviceHash,
       raw: {
         __event: "create_invoice_request",
         planId,
-        amount: amountStr,
+        amount: amountNum,
         currency,
-        origin,
+        merchantDomainName,
+        appBase,
         serviceUrl,
         returnUrl,
+        signString,
       },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as any)
 
-    const form = new URLSearchParams()
-    form.set("merchantAccount", merchantAccount)
-    form.set("merchantDomainName", hostNoPort)
-    form.set("orderReference", orderReference)
-    form.set("orderDate", String(orderDate))
-    form.set("amount", amountStr)
-    form.set("currency", currency)
-    form.append("productName[]", productName)
-    form.append("productCount[]", productCount)
-    form.append("productPrice[]", productPrice)
-    form.set("merchantSignature", merchantSignature)
-    form.set("apiVersion", "1")
-    form.set("language", String(body?.language || "UA"))
-    form.set("returnUrl", returnUrl)
-    form.set("serviceUrl", serviceUrl)
+    const wfpBody = {
+      transactionType: "CREATE_INVOICE",
+      merchantAccount,
+      merchantAuthType: "SimpleSignature",
+      merchantDomainName,
+      merchantSignature,
+      apiVersion: 1,
+      language: String(body?.language || "UA"),
+      orderReference,
+      orderDate,
+      amount: amountNum,
+      currency,
+      productName: [productName],
+      productCount: [productCountNum],
+      productPrice: [productPriceNum],
+      returnUrl,
+      serviceUrl,
+    }
 
-    const r = await fetch(WFP_OFFLINE_URL, {
+    const r = await fetch(WFP_API_URL, {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: form.toString(),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(wfpBody),
       cache: "no-store",
     })
 
     const j: any = await r.json().catch(() => ({}))
-    const invoiceUrl = String(j?.url || "").trim()
+    const invoiceUrl = String(j?.invoiceUrl || j?.url || "").trim()
 
     await admin
       .from("billing_orders")
@@ -172,9 +195,13 @@ export async function POST(req: NextRequest) {
           request: {
             orderReference,
             orderDate,
-            amount: amountStr,
+            amount: amountNum,
             currency,
             planId,
+            merchantDomainName,
+            serviceUrl,
+            returnUrl,
+            signString,
           },
           response: j,
           httpStatus: r.status,
@@ -185,7 +212,13 @@ export async function POST(req: NextRequest) {
 
     if (!r.ok || !invoiceUrl) {
       return NextResponse.json(
-        { ok: false, error: "wayforpay_offline_failed", httpStatus: r.status, details: j },
+        {
+          ok: false,
+          error: "wayforpay_offline_failed",
+          reason: String(j?.reason || ""),
+          reasonCode: j?.reasonCode ?? null,
+          httpStatus: r.status,
+        },
         { status: 502, headers: { "cache-control": "no-store" } }
       )
     }

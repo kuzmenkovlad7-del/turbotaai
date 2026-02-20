@@ -52,6 +52,21 @@ check(
   /export function trackLeadClick/
 )
 check(
+  "lib/tracking.ts has trackStartChatClick",
+  "lib/tracking.ts",
+  /export function trackStartChatClick/
+)
+check(
+  "lib/tracking.ts has trackStartVoiceClick",
+  "lib/tracking.ts",
+  /export function trackStartVoiceClick/
+)
+check(
+  "lib/tracking.ts has trackStartVideoClick",
+  "lib/tracking.ts",
+  /export function trackStartVideoClick/
+)
+check(
   "lib/tracking.ts has trackContactFormSubmit",
   "lib/tracking.ts",
   /export function trackContactFormSubmit/
@@ -99,11 +114,21 @@ check(
   /updateTrackingDebug/
 )
 
-// 3. Lead events wired
+// 3. Lead / modal CTA events wired
 check(
-  "Home page imports trackLeadClick",
+  "Home page imports trackStartChatClick",
   "app/page.tsx",
-  /trackLeadClick/
+  /trackStartChatClick/
+)
+check(
+  "Home page imports trackStartVoiceClick",
+  "app/page.tsx",
+  /trackStartVoiceClick/
+)
+check(
+  "Home page imports trackStartVideoClick",
+  "app/page.tsx",
+  /trackStartVideoClick/
 )
 check(
   "Contact form imports trackContactFormSubmit",
@@ -159,6 +184,21 @@ check(
   /ga\(["']generate_lead["']/
 )
 check(
+  "GA4: start_chat_click event",
+  "lib/tracking.ts",
+  /ga\(["']start_chat_click["']/
+)
+check(
+  "GA4: start_voice_click event",
+  "lib/tracking.ts",
+  /ga\(["']start_voice_click["']/
+)
+check(
+  "GA4: start_video_click event",
+  "lib/tracking.ts",
+  /ga\(["']start_video_click["']/
+)
+check(
   "GA4: sign_up event",
   "lib/tracking.ts",
   /ga\(["']sign_up["']/
@@ -191,9 +231,24 @@ check(
 
 // 8. Meta Pixel events in tracking lib
 check(
-  "Meta: Lead event",
+  "Meta: Lead event (legacy generate_lead)",
   "lib/tracking.ts",
   /fb\(["']Lead["']/
+)
+check(
+  "Meta: Lead with start_chat_click content_name",
+  "lib/tracking.ts",
+  /content_name.*start_chat_click/
+)
+check(
+  "Meta: Lead with start_voice_click content_name",
+  "lib/tracking.ts",
+  /content_name.*start_voice_click/
+)
+check(
+  "Meta: Lead with start_video_click content_name",
+  "lib/tracking.ts",
+  /content_name.*start_video_click/
 )
 check(
   "Meta: CompleteRegistration event",
