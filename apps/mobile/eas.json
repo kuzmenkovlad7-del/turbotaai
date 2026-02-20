@@ -11,7 +11,19 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_IAP_ENABLED": "false"
+        "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_DEBUG": "false"
+      }
+    },
+    "android-apk": {
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_DEBUG": "false"
       }
     },
     "preview": {
@@ -20,12 +32,14 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_IAP_ENABLED": "false"
+        "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_DEBUG": "false"
       }
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_IAP_ENABLED": "false"
+        "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_DEBUG": "false"
       }
     }
   },
@@ -37,7 +51,8 @@
         "appleTeamId": "APPLE_TEAM_ID_HERE"
       },
       "android": {
-        "serviceAccountKeyPath": "./google-play-key.json"
+        "serviceAccountKeyPath": "./google-play-key.json",
+        "track": "internal"
       }
     }
   }
