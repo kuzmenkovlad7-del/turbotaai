@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react"
+import React, { useState, useCallback, useRef } from "react"
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Linking,
 } from "react-native"
+import { useFocusEffect } from "@react-navigation/native"
 import ScreenWrapper from "@/components/ScreenWrapper"
 import Button from "@/components/Button"
 import { useAuth } from "@/hooks/useAuth"
@@ -46,6 +47,20 @@ export default function AccountScreen() {
 
   // Refresh access state
   const [refreshingAccess, setRefreshingAccess] = useState(false)
+
+  // Refresh access when tab gains focus (e.g. returning from web browser after purchase/promo).
+  // Debounced to 30 s so repeated tab switches don't spam the API.
+  const lastFocusRefreshRef = useRef<number>(0)
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now()
+      if (now - lastFocusRefreshRef.current > 30_000) {
+        lastFocusRefreshRef.current = now
+        console.log("[AccountScreen] focus refresh — fetching access status")
+        refreshAccess().catch(() => {})
+      }
+    }, [refreshAccess]),
+  )
 
   const handleLogout = () => {
     Alert.alert(t.accountSignOut, t.accountSignOutConfirm, [

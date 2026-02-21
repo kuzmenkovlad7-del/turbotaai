@@ -45,6 +45,7 @@ export function useAuth() {
     bootstrapFailed: false,
   })
   const mounted = useRef(true)
+  const bootstrapping = useRef(false)
 
   useEffect(() => {
     mounted.current = true
@@ -52,6 +53,11 @@ export function useAuth() {
   }, [])
 
   const runBootstrap = useCallback(async () => {
+    if (bootstrapping.current) {
+      console.log("[useAuth] bootstrap already in-flight, skipping")
+      return
+    }
+    bootstrapping.current = true
     try {
       console.log("[useAuth] bootstrap start")
       await ensureDeviceHash()
@@ -76,6 +82,8 @@ export function useAuth() {
       if (!mounted.current) return
       console.warn("[useAuth] bootstrap failed:", e?.message)
       setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true }))
+    } finally {
+      bootstrapping.current = false
     }
   }, [])
 
