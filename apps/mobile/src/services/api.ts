@@ -164,6 +164,8 @@ export type MessagePayload = {
   timestamp: string
   user?: string
   email?: string
+  gender?: string
+  characterId?: string
 }
 
 /** Dev-safe validator: logs missing/invalid fields, never crashes */
@@ -200,6 +202,8 @@ export async function sendMessage(payload: MessagePayload): Promise<AgentRespons
       timestamp: payload.timestamp,
       user: payload.user || undefined,
       email: payload.email || undefined,
+      gender: payload.gender || undefined,
+      characterId: payload.characterId || undefined,
     }),
   })
   const data = await safeJson(res, { ok: false, error: `HTTP ${res.status}` } as AgentResponse)

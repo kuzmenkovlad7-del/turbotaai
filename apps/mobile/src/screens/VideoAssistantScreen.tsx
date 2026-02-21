@@ -19,6 +19,19 @@ import { generateUUID, getSessionId, setSessionId } from "@/services/storage"
 import { buildMessagePayload } from "@/services/messagePayload"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
+type Character = {
+  id: string
+  nameKey: "assistantCharacterMia" | "assistantCharacterAlex" | "assistantCharacterLeo"
+  gender: string
+  emoji: string
+}
+
+const CHARACTERS: Character[] = [
+  { id: "dr-maria",      nameKey: "assistantCharacterMia",  gender: "female", emoji: "\uD83D\uDC69\u200D\u2695\uFE0F" },
+  { id: "dr-sophia",    nameKey: "assistantCharacterAlex", gender: "female", emoji: "\uD83D\uDC69\u200D\uD83D\uDCBC" },
+  { id: "dr-alexander", nameKey: "assistantCharacterLeo",  gender: "male",   emoji: "\uD83D\uDC68\u200D\u2695\uFE0F" },
+]
+
 type Message = {
   id: string
   role: "user" | "assistant"
@@ -88,6 +101,7 @@ export default function VideoAssistantScreen() {
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null)
   const sendingRef = useRef(false)
   const isNearBottomRef = useRef(true)
+  const [selectedCharacter, setSelectedCharacter] = useState(CHARACTERS[0])
 
   // Load or create persistent sessionId
   useEffect(() => {
@@ -148,6 +162,8 @@ export default function VideoAssistantScreen() {
         userId: user?.id || null,
         sessionId: sessionIdRef.current,
         email: user?.email,
+        gender: selectedCharacter.gender,
+        characterId: selectedCharacter.id,
       })
       const data = await api.sendMessage(payload)
       const reply = api.extractReplyText(data)
@@ -196,7 +212,7 @@ export default function VideoAssistantScreen() {
       sendingRef.current = false
       setSending(false)
     }
-  }, [input, user, t, locale])
+  }, [input, user, t, locale, selectedCharacter])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => {
@@ -232,6 +248,26 @@ export default function VideoAssistantScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
+        {/* Character selector */}
+        <View style={styles.selectorRow}>
+          {CHARACTERS.map((char) => {
+            const isActive = selectedCharacter.id === char.id
+            return (
+              <TouchableOpacity
+                key={char.id}
+                style={[styles.selectorBtn, isActive && styles.selectorBtnActive]}
+                onPress={() => setSelectedCharacter(char)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.selectorEmoji}>{char.emoji}</Text>
+                <Text style={[styles.selectorLabel, isActive && styles.selectorLabelActive]}>
+                  {t[char.nameKey]}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -382,4 +418,31 @@ const styles = StyleSheet.create({
   sendIcon: { color: "#fff", fontSize: 20, fontWeight: "700" },
   newChatBtn: { marginRight: 12 },
   newChatText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: "600" },
+
+  // Character selector
+  selectorRow: {
+    flexDirection: "row",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  selectorBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+  },
+  selectorBtnActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+    borderWidth: 2,
+  },
+  selectorEmoji: { fontSize: 20, marginBottom: 2 },
+  selectorLabel: { fontSize: fontSize.xs, fontWeight: "600", color: colors.textSecondary },
+  selectorLabelActive: { color: colors.primary },
 })

@@ -301,12 +301,14 @@ export default function AccountScreen() {
 
           {/* Restore purchases + Refresh access */}
           <View style={styles.actionSection}>
-            <Button
-              title={t.accountRestorePurchases}
-              variant="ghost"
-              onPress={restorePurchases}
-              loading={restoring}
-            />
+            {iapEnabled && (
+              <Button
+                title={t.accountRestorePurchases}
+                variant="ghost"
+                onPress={restorePurchases}
+                loading={restoring}
+              />
+            )}
             <Button
               title={t.accountRefreshAccess}
               variant="outline"

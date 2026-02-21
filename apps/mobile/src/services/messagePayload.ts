@@ -18,6 +18,8 @@ export async function buildMessagePayload(params: {
   userId: string | null
   sessionId: string
   email?: string
+  gender?: string
+  characterId?: string
 }): Promise<MessagePayload> {
   const deviceId = await ensureDeviceHash()
   const clientMessageId = generateUUID()
@@ -38,5 +40,7 @@ export async function buildMessagePayload(params: {
     timestamp,
     user,
     email: params.email,
+    gender: params.gender,
+    characterId: params.characterId,
   }
 }

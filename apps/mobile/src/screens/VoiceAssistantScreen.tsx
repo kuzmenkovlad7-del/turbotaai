@@ -74,6 +74,8 @@ function TypingIndicator() {
 
 /* ── Main screen ── */
 
+type VoiceGender = "female" | "male"
+
 export default function VoiceAssistantScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
@@ -88,6 +90,7 @@ export default function VoiceAssistantScreen() {
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null)
   const sendingRef = useRef(false)
   const isNearBottomRef = useRef(true)
+  const [gender, setGender] = useState<VoiceGender>("female")
 
   // Load or create persistent sessionId
   useEffect(() => {
@@ -148,6 +151,7 @@ export default function VoiceAssistantScreen() {
         userId: user?.id || null,
         sessionId: sessionIdRef.current,
         email: user?.email,
+        gender,
       })
       const data = await api.sendMessage(payload)
       const reply = api.extractReplyText(data)
@@ -196,7 +200,7 @@ export default function VoiceAssistantScreen() {
       sendingRef.current = false
       setSending(false)
     }
-  }, [input, user, t, locale])
+  }, [input, user, t, locale, gender])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => {
@@ -232,6 +236,28 @@ export default function VoiceAssistantScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
+        {/* Gender selector */}
+        <View style={styles.selectorRow}>
+          <TouchableOpacity
+            style={[styles.selectorBtn, gender === "female" && styles.selectorBtnActive, styles.selectorBtnFemale]}
+            onPress={() => setGender("female")}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.selectorLabel, gender === "female" && styles.selectorLabelActiveFemale]}>
+              {"\u2640\uFE0F"} {t.voiceGenderFemale}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.selectorBtn, gender === "male" && styles.selectorBtnActive, styles.selectorBtnMale]}
+            onPress={() => setGender("male")}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.selectorLabel, gender === "male" && styles.selectorLabelActiveMale]}>
+              {"\u2642\uFE0F"} {t.voiceGenderMale}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -382,4 +408,29 @@ const styles = StyleSheet.create({
   sendIcon: { color: "#fff", fontSize: 20, fontWeight: "700" },
   newChatBtn: { marginRight: 12 },
   newChatText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: "600" },
+
+  // Gender selector
+  selectorRow: {
+    flexDirection: "row",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  selectorBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+  },
+  selectorBtnActive: { borderWidth: 2 },
+  selectorBtnFemale: {},
+  selectorBtnMale: {},
+  selectorLabel: { fontSize: fontSize.sm, fontWeight: "600", color: colors.textSecondary },
+  selectorLabelActiveFemale: { color: "#db2777" },
+  selectorLabelActiveMale: { color: "#2563eb" },
 })
