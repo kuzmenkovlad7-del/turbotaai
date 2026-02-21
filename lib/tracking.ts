@@ -1,7 +1,7 @@
 /**
- * Centralized tracking helpers for GA4 + Meta Pixel.
+ * Centralized tracking helpers for GA4 + Meta Pixel + TikTok Pixel.
  *
- * Safe no-ops when gtag/fbq are not loaded.
+ * Safe no-ops when gtag/fbq/ttq are not loaded.
  * All functions are client-side only — call from "use client" modules.
  */
 
@@ -35,6 +35,7 @@ export function updateTrackingDebug() {
     ...prev,
     gaLoaded: typeof w.gtag === "function",
     fbLoaded: typeof w.fbq === "function",
+    ttqLoaded: typeof w.ttq === "function",
     lastEvents: _lastEvents.slice(),
     counters: { ..._counters },
   }
@@ -49,7 +50,7 @@ function log(...args: any[]) {
 }
 
 // ---------------------------------------------------------------------------
-// Low-level GA4 / FB helpers
+// Low-level GA4 / Meta Pixel / TikTok helpers
 // ---------------------------------------------------------------------------
 
 function ga(eventName: string, params?: Record<string, any>) {
@@ -74,6 +75,17 @@ function fb(eventName: string, params?: Record<string, any>) {
   }
   w.fbq("track", eventName, params)
   log("fb", eventName, params)
+}
+
+/** TikTok Pixel — safe no-op when ttq is not ready */
+function ttq(eventName: string, params?: Record<string, any>) {
+  const w = typeof window !== "undefined" ? (window as any) : null
+  if (!w?.ttq?.track) {
+    log("ttq skip — not loaded", eventName)
+    return
+  }
+  w.ttq.track(eventName, params)
+  log("ttq", eventName, params)
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +134,7 @@ export function trackLeadClick(label?: string) {
 export function trackContactFormSubmit() {
   ga("generate_lead", { event_label: "contact_form" })
   fb("Lead", { content_name: "contact_form" })
+  ttq("SubmitForm")
   pushDebugEvent("contact_form_submit_success")
   updateTrackingDebug()
 }
@@ -130,6 +143,7 @@ export function trackContactFormSubmit() {
 export function trackSignup(method?: string) {
   ga("sign_up", method ? { method } : undefined)
   fb("CompleteRegistration")
+  ttq("CompleteRegistration")
   pushDebugEvent("signup_success", { method })
   updateTrackingDebug()
 }
@@ -145,6 +159,7 @@ export function trackLogin(method?: string) {
 export function trackCheckoutStart(params?: { value?: number; currency?: string }) {
   ga("begin_checkout", params)
   fb("InitiateCheckout", params)
+  ttq("InitiateCheckout", params)
   pushDebugEvent("checkout_start", params)
   updateTrackingDebug()
 }
@@ -153,6 +168,7 @@ export function trackCheckoutStart(params?: { value?: number; currency?: string 
 export function trackAddPaymentInfo(params?: { value?: number; currency?: string }) {
   ga("add_payment_info", params)
   fb("AddPaymentInfo", params)
+  // TikTok doesn't have AddPaymentInfo — no equivalent needed
   pushDebugEvent("add_payment_info", params)
   updateTrackingDebug()
 }
@@ -179,6 +195,11 @@ export function trackPurchase(params: {
     currency: params.currency,
     content_ids: [params.transaction_id],
   })
+  ttq("PlaceAnOrder", {
+    value: params.value,
+    currency: params.currency,
+    content_id: params.transaction_id,
+  })
   pushDebugEvent("purchase_success", params)
   updateTrackingDebug()
 }
@@ -187,7 +208,17 @@ export function trackPurchase(params: {
 export function trackTrialStart() {
   ga("start_trial")
   fb("StartTrial")
+  ttq("Subscribe")
   pushDebugEvent("trial_start")
+  updateTrackingDebug()
+}
+
+/** View key content page (pricing, landing) */
+export function trackViewContent(params?: { content_name?: string; content_id?: string }) {
+  ga("view_item", params)
+  fb("ViewContent", params)
+  ttq("ViewContent", params)
+  pushDebugEvent("view_content", params)
   updateTrackingDebug()
 }
 
@@ -216,6 +247,7 @@ export function trackStartChatClick() {
   const utmParams = getUtmParams()
   ga("start_chat_click", utmParams)
   fb("Lead", { content_name: "start_chat_click", ...utmParams })
+  ttq("ClickButton", { content_name: "start_chat" })
   pushDebugEvent("start_chat_click", utmParams)
   updateTrackingDebug()
 }
@@ -225,6 +257,7 @@ export function trackStartVoiceClick() {
   const utmParams = getUtmParams()
   ga("start_voice_click", utmParams)
   fb("Lead", { content_name: "start_voice_click", ...utmParams })
+  ttq("ClickButton", { content_name: "start_voice" })
   pushDebugEvent("start_voice_click", utmParams)
   updateTrackingDebug()
 }
@@ -234,6 +267,7 @@ export function trackStartVideoClick() {
   const utmParams = getUtmParams()
   ga("start_video_click", utmParams)
   fb("Lead", { content_name: "start_video_click", ...utmParams })
+  ttq("ClickButton", { content_name: "start_video" })
   pushDebugEvent("start_video_click", utmParams)
   updateTrackingDebug()
 }
@@ -262,4 +296,15 @@ export function trackFbPageView(path: string) {
   }
   w.fbq("track", "PageView")
   log("fb PageView", path)
+}
+
+/** TikTok Pixel page view (used by Analytics component for SPA navigation) */
+export function trackTtqPageView(path: string) {
+  const w = typeof window !== "undefined" ? (window as any) : null
+  if (!w?.ttq?.page) {
+    log("ttq PageView skip — not loaded", path)
+    return
+  }
+  w.ttq.page()
+  log("ttq page()", path)
 }
