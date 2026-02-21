@@ -3,9 +3,15 @@
 import { useEffect, useRef } from "react"
 import { usePathname } from "next/navigation"
 import Script from "next/script"
-import { trackPageView, trackFbPageView, updateTrackingDebug } from "@/lib/tracking"
+import { trackPageView, trackFbPageView, trackTtqPageView, updateTrackingDebug } from "@/lib/tracking"
 
 const GA_ID = "G-RRMR2Y3VGJ"
+
+// Pixel ID from env — falls back to the hardcoded production ID so builds
+// work without the env var (same behaviour as GA_ID above).
+const TIKTOK_PIXEL_ID =
+  process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID?.trim() || "D6CUMBJC77U90IGSJR5G"
+
 const DEBUG = process.env.NEXT_PUBLIC_TRACKING_DEBUG === "true"
 
 // ---------------------------------------------------------------------------
@@ -23,10 +29,6 @@ const FB_PIXEL_ID = normalisePixelId(RAW_PIXEL_ID)
 
 // ---------------------------------------------------------------------------
 // Suppress "[Meta Pixel] - Invalid PixelID: null." from 3rd-party scripts.
-// Our code never calls fbq("init") with a bad ID (normalisePixelId guards it),
-// but external sources (Meta Business Suite auto-injection, browser extensions)
-// can still trigger this warning via fbevents.js.  Only this exact pattern is
-// suppressed — all other console output passes through untouched.
 // ---------------------------------------------------------------------------
 if (typeof window !== "undefined") {
   const _pixelErrRe = /\[Meta Pixel\].*Invalid PixelID/
@@ -49,9 +51,18 @@ declare global {
     fbq?: (...args: any[]) => void
     _fbq?: any
     __fbPixelInited?: boolean
+    ttq?: {
+      page: () => void
+      track: (event: string, params?: Record<string, any>) => void
+      load: (id: string, opts?: Record<string, any>) => void
+      identify: (params: Record<string, any>) => void
+      [key: string]: any
+    }
+    __ttqPixelInited?: boolean
     __trackingDebug?: {
       gaLoaded: boolean
       fbLoaded: boolean
+      ttqLoaded: boolean
       lastEvents?: any[]
       counters?: Record<string, number>
       pixelIdMasked?: string
@@ -77,18 +88,18 @@ export default function Analytics() {
   const prevPathRef = useRef<string | null>(null)
   const gaReadyRef = useRef(false)
   const fbInitRef = useRef(false)
+  const ttqInitRef = useRef(false)
 
-  // Init Meta Pixel once — guarded by ref AND global flag
+  // ── Init Meta Pixel once ─────────────────────────────────────────────────
   useEffect(() => {
     if (fbInitRef.current) return
     if (typeof window === "undefined") return
 
     fbInitRef.current = true
 
-    // Reject invalid pixel IDs before touching fbq
     if (!FB_PIXEL_ID) {
       window.__trackingDebug = {
-        ...(window.__trackingDebug ?? { gaLoaded: false, fbLoaded: false }),
+        ...(window.__trackingDebug ?? { gaLoaded: false, fbLoaded: false, ttqLoaded: false }),
         pixelIdMasked: "(none)",
         pixelInitAttempted: true,
         pixelInitSuccess: false,
@@ -98,10 +109,9 @@ export default function Analytics() {
       return
     }
 
-    // Prevent double-init across React re-mounts (e.g. Strict Mode, HMR)
     if (window.__fbPixelInited) {
       window.__trackingDebug = {
-        ...(window.__trackingDebug ?? { gaLoaded: false, fbLoaded: false }),
+        ...(window.__trackingDebug ?? { gaLoaded: false, fbLoaded: false, ttqLoaded: false }),
         pixelIdMasked: maskPixelId(FB_PIXEL_ID),
         pixelInitAttempted: true,
         pixelInitSuccess: false,
@@ -111,22 +121,13 @@ export default function Analytics() {
       return
     }
 
-    // Standard Meta Pixel snippet (minified)
     const f = window
     const b = document
 
     if (f.fbq) {
-      // fbq exists from another script — just init with our ID
       f.fbq("init", FB_PIXEL_ID)
       f.fbq("track", "PageView")
       window.__fbPixelInited = true
-      window.__trackingDebug = {
-        ...(window.__trackingDebug ?? { gaLoaded: false, fbLoaded: false }),
-        pixelIdMasked: maskPixelId(FB_PIXEL_ID),
-        pixelInitAttempted: true,
-        pixelInitSuccess: true,
-        pixelInitReason: "ok",
-      }
       log("fb init (fbq already existed) + first PageView", maskPixelId(FB_PIXEL_ID))
       return
     }
@@ -157,7 +158,7 @@ export default function Analytics() {
     window.__fbPixelInited = true
 
     window.__trackingDebug = {
-      ...(window.__trackingDebug ?? { gaLoaded: false, fbLoaded: false }),
+      ...(window.__trackingDebug ?? { gaLoaded: false, fbLoaded: false, ttqLoaded: false }),
       pixelIdMasked: maskPixelId(FB_PIXEL_ID),
       pixelInitAttempted: true,
       pixelInitSuccess: true,
@@ -167,26 +168,45 @@ export default function Analytics() {
     log("fb init + first PageView", maskPixelId(FB_PIXEL_ID))
   }, [])
 
-  // Track SPA route changes
+  // ── Init TikTok Pixel once — fires ttq.page() for the first load ─────────
+  // The <Script> tag below loads the stub + remote script.
+  // This effect calls ttq.page() once after hydration.
+  // SPA route changes are handled by the pathname effect below.
+  useEffect(() => {
+    if (ttqInitRef.current) return
+    if (typeof window === "undefined") return
+    if (window.__ttqPixelInited) return
+
+    ttqInitRef.current = true
+    window.__ttqPixelInited = true
+
+    // ttq is a stub queue at this point — page() will be replayed when the
+    // remote script loads.
+    if (window.ttq?.page) {
+      window.ttq.page()
+      log("ttq first page()")
+    }
+  }, [])
+
+  // ── Track SPA route changes ───────────────────────────────────────────────
   useEffect(() => {
     if (!pathname) return
 
-    // Skip the very first render — GA4 handles it via config load,
-    // and Meta Pixel fires PageView on init above.
+    // Skip the very first render — init effects above handle the first load.
     if (prevPathRef.current === null) {
       prevPathRef.current = pathname
       return
     }
 
-    // Only fire on actual path changes (not re-renders)
     if (pathname === prevPathRef.current) return
     prevPathRef.current = pathname
 
     trackPageView(pathname)
     trackFbPageView(pathname)
+    trackTtqPageView(pathname)
   }, [pathname])
 
-  // Debug helper — updates every 2s
+  // ── Debug helper — updates every 2s ──────────────────────────────────────
   useEffect(() => {
     if (typeof window === "undefined") return
     updateTrackingDebug()
@@ -196,7 +216,7 @@ export default function Analytics() {
 
   return (
     <>
-      {/* GA4 — gtag.js loaded via next/script for optimal performance */}
+      {/* GA4 */}
       <Script
         src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
         strategy="afterInteractive"
@@ -218,7 +238,43 @@ export default function Analytics() {
         }}
       />
 
-      {/* Meta Pixel noscript fallback — only rendered when pixel ID is valid */}
+      {/* TikTok Pixel — stub queue init + async script load.
+          ttq.page() is NOT called here; the useEffect above fires it once
+          after hydration so React controls dedup. */}
+      <Script
+        id="tiktok-pixel-init"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{
+          __html: `
+            !function(w,d,t){
+              w.TiktokAnalyticsObject=t;
+              var ttq=w[t]=w[t]||[];
+              ttq.methods=["page","track","identify","instances","debug","on","off","once","ready",
+                           "alias","group","enableCookie","disableCookie","holdConsent",
+                           "revokeConsent","grantConsent"];
+              ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};
+              for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);
+              ttq.instance=function(t){
+                for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);
+                return e;
+              };
+              ttq.load=function(e,n){
+                var r="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;
+                ttq._i=ttq._i||{};ttq._i[e]=[];ttq._i[e]._u=r;
+                ttq._t=ttq._t||{};ttq._t[e]=+new Date;
+                ttq._o=ttq._o||{};ttq._o[e]=n||{};
+                n=document.createElement("script");n.type="text/javascript";n.async=!0;
+                n.src=r+"?sdkid="+e+"&lib="+t;
+                e=document.getElementsByTagName("script")[0];
+                e.parentNode.insertBefore(n,e);
+              };
+              ttq.load('${TIKTOK_PIXEL_ID}');
+            }(window,document,'ttq');
+          `,
+        }}
+      />
+
+      {/* Meta Pixel noscript fallback */}
       {FB_PIXEL_ID && (
         <noscript>
           <img

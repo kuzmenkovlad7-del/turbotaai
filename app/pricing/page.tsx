@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useLanguage } from "@/lib/i18n/language-context"
-import { trackCheckoutStart, trackAddPaymentInfo } from "@/lib/tracking"
+import { trackCheckoutStart, trackAddPaymentInfo, trackViewContent } from "@/lib/tracking"
 
 type AnyObj = Record<string, any>
 
@@ -229,6 +229,11 @@ export default function PricingPage() {
   const accessUntilPretty = fmtDateDMY(hasPaid ? paidUntilRaw : hasPromo ? promoUntilRaw : null) || null
 
   const questionsLabel = unlimited ? copy.unlimited : String(questionsLeft)
+
+  useEffect(() => {
+    // Track pricing page view for all ad platforms
+    trackViewContent({ content_name: "pricing", content_id: "pricing_page" })
+  }, [])
 
   useEffect(() => {
     let alive = true
