@@ -119,7 +119,9 @@ export function useAuth() {
     } catch (e: any) {
       if (!mounted.current) return
       console.warn("[useAuth] bootstrap FAILED:", e?.message)
-      setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true }))
+      // Keep previous accessInfo if available; fall back to EMPTY_ACCESS so UI
+      // never shows an infinite spinner (AccountScreen checks !accessInfo).
+      setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true, accessInfo: s.accessInfo ?? EMPTY_ACCESS }))
     } finally {
       bootstrapping.current = false
     }

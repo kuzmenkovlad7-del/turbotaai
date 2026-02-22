@@ -147,7 +147,13 @@ export default function VideoAssistantScreen() {
 
   const sendMessage = useCallback(async () => {
     const text = input.trim()
-    if (!text || sendingRef.current || !sessionIdRef.current) return
+    if (!text || sendingRef.current) return
+    // Session ID may not have loaded from storage yet on very first tap — generate inline
+    if (!sessionIdRef.current) {
+      const newId = generateUUID()
+      sessionIdRef.current = newId
+      setSessionId("video", newId).catch(() => {})
+    }
 
     sendingRef.current = true
     setSending(true)

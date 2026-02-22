@@ -66,7 +66,7 @@ export default function AccountScreen() {
         }))
         refreshAccess().catch(() => {})
       }
-    }, [refreshAccess, accessInfo]),
+    }, [refreshAccess]),
   )
 
   const handleLogout = () => {
