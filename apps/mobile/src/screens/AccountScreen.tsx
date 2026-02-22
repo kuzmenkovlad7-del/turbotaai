@@ -56,10 +56,16 @@ export default function AccountScreen() {
       const now = Date.now()
       if (now - lastFocusRefreshRef.current > 30_000) {
         lastFocusRefreshRef.current = now
-        console.log("[AccountScreen] focus refresh — fetching access status")
+        console.log("[AccountScreen] FOCUS REFRESH triggered — current accessInfo BEFORE:", JSON.stringify({
+          access: accessInfo?.access ?? "null",
+          trialLeft: accessInfo?.trialLeft ?? "null",
+          unlimited: accessInfo?.unlimited ?? "null",
+          paidUntil: accessInfo?.paidUntil ?? "null",
+          promoUntil: accessInfo?.promoUntil ?? "null",
+        }))
         refreshAccess().catch(() => {})
       }
-    }, [refreshAccess]),
+    }, [refreshAccess, accessInfo]),
   )
 
   const handleLogout = () => {

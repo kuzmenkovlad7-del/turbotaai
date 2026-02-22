@@ -165,6 +165,13 @@ export default function VideoAssistantScreen() {
         gender: selectedCharacter.gender,
         characterId: selectedCharacter.id,
       })
+      console.log("[VideoAssistant] PAYLOAD:", JSON.stringify({
+        mode: payload.mode,
+        characterId: payload.characterId,
+        gender: payload.gender,
+        sessionId: payload.sessionId,
+        userId: payload.userId,
+      }))
       const data = await api.sendMessage(payload)
       const reply = api.extractReplyText(data)
       const isError = data?.ok === false
