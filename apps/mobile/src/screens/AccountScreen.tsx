@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { useSubscription } from "@/hooks/useSubscription"
 import { redeemPromo, cancelAutoRenew, resumeAutoRenew } from "@/services/api"
+import { logEvent } from "@/services/analytics"
 import { API_BASE_URL, IAP_PRODUCTS } from "@/constants/config"
 import { LOCALE_LABELS, type Locale } from "@/constants/i18n"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
@@ -76,6 +77,7 @@ export default function AccountScreen() {
   }
 
   const handleSubscribeWeb = useCallback(() => {
+    logEvent("subscription_cta_tapped", { method: "web" })
     Linking.openURL(`${API_BASE_URL}/pricing`).catch(() => {})
   }, [])
 
@@ -88,6 +90,7 @@ export default function AccountScreen() {
       console.log("[Account] applying promo code:", code)
       const result = await redeemPromo(code)
       if (result.ok) {
+        logEvent("subscription_started", { method: "promo" })
         setPromoMsg({ text: t.accountPromoSuccess, ok: true })
         setPromoCode("")
         await refreshAccess()

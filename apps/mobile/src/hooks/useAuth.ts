@@ -3,6 +3,7 @@ import { AppState, type AppStateStatus } from "react-native"
 import { ensureDeviceHash } from "@/services/storage"
 import { signIn, signUp, signOut, refreshSession, isSupabaseConfigured, type AuthResult } from "@/services/supabase"
 import { bootstrap, type BootstrapData } from "@/services/api"
+import { logEvent } from "@/services/analytics"
 
 export type AccessInfo = {
   access: "paid" | "promo" | "trial" | "none"
@@ -188,6 +189,7 @@ export function useAuth() {
       const result = await signIn(email, password)
       console.log("[useAuth] login result:", result.ok, result.error ?? "")
       if (result.ok) {
+        logEvent("login", { method: "email" })
         // Set user immediately from signIn data so navigator transitions
         // even if the subsequent bootstrap call is slow or fails
         if (mounted.current && result.userId && result.email) {
@@ -221,6 +223,7 @@ export function useAuth() {
       const result = await signUp(email, password)
       console.log("[useAuth] register result:", result.ok, result.error ?? "")
       if (result.ok && !result.error) {
+        logEvent("register", { method: "email" })
         // Set user immediately so navigator transitions without waiting for bootstrap
         if (mounted.current && result.userId && result.email) {
           setState(s => ({ ...s, user: { id: result.userId!, email: result.email! } }))

@@ -18,6 +18,7 @@ import * as api from "@/services/api"
 import { generateUUID, getSessionId, setSessionId } from "@/services/storage"
 import { buildMessagePayload } from "@/services/messagePayload"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
+import { logEvent } from "@/services/analytics"
 
 type Message = {
   id: string
@@ -174,6 +175,13 @@ export default function VoiceAssistantScreen() {
       // Trigger typewriter animation for non-error responses
       if (!isError) {
         setStreamingMsgId(aiMsg.id)
+      }
+
+      // Track analytics
+      if (!isError) {
+        const isFirstMessage = !conversationIdRef.current
+        if (isFirstMessage) logEvent("chat_started", { mode: "voice", gender })
+        logEvent("message_sent", { mode: "voice", gender })
       }
 
       // Save to history (fire-and-forget)

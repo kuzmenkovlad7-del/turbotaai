@@ -95,18 +95,6 @@ export default function LoginScreen({ onLogin, onGoToRegister, onGoToForgotPassw
               style={{ marginTop: spacing.sm }}
             />
 
-            {/* OAuth stub — TODO: wire expo-auth-session when backend OAuth redirect is ready */}
-            <TouchableOpacity
-              style={styles.oauthBtn}
-              onPress={() => {
-                // TODO: Implement with expo-auth-session + supabase.auth.signInWithOAuth
-                alert(t.oauthComingSoon)
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.oauthText}>{t.oauthGoogle}</Text>
-            </TouchableOpacity>
-
             <TouchableOpacity onPress={onGoToRegister} style={styles.link}>
               <Text style={styles.linkText}>
                 {t.loginNoAccount} <Text style={styles.linkBold}>{t.loginCreate}</Text>
@@ -138,16 +126,6 @@ const styles = StyleSheet.create({
   },
   forgotLink: { alignSelf: "flex-end", marginTop: spacing.xs, marginBottom: spacing.xs },
   forgotText: { fontSize: fontSize.sm, color: colors.primary, fontWeight: "500" },
-  oauthBtn: {
-    marginTop: spacing.md,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    backgroundColor: colors.surface,
-  },
-  oauthText: { fontSize: fontSize.md, fontWeight: "600", color: colors.text },
   link: { alignItems: "center", marginTop: spacing.xl },
   linkText: { fontSize: fontSize.sm, color: colors.textSecondary },
   linkBold: { color: colors.primary, fontWeight: "600" },
