@@ -20,16 +20,17 @@ import { buildMessagePayload } from "@/services/messagePayload"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 type Character = {
-  id: string
+  id: string           // dr-* (what n8n actually reads)
+  avatarSlug: string   // mia|alex|leo (short name, sent as extra field for safety)
   nameKey: "assistantCharacterMia" | "assistantCharacterAlex" | "assistantCharacterLeo"
   gender: string
   emoji: string
 }
 
 const CHARACTERS: Character[] = [
-  { id: "dr-maria",      nameKey: "assistantCharacterMia",  gender: "female", emoji: "\uD83D\uDC69\u200D\u2695\uFE0F" },
-  { id: "dr-sophia",    nameKey: "assistantCharacterAlex", gender: "female", emoji: "\uD83D\uDC69\u200D\uD83D\uDCBC" },
-  { id: "dr-alexander", nameKey: "assistantCharacterLeo",  gender: "male",   emoji: "\uD83D\uDC68\u200D\u2695\uFE0F" },
+  { id: "dr-maria",      avatarSlug: "mia",  nameKey: "assistantCharacterMia",  gender: "female", emoji: "\uD83D\uDC69\u200D\u2695\uFE0F" },
+  { id: "dr-sophia",     avatarSlug: "alex", nameKey: "assistantCharacterAlex", gender: "female", emoji: "\uD83D\uDC69\u200D\uD83D\uDCBC" },
+  { id: "dr-alexander",  avatarSlug: "leo",  nameKey: "assistantCharacterLeo",  gender: "male",   emoji: "\uD83D\uDC68\u200D\u2695\uFE0F" },
 ]
 
 type Message = {
@@ -164,14 +165,19 @@ export default function VideoAssistantScreen() {
         email: user?.email,
         gender: selectedCharacter.gender,
         characterId: selectedCharacter.id,
+        avatarSlug: selectedCharacter.avatarSlug,
       })
+      // ── PAYLOAD CONTRACT PROOF LOG ──────────────────────────
       console.log("[VideoAssistant] PAYLOAD:", JSON.stringify({
+        label: t[selectedCharacter.nameKey],
         mode: payload.mode,
-        characterId: payload.characterId,
+        characterId: payload.characterId,   // dr-* (primary field n8n reads)
+        avatarSlug: payload.avatarSlug,     // mia|alex|leo (extra safety field)
         gender: payload.gender,
         sessionId: payload.sessionId,
         userId: payload.userId,
       }))
+      // ────────────────────────────────────────────────────────
       const data = await api.sendMessage(payload)
       const reply = api.extractReplyText(data)
       const isError = data?.ok === false
