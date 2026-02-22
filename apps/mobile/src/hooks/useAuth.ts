@@ -150,7 +150,7 @@ export function useAuth() {
       } catch (e: any) {
         console.warn("[useAuth] init error:", e?.message)
         if (mounted.current) {
-          setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true }))
+          setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true, accessInfo: s.accessInfo ?? EMPTY_ACCESS }))
         }
       }
     })()
