@@ -3,6 +3,7 @@ import { AppState, type AppStateStatus } from "react-native"
 import { ensureDeviceHash } from "@/services/storage"
 import { signIn, signUp, signOut, refreshSession, isSupabaseConfigured, type AuthResult } from "@/services/supabase"
 import { bootstrap, type BootstrapData } from "@/services/api"
+import { logEvent } from "@/services/analytics"
 
 export type AccessInfo = {
   access: "paid" | "promo" | "trial" | "none"
@@ -45,6 +46,7 @@ export function useAuth() {
     bootstrapFailed: false,
   })
   const mounted = useRef(true)
+  const bootstrapping = useRef(false)
 
   useEffect(() => {
     mounted.current = true
@@ -52,12 +54,44 @@ export function useAuth() {
   }, [])
 
   const runBootstrap = useCallback(async () => {
+    if (bootstrapping.current) {
+      console.log("[useAuth] bootstrap already in-flight, skipping")
+      return
+    }
+    bootstrapping.current = true
     try {
-      console.log("[useAuth] bootstrap start")
+      console.log("[useAuth] bootstrap START ─────────────────────")
       await ensureDeviceHash()
       const data = await bootstrap()
       if (!mounted.current) return
-      console.log("[useAuth] bootstrap ok, logged_in=", data.isLoggedIn)
+
+      // ── BEFORE/AFTER debug log ──────────────────────────────
+      setState(s => {
+        const prev = s.accessInfo
+        console.log("[useAuth] bootstrap BEFORE:", JSON.stringify({
+          access: prev?.access ?? "null",
+          trialLeft: prev?.trialLeft ?? "null",
+          unlimited: prev?.unlimited ?? "null",
+          paidUntil: prev?.paidUntil ?? "null",
+          promoUntil: prev?.promoUntil ?? "null",
+        }))
+        return s // no-op setState just to read prev synchronously
+      })
+      // ────────────────────────────────────────────────────────
+
+      console.log("[useAuth] bootstrap API response:", JSON.stringify({
+        ok: data.ok,
+        isLoggedIn: data.isLoggedIn,
+        access: data.access,
+        hasAccess: data.hasAccess,
+        unlimited: data.unlimited,
+        trial_questions_left: data.trial_questions_left,
+        paid_until: data.paid_until,
+        promo_until: data.promo_until,
+        subscription_status: data.subscription_status,
+        auto_renew: data.auto_renew,
+      }))
+
       const user = data.isLoggedIn && data.userId && data.email
         ? { id: data.userId, email: data.email }
         : null
@@ -71,11 +105,25 @@ export function useAuth() {
         subscriptionStatus: data.subscription_status ?? null,
         autoRenew: data.auto_renew ?? false,
       }
+
+      console.log("[useAuth] bootstrap AFTER:", JSON.stringify({
+        access: accessInfo.access,
+        trialLeft: accessInfo.trialLeft,
+        unlimited: accessInfo.unlimited,
+        paidUntil: accessInfo.paidUntil,
+        promoUntil: accessInfo.promoUntil,
+      }))
+      console.log("[useAuth] bootstrap END ───────────────────────")
+
       setState(s => ({ ...s, ready: true, user: user ?? s.user, accessInfo, error: null, bootstrapFailed: false }))
     } catch (e: any) {
       if (!mounted.current) return
-      console.warn("[useAuth] bootstrap failed:", e?.message)
-      setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true }))
+      console.warn("[useAuth] bootstrap FAILED:", e?.message)
+      // Keep previous accessInfo if available; fall back to EMPTY_ACCESS so UI
+      // never shows an infinite spinner (AccountScreen checks !accessInfo).
+      setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true, accessInfo: s.accessInfo ?? EMPTY_ACCESS }))
+    } finally {
+      bootstrapping.current = false
     }
   }, [])
 
@@ -102,7 +150,7 @@ export function useAuth() {
       } catch (e: any) {
         console.warn("[useAuth] init error:", e?.message)
         if (mounted.current) {
-          setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true }))
+          setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true, accessInfo: s.accessInfo ?? EMPTY_ACCESS }))
         }
       }
     })()
@@ -114,8 +162,9 @@ export function useAuth() {
     const subscription = AppState.addEventListener("change", async (next: AppStateStatus) => {
       const prev = appStateRef.current
       appStateRef.current = next
+      console.log(`[useAuth] AppState: ${prev} → ${next}`)
       if (prev.match(/inactive|background/) && next === "active" && mounted.current) {
-        console.log("[useAuth] app foregrounded — refreshing session")
+        console.log("[useAuth] FOREGROUND DETECTED — triggering session + bootstrap refresh")
         try {
           const result = await refreshSession().catch(() => ({ ok: false } as AuthResult))
           if (result.ok && result.userId && result.email && mounted.current) {
@@ -142,6 +191,7 @@ export function useAuth() {
       const result = await signIn(email, password)
       console.log("[useAuth] login result:", result.ok, result.error ?? "")
       if (result.ok) {
+        logEvent("login", { method: "email" })
         // Set user immediately from signIn data so navigator transitions
         // even if the subsequent bootstrap call is slow or fails
         if (mounted.current && result.userId && result.email) {
@@ -175,6 +225,7 @@ export function useAuth() {
       const result = await signUp(email, password)
       console.log("[useAuth] register result:", result.ok, result.error ?? "")
       if (result.ok && !result.error) {
+        logEvent("register", { method: "email" })
         // Set user immediately so navigator transitions without waiting for bootstrap
         if (mounted.current && result.userId && result.email) {
           setState(s => ({ ...s, user: { id: result.userId!, email: result.email! } }))

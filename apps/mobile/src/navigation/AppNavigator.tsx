@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useEffect, useRef } from "react"
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, ScrollView } from "react-native"
 import { StatusBar } from "expo-status-bar"
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native"
@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import { ENV_OK, ENV_ISSUES } from "@/constants/config"
+import { logEvent } from "@/services/analytics"
 
 /** Force light theme — never inherit device dark mode */
 const LightTheme = {
@@ -125,6 +126,15 @@ function MainTabs() {
 export default function AppNavigator() {
   const { ready, user, login, register, loading, error, bootstrapFailed, retryBootstrap } = useAuth()
   const { t } = useT()
+
+  // Fire app_open once when bootstrap completes
+  const appOpenFiredRef = useRef(false)
+  useEffect(() => {
+    if (ready && !appOpenFiredRef.current) {
+      appOpenFiredRef.current = true
+      logEvent("app_open", { logged_in: !!user })
+    }
+  }, [ready, user])
 
   // Missing environment variables — show clear error instead of crashing silently
   if (!ENV_OK) {

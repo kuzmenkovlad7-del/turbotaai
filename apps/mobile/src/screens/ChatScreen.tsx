@@ -18,6 +18,7 @@ import * as api from "@/services/api"
 import { generateUUID, getSessionId, setSessionId } from "@/services/storage"
 import { buildMessagePayload } from "@/services/messagePayload"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
+import { logEvent } from "@/services/analytics"
 
 type Message = {
   id: string
@@ -131,7 +132,13 @@ export default function ChatScreen() {
 
   const sendMessage = useCallback(async () => {
     const text = input.trim()
-    if (!text || sendingRef.current || !sessionIdRef.current) return
+    if (!text || sendingRef.current) return
+    // Session ID may not have loaded from storage yet on very first tap — generate inline
+    if (!sessionIdRef.current) {
+      const newId = generateUUID()
+      sessionIdRef.current = newId
+      setSessionId("chat", newId).catch(() => {})
+    }
 
     sendingRef.current = true
     setSending(true)
@@ -164,6 +171,13 @@ export default function ChatScreen() {
       // Trigger typewriter animation for non-error responses
       if (!isError) {
         setStreamingMsgId(aiMsg.id)
+      }
+
+      // Track analytics
+      if (!isError) {
+        const isFirstMessage = !conversationIdRef.current
+        if (isFirstMessage) logEvent("chat_started", { mode: "chat" })
+        logEvent("message_sent", { mode: "chat" })
       }
 
       // Save to history (fire-and-forget, don't block UI)

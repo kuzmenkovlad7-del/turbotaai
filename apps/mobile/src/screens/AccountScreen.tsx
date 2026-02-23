@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react"
+import React, { useState, useCallback, useRef } from "react"
 import {
   View,
   Text,
@@ -10,12 +10,14 @@ import {
   TouchableOpacity,
   Linking,
 } from "react-native"
+import { useFocusEffect } from "@react-navigation/native"
 import ScreenWrapper from "@/components/ScreenWrapper"
 import Button from "@/components/Button"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { useSubscription } from "@/hooks/useSubscription"
 import { redeemPromo, cancelAutoRenew, resumeAutoRenew } from "@/services/api"
+import { logEvent } from "@/services/analytics"
 import { API_BASE_URL, IAP_PRODUCTS } from "@/constants/config"
 import { LOCALE_LABELS, type Locale } from "@/constants/i18n"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
@@ -47,6 +49,20 @@ export default function AccountScreen() {
   // Refresh access state
   const [refreshingAccess, setRefreshingAccess] = useState(false)
 
+  // Refresh access when tab gains focus (e.g. returning from web browser after purchase/promo).
+  // Debounced to 30 s so repeated tab switches don't spam the API.
+  const lastFocusRefreshRef = useRef<number>(0)
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now()
+      if (now - lastFocusRefreshRef.current > 30_000) {
+        lastFocusRefreshRef.current = now
+        console.log("[AccountScreen] FOCUS REFRESH triggered — calling refreshAccess")
+        refreshAccess().catch(() => {})
+      }
+    }, [refreshAccess]),
+  )
+
   const handleLogout = () => {
     Alert.alert(t.accountSignOut, t.accountSignOutConfirm, [
       { text: t.accountCancel, style: "cancel" },
@@ -55,6 +71,7 @@ export default function AccountScreen() {
   }
 
   const handleSubscribeWeb = useCallback(() => {
+    logEvent("subscription_cta_tapped", { method: "web" })
     Linking.openURL(`${API_BASE_URL}/pricing`).catch(() => {})
   }, [])
 
@@ -67,6 +84,7 @@ export default function AccountScreen() {
       console.log("[Account] applying promo code:", code)
       const result = await redeemPromo(code)
       if (result.ok) {
+        logEvent("subscription_started", { method: "promo" })
         setPromoMsg({ text: t.accountPromoSuccess, ok: true })
         setPromoCode("")
         await refreshAccess()
@@ -301,12 +319,14 @@ export default function AccountScreen() {
 
           {/* Restore purchases + Refresh access */}
           <View style={styles.actionSection}>
-            <Button
-              title={t.accountRestorePurchases}
-              variant="ghost"
-              onPress={restorePurchases}
-              loading={restoring}
-            />
+            {iapEnabled && (
+              <Button
+                title={t.accountRestorePurchases}
+                variant="ghost"
+                onPress={restorePurchases}
+                loading={restoring}
+              />
+            )}
             <Button
               title={t.accountRefreshAccess}
               variant="outline"

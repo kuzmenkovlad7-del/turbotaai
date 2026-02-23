@@ -18,6 +18,21 @@ import * as api from "@/services/api"
 import { generateUUID, getSessionId, setSessionId } from "@/services/storage"
 import { buildMessagePayload } from "@/services/messagePayload"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
+import { logEvent } from "@/services/analytics"
+
+type Character = {
+  id: string           // dr-* (what n8n actually reads)
+  avatarSlug: string   // mia|alex|leo (short name, sent as extra field for safety)
+  nameKey: "assistantCharacterMia" | "assistantCharacterAlex" | "assistantCharacterLeo"
+  gender: string
+  emoji: string
+}
+
+const CHARACTERS: Character[] = [
+  { id: "dr-maria",      avatarSlug: "mia",  nameKey: "assistantCharacterMia",  gender: "female", emoji: "\uD83D\uDC69\u200D\u2695\uFE0F" },
+  { id: "dr-sophia",     avatarSlug: "alex", nameKey: "assistantCharacterAlex", gender: "female", emoji: "\uD83D\uDC69\u200D\uD83D\uDCBC" },
+  { id: "dr-alexander",  avatarSlug: "leo",  nameKey: "assistantCharacterLeo",  gender: "male",   emoji: "\uD83D\uDC68\u200D\u2695\uFE0F" },
+]
 
 type Message = {
   id: string
@@ -88,6 +103,7 @@ export default function VideoAssistantScreen() {
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null)
   const sendingRef = useRef(false)
   const isNearBottomRef = useRef(true)
+  const [selectedCharacter, setSelectedCharacter] = useState(CHARACTERS[0])
 
   // Load or create persistent sessionId
   useEffect(() => {
@@ -131,7 +147,13 @@ export default function VideoAssistantScreen() {
 
   const sendMessage = useCallback(async () => {
     const text = input.trim()
-    if (!text || sendingRef.current || !sessionIdRef.current) return
+    if (!text || sendingRef.current) return
+    // Session ID may not have loaded from storage yet on very first tap — generate inline
+    if (!sessionIdRef.current) {
+      const newId = generateUUID()
+      sessionIdRef.current = newId
+      setSessionId("video", newId).catch(() => {})
+    }
 
     sendingRef.current = true
     setSending(true)
@@ -148,7 +170,21 @@ export default function VideoAssistantScreen() {
         userId: user?.id || null,
         sessionId: sessionIdRef.current,
         email: user?.email,
+        gender: selectedCharacter.gender,
+        characterId: selectedCharacter.id,
+        avatarSlug: selectedCharacter.avatarSlug,
       })
+      // ── PAYLOAD CONTRACT PROOF LOG ──────────────────────────
+      console.log("[VideoAssistant] PAYLOAD:", JSON.stringify({
+        label: t[selectedCharacter.nameKey],
+        mode: payload.mode,
+        characterId: payload.characterId,   // dr-* (primary field n8n reads)
+        avatarSlug: payload.avatarSlug,     // mia|alex|leo (extra safety field)
+        gender: payload.gender,
+        sessionId: payload.sessionId,
+        userId: payload.userId,
+      }))
+      // ────────────────────────────────────────────────────────
       const data = await api.sendMessage(payload)
       const reply = api.extractReplyText(data)
       const isError = data?.ok === false
@@ -164,6 +200,13 @@ export default function VideoAssistantScreen() {
       // Trigger typewriter animation for non-error responses
       if (!isError) {
         setStreamingMsgId(aiMsg.id)
+      }
+
+      // Track analytics
+      if (!isError) {
+        const isFirstMessage = !conversationIdRef.current
+        if (isFirstMessage) logEvent("chat_started", { mode: "video", characterId: selectedCharacter.id })
+        logEvent("message_sent", { mode: "video", characterId: selectedCharacter.id })
       }
 
       // Save to history (fire-and-forget)
@@ -196,7 +239,7 @@ export default function VideoAssistantScreen() {
       sendingRef.current = false
       setSending(false)
     }
-  }, [input, user, t, locale])
+  }, [input, user, t, locale, selectedCharacter])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => {
@@ -232,6 +275,26 @@ export default function VideoAssistantScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
+        {/* Character selector */}
+        <View style={styles.selectorRow}>
+          {CHARACTERS.map((char) => {
+            const isActive = selectedCharacter.id === char.id
+            return (
+              <TouchableOpacity
+                key={char.id}
+                style={[styles.selectorBtn, isActive && styles.selectorBtnActive]}
+                onPress={() => setSelectedCharacter(char)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.selectorEmoji}>{char.emoji}</Text>
+                <Text style={[styles.selectorLabel, isActive && styles.selectorLabelActive]}>
+                  {t[char.nameKey]}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -382,4 +445,31 @@ const styles = StyleSheet.create({
   sendIcon: { color: "#fff", fontSize: 20, fontWeight: "700" },
   newChatBtn: { marginRight: 12 },
   newChatText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: "600" },
+
+  // Character selector
+  selectorRow: {
+    flexDirection: "row",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  selectorBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+  },
+  selectorBtnActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+    borderWidth: 2,
+  },
+  selectorEmoji: { fontSize: 20, marginBottom: 2 },
+  selectorLabel: { fontSize: fontSize.xs, fontWeight: "600", color: colors.textSecondary },
+  selectorLabelActive: { color: colors.primary },
 })

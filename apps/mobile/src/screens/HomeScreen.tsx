@@ -1,5 +1,6 @@
-import React from "react"
+import React, { useCallback, useRef } from "react"
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native"
+import { useFocusEffect } from "@react-navigation/native"
 import ScreenWrapper from "@/components/ScreenWrapper"
 import { useAuth, type AccessInfo } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
@@ -27,8 +28,22 @@ function AccessBadge({ info }: { info: AccessInfo | null }) {
 }
 
 export default function HomeScreen({ navigation }: Props) {
-  const { user, accessInfo } = useAuth()
+  const { user, accessInfo, refreshAccess } = useAuth()
   const { t } = useT()
+
+  // Keep the access badge in sync when user returns from external browser
+  // (e.g. after web purchase or promo activation). Debounced to 30 s.
+  const lastFocusRefreshRef = useRef<number>(0)
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now()
+      if (now - lastFocusRefreshRef.current > 30_000) {
+        lastFocusRefreshRef.current = now
+        console.log("[HomeScreen] focus refresh — fetching access status")
+        refreshAccess().catch(() => {})
+      }
+    }, [refreshAccess]),
+  )
 
   const cards = [
     {
