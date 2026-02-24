@@ -31,6 +31,15 @@ export type AuthContextValue = AuthState & {
   logout: () => Promise<void>
   refreshAccess: () => Promise<void>
   retryBootstrap: () => Promise<void>
+  /**
+   * Optimistically decrement trial_questions_left by 1 in local state.
+   *
+   * Call this after each successful AI reply while the user is on trial so
+   * the displayed count stays in sync without waiting for the next bootstrap
+   * round-trip. When trialLeft reaches 0, access transitions to "none"
+   * immediately — the locked paywall is shown on the next render.
+   */
+  decrementTrialLeft: () => void
 }
 
 const EMPTY_ACCESS: AccessInfo = {
@@ -59,6 +68,7 @@ export const AuthContext = createContext<AuthContextValue>({
   logout: NOOP_ASYNC,
   refreshAccess: NOOP_ASYNC,
   retryBootstrap: NOOP_ASYNC,
+  decrementTrialLeft: () => {},
 })
 
 /**
@@ -244,6 +254,23 @@ export function useAuthProvider(): AuthContextValue {
     }
   }, [])
 
+  const decrementTrialLeft = useCallback(() => {
+    setState((s) => {
+      if (!s.accessInfo || s.accessInfo.access !== "trial") return s
+      const newLeft = Math.max(0, s.accessInfo.trialLeft - 1)
+      return {
+        ...s,
+        accessInfo: {
+          ...s.accessInfo,
+          trialLeft: newLeft,
+          // Mirror the web: when questions run out, access becomes "none"
+          access: newLeft > 0 ? "trial" : "none",
+          hasAccess: newLeft > 0,
+        },
+      }
+    })
+  }, [])
+
   return {
     ...state,
     login,
@@ -251,6 +278,7 @@ export function useAuthProvider(): AuthContextValue {
     logout,
     refreshAccess: runBootstrap,
     retryBootstrap,
+    decrementTrialLeft,
   }
 }
 

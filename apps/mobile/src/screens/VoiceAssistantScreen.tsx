@@ -12,8 +12,10 @@ import {
 } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { API_BASE_URL } from "@/constants/config"
+import { getAccessState } from "@/utils/accessState"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import { logEvent } from "@/services/analytics"
 
@@ -47,7 +49,9 @@ const GENDER_OPTIONS: GenderOption[] = [
 export default function VoiceAssistantScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
+  const { accessInfo } = useAuth()
   const { t, locale } = useT()
+  const accessState = getAccessState(accessInfo)
 
   const [gender, setGender] = useState<VoiceGender>("female")
   const [starting, setStarting] = useState(false)
@@ -76,6 +80,12 @@ export default function VoiceAssistantScreen() {
     setPermError(null)
 
     try {
+      // Access gate — same rules as web platform (paid | promo | trial with questions left)
+      if (accessState.isLocked) {
+        setPermError(t.accessLockedTitle)
+        return
+      }
+
       const granted = await requestMicPermission()
       if (!granted) {
         setPermError(t.permMicDenied)
@@ -90,7 +100,7 @@ export default function VoiceAssistantScreen() {
     } finally {
       setStarting(false)
     }
-  }, [starting, gender, locale, t, navigation, requestMicPermission])
+  }, [starting, gender, locale, t, navigation, requestMicPermission, accessState.isLocked])
 
   const selectedOption = GENDER_OPTIONS.find((g) => g.id === gender)!
 
@@ -137,7 +147,7 @@ export default function VoiceAssistantScreen() {
           })}
         </View>
 
-        {/* Permission error */}
+        {/* Permission / access error */}
         {permError && (
           <View style={styles.permErrorBox}>
             <Text style={styles.permErrorText}>{permError}</Text>
@@ -146,28 +156,48 @@ export default function VoiceAssistantScreen() {
 
       </ScrollView>
 
-      {/* Start CTA */}
-      <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-        <TouchableOpacity
-          style={[
-            styles.startBtn,
-            { backgroundColor: selectedOption.accent },
-            starting && styles.startBtnDisabled,
-          ]}
-          onPress={handleStart}
-          disabled={starting}
-          activeOpacity={0.85}
-        >
-          {starting ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <Text style={styles.startBtnIcon}>{"\uD83D\uDCDE"}</Text>
-              <Text style={styles.startBtnText}>{t.voiceStartCall}</Text>
-            </>
+      {/* CTA bar */}
+      {accessState.isLocked ? (
+        /* Paywall — user has no access */
+        <View style={[styles.paywallBar, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          <View>
+            <Text style={styles.paywallTitle}>{t.accessLockedTitle}</Text>
+            <Text style={styles.paywallDesc}>{t.accessLockedDesc}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.paywallBtn}
+            onPress={() => (navigation as any).navigate("MainTabs", { screen: "AccountTab" })}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.paywallBtnText}>{t.accessGoToAccount}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          {accessState.isTrial && (
+            <Text style={styles.trialChip}>{t.accessTrialRemaining(accessState.trialLeft)}</Text>
           )}
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[
+              styles.startBtn,
+              { backgroundColor: selectedOption.accent },
+              starting && styles.startBtnDisabled,
+            ]}
+            onPress={handleStart}
+            disabled={starting}
+            activeOpacity={0.85}
+          >
+            {starting ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Text style={styles.startBtnIcon}>{"\uD83D\uDCDE"}</Text>
+                <Text style={styles.startBtnText}>{t.voiceStartCall}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   )
 }
@@ -267,4 +297,30 @@ const styles = StyleSheet.create({
   startBtnDisabled: { opacity: 0.6 },
   startBtnIcon: { fontSize: 20 },
   startBtnText: { color: "#fff", fontSize: fontSize.lg, fontWeight: "700" },
+  trialChip: {
+    fontSize: fontSize.xs,
+    color: colors.primary,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: spacing.xs,
+  },
+
+  // Paywall bar — shown when access is "none"
+  paywallBar: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    backgroundColor: colors.errorLight,
+    borderTopWidth: 1,
+    borderTopColor: colors.error,
+    gap: spacing.md,
+  },
+  paywallTitle: { fontSize: fontSize.md, fontWeight: "700", color: colors.error },
+  paywallDesc: { fontSize: fontSize.sm, color: colors.error, lineHeight: 18, marginTop: 2 },
+  paywallBtn: {
+    backgroundColor: colors.error,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    alignItems: "center" as const,
+  },
+  paywallBtnText: { color: "#fff", fontWeight: "700", fontSize: fontSize.sm },
 })

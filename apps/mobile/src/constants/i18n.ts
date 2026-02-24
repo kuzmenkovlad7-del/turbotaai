@@ -80,6 +80,13 @@ const en = {
   chatPlaceholder: "Type a message...",
   chatNoInternet: "No internet connection. Check your network and try again.",
   chatError: "Something went wrong. Please try again.",
+  chatPaymentRequired: "You\u2019ve used all your free questions. Subscribe to continue.",
+
+  // Access gating — shown when a feature is locked (matching web paywall copy)
+  accessLockedTitle: "No active plan",
+  accessLockedDesc: "Subscribe to get unlimited access to Chat, Voice & Video sessions.",
+  accessGoToAccount: "View subscription options",
+  accessTrialRemaining: (n: number) => `${n} free question${n !== 1 ? "s" : ""} remaining`,
 
   // Video / Voice
   videoTitle: "Video Assistant",
@@ -242,6 +249,11 @@ const uk: Translations = {
   chatPlaceholder: "Введіть повідомлення...",
   chatNoInternet: "Немає інтернету. Перевірте мережу.",
   chatError: "Щось пішло не так. Спробуйте ще раз.",
+  chatPaymentRequired: "Ви використали всі безкоштовні запитання. Підпишіться, щоб продовжити.",
+  accessLockedTitle: "Немає активного плану",
+  accessLockedDesc: "Підпишіться для необмеженого доступу до Чату, Голосу та Відео.",
+  accessGoToAccount: "Переглянути плани підписки",
+  accessTrialRemaining: (n: number) => `${n} безкоштовн${n === 1 ? "е запитання" : "их запитань"} залишилося`,
 
   videoTitle: "Відео-помічник",
   videoDesc: "Спілкуйтесь віч-на-віч з AI-помічником. Оберіть персонажа та розпочніть відеоконсультацію.",
@@ -393,6 +405,11 @@ const ru: Translations = {
   chatPlaceholder: "Введите сообщение...",
   chatNoInternet: "Нет интернета. Проверьте сеть.",
   chatError: "Что-то пошло не так. Попробуйте ещё раз.",
+  chatPaymentRequired: "Вы использовали все бесплатные вопросы. Подпишитесь, чтобы продолжить.",
+  accessLockedTitle: "Нет активного плана",
+  accessLockedDesc: "Подпишитесь для неограниченного доступа к Чату, Голосу и Видео.",
+  accessGoToAccount: "Посмотреть варианты подписки",
+  accessTrialRemaining: (n: number) => `${n} бесплатн${n === 1 ? "ый вопрос" : "ых вопроса"} осталось`,
 
   videoTitle: "Видео-помощник",
   videoDesc: "Общайтесь лицом к лицу с AI-помощником. Выберите персонажа и начните видеоконсультацию.",

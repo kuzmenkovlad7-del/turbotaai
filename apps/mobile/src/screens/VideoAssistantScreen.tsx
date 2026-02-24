@@ -11,8 +11,10 @@ import {
 } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { API_BASE_URL } from "@/constants/config"
+import { getAccessState } from "@/utils/accessState"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import { logEvent } from "@/services/analytics"
 
@@ -59,7 +61,9 @@ const CHARACTERS: Character[] = [
 export default function VideoAssistantScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
+  const { accessInfo } = useAuth()
   const { t, locale } = useT()
+  const accessState = getAccessState(accessInfo)
 
   const [selectedCharacter, setSelectedCharacter] = useState<Character>(CHARACTERS[0])
   const [starting, setStarting] = useState(false)
@@ -87,6 +91,12 @@ export default function VideoAssistantScreen() {
     setPermError(null)
 
     try {
+      // Access gate — same rules as web platform (paid | promo | trial with questions left)
+      if (accessState.isLocked) {
+        setPermError(t.accessLockedTitle)
+        return
+      }
+
       const granted = await requestPermissions()
       if (!granted) {
         // Show the more restrictive error (camera covers both)
@@ -110,7 +120,7 @@ export default function VideoAssistantScreen() {
     } finally {
       setStarting(false)
     }
-  }, [starting, selectedCharacter, locale, t, navigation, requestPermissions])
+  }, [starting, selectedCharacter, locale, t, navigation, requestPermissions, accessState.isLocked])
 
   return (
     <View style={[styles.root, { paddingBottom: insets.bottom }]}>
@@ -170,28 +180,48 @@ export default function VideoAssistantScreen() {
 
       </ScrollView>
 
-      {/* Start CTA */}
-      <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-        <TouchableOpacity
-          style={[
-            styles.startBtn,
-            { backgroundColor: selectedCharacter.accent },
-            starting && styles.startBtnDisabled,
-          ]}
-          onPress={handleStart}
-          disabled={starting}
-          activeOpacity={0.85}
-        >
-          {starting ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <Text style={styles.startBtnIcon}>{"\uD83C\uDFA5"}</Text>
-              <Text style={styles.startBtnText}>{t.videoStartCall}</Text>
-            </>
+      {/* CTA bar */}
+      {accessState.isLocked ? (
+        /* Paywall — user has no access */
+        <View style={[styles.paywallBar, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          <View>
+            <Text style={styles.paywallTitle}>{t.accessLockedTitle}</Text>
+            <Text style={styles.paywallDesc}>{t.accessLockedDesc}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.paywallBtn}
+            onPress={() => (navigation as any).navigate("MainTabs", { screen: "AccountTab" })}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.paywallBtnText}>{t.accessGoToAccount}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          {accessState.isTrial && (
+            <Text style={styles.trialChip}>{t.accessTrialRemaining(accessState.trialLeft)}</Text>
           )}
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[
+              styles.startBtn,
+              { backgroundColor: selectedCharacter.accent },
+              starting && styles.startBtnDisabled,
+            ]}
+            onPress={handleStart}
+            disabled={starting}
+            activeOpacity={0.85}
+          >
+            {starting ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Text style={styles.startBtnIcon}>{"\uD83C\uDFA5"}</Text>
+                <Text style={styles.startBtnText}>{t.videoStartCall}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   )
 }
@@ -298,4 +328,30 @@ const styles = StyleSheet.create({
   startBtnDisabled: { opacity: 0.6 },
   startBtnIcon: { fontSize: 20 },
   startBtnText: { color: "#fff", fontSize: fontSize.lg, fontWeight: "700" },
+  trialChip: {
+    fontSize: fontSize.xs,
+    color: colors.primary,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: spacing.xs,
+  },
+
+  // Paywall bar — shown when access is "none"
+  paywallBar: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    backgroundColor: colors.errorLight,
+    borderTopWidth: 1,
+    borderTopColor: colors.error,
+    gap: spacing.md,
+  },
+  paywallTitle: { fontSize: fontSize.md, fontWeight: "700", color: colors.error },
+  paywallDesc: { fontSize: fontSize.sm, color: colors.error, lineHeight: 18, marginTop: 2 },
+  paywallBtn: {
+    backgroundColor: colors.error,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    alignItems: "center" as const,
+  },
+  paywallBtnText: { color: "#fff", fontWeight: "700", fontSize: fontSize.sm },
 })
