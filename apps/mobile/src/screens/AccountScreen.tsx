@@ -57,7 +57,6 @@ export default function AccountScreen() {
       const now = Date.now()
       if (now - lastFocusRefreshRef.current > 30_000) {
         lastFocusRefreshRef.current = now
-        console.log("[AccountScreen] FOCUS REFRESH triggered — calling refreshAccess")
         refreshAccess().catch(() => {})
       }
     }, [refreshAccess]),
@@ -81,7 +80,6 @@ export default function AccountScreen() {
     setPromoLoading(true)
     setPromoMsg(null)
     try {
-      console.log("[Account] applying promo code:", code)
       const result = await redeemPromo(code)
       if (result.ok) {
         logEvent("subscription_started", { method: "promo" })

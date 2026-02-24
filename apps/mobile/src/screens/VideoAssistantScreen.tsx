@@ -174,17 +174,6 @@ export default function VideoAssistantScreen() {
         characterId: selectedCharacter.id,
         avatarSlug: selectedCharacter.avatarSlug,
       })
-      // ── PAYLOAD CONTRACT PROOF LOG ──────────────────────────
-      console.log("[VideoAssistant] PAYLOAD:", JSON.stringify({
-        label: t[selectedCharacter.nameKey],
-        mode: payload.mode,
-        characterId: payload.characterId,   // dr-* (primary field n8n reads)
-        avatarSlug: payload.avatarSlug,     // mia|alex|leo (extra safety field)
-        gender: payload.gender,
-        sessionId: payload.sessionId,
-        userId: payload.userId,
-      }))
-      // ────────────────────────────────────────────────────────
       const data = await api.sendMessage(payload)
       const reply = api.extractReplyText(data)
       const isError = data?.ok === false

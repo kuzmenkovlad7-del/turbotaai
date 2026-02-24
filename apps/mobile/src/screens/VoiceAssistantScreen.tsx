@@ -160,12 +160,6 @@ export default function VoiceAssistantScreen() {
         email: user?.email,
         gender,
       })
-      console.log("[VoiceAssistant] PAYLOAD:", JSON.stringify({
-        mode: payload.mode,
-        gender: payload.gender,
-        sessionId: payload.sessionId,
-        userId: payload.userId,
-      }))
       const data = await api.sendMessage(payload)
       const reply = api.extractReplyText(data)
       const isError = data?.ok === false

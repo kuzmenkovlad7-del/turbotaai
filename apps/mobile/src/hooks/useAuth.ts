@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react"
 import { AppState, type AppStateStatus } from "react-native"
 import { ensureDeviceHash } from "@/services/storage"
 import { signIn, signUp, signOut, refreshSession, isSupabaseConfigured, type AuthResult } from "@/services/supabase"
@@ -25,6 +25,14 @@ type AuthState = {
   bootstrapFailed: boolean
 }
 
+export type AuthContextValue = AuthState & {
+  login: (email: string, password: string) => Promise<AuthResult>
+  register: (email: string, password: string) => Promise<AuthResult>
+  logout: () => Promise<void>
+  refreshAccess: () => Promise<void>
+  retryBootstrap: () => Promise<void>
+}
+
 const EMPTY_ACCESS: AccessInfo = {
   access: "none",
   hasAccess: false,
@@ -36,7 +44,28 @@ const EMPTY_ACCESS: AccessInfo = {
   autoRenew: false,
 }
 
-export function useAuth() {
+const NOOP_RESULT: AuthResult = { ok: false, error: "AuthContext not initialised" }
+const NOOP_ASYNC = async () => {}
+
+export const AuthContext = createContext<AuthContextValue>({
+  ready: false,
+  user: null,
+  accessInfo: null,
+  error: null,
+  loading: false,
+  bootstrapFailed: false,
+  login: async () => NOOP_RESULT,
+  register: async () => NOOP_RESULT,
+  logout: NOOP_ASYNC,
+  refreshAccess: NOOP_ASYNC,
+  retryBootstrap: NOOP_ASYNC,
+})
+
+/**
+ * Run inside AuthContext.Provider (App.tsx).
+ * Exposes a single shared auth + access state for the whole app.
+ */
+export function useAuthProvider(): AuthContextValue {
   const [state, setState] = useState<AuthState>({
     ready: false,
     user: null,
@@ -54,43 +83,12 @@ export function useAuth() {
   }, [])
 
   const runBootstrap = useCallback(async () => {
-    if (bootstrapping.current) {
-      console.log("[useAuth] bootstrap already in-flight, skipping")
-      return
-    }
+    if (bootstrapping.current) return
     bootstrapping.current = true
     try {
-      console.log("[useAuth] bootstrap START ─────────────────────")
       await ensureDeviceHash()
-      const data = await bootstrap()
+      const data: BootstrapData = await bootstrap()
       if (!mounted.current) return
-
-      // ── BEFORE/AFTER debug log ──────────────────────────────
-      setState(s => {
-        const prev = s.accessInfo
-        console.log("[useAuth] bootstrap BEFORE:", JSON.stringify({
-          access: prev?.access ?? "null",
-          trialLeft: prev?.trialLeft ?? "null",
-          unlimited: prev?.unlimited ?? "null",
-          paidUntil: prev?.paidUntil ?? "null",
-          promoUntil: prev?.promoUntil ?? "null",
-        }))
-        return s // no-op setState just to read prev synchronously
-      })
-      // ────────────────────────────────────────────────────────
-
-      console.log("[useAuth] bootstrap API response:", JSON.stringify({
-        ok: data.ok,
-        isLoggedIn: data.isLoggedIn,
-        access: data.access,
-        hasAccess: data.hasAccess,
-        unlimited: data.unlimited,
-        trial_questions_left: data.trial_questions_left,
-        paid_until: data.paid_until,
-        promo_until: data.promo_until,
-        subscription_status: data.subscription_status,
-        auto_renew: data.auto_renew,
-      }))
 
       const user = data.isLoggedIn && data.userId && data.email
         ? { id: data.userId, email: data.email }
@@ -106,22 +104,23 @@ export function useAuth() {
         autoRenew: data.auto_renew ?? false,
       }
 
-      console.log("[useAuth] bootstrap AFTER:", JSON.stringify({
-        access: accessInfo.access,
-        trialLeft: accessInfo.trialLeft,
-        unlimited: accessInfo.unlimited,
-        paidUntil: accessInfo.paidUntil,
-        promoUntil: accessInfo.promoUntil,
+      setState(s => ({
+        ...s,
+        ready: true,
+        user: user ?? s.user,
+        accessInfo,
+        error: null,
+        bootstrapFailed: false,
       }))
-      console.log("[useAuth] bootstrap END ───────────────────────")
-
-      setState(s => ({ ...s, ready: true, user: user ?? s.user, accessInfo, error: null, bootstrapFailed: false }))
     } catch (e: any) {
       if (!mounted.current) return
-      console.warn("[useAuth] bootstrap FAILED:", e?.message)
-      // Keep previous accessInfo if available; fall back to EMPTY_ACCESS so UI
-      // never shows an infinite spinner (AccountScreen checks !accessInfo).
-      setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true, accessInfo: s.accessInfo ?? EMPTY_ACCESS }))
+      setState(s => ({
+        ...s,
+        ready: true,
+        error: e?.message,
+        bootstrapFailed: true,
+        accessInfo: s.accessInfo ?? EMPTY_ACCESS,
+      }))
     } finally {
       bootstrapping.current = false
     }
@@ -132,7 +131,7 @@ export function useAuth() {
     await runBootstrap()
   }, [runBootstrap])
 
-  // On mount: try refresh then bootstrap
+  // On mount: refresh session then bootstrap
   useEffect(() => {
     ;(async () => {
       try {
@@ -141,38 +140,39 @@ export function useAuth() {
         }
         await ensureDeviceHash()
         const refreshResult = await refreshSession().catch(() => ({ ok: false } as AuthResult))
-        console.log("[useAuth] session refresh:", refreshResult.ok ? "restored" : "no session")
-        // Pre-set user from refresh result so if bootstrap fails we still know who's logged in
         if (refreshResult.ok && refreshResult.userId && refreshResult.email && mounted.current) {
           setState(s => ({ ...s, user: { id: refreshResult.userId!, email: refreshResult.email! } }))
         }
         await runBootstrap()
       } catch (e: any) {
-        console.warn("[useAuth] init error:", e?.message)
         if (mounted.current) {
-          setState(s => ({ ...s, ready: true, error: e?.message, bootstrapFailed: true, accessInfo: s.accessInfo ?? EMPTY_ACCESS }))
+          setState(s => ({
+            ...s,
+            ready: true,
+            error: e?.message,
+            bootstrapFailed: true,
+            accessInfo: s.accessInfo ?? EMPTY_ACCESS,
+          }))
         }
       }
     })()
   }, [runBootstrap])
 
-  // Refresh session + access when app returns from background
+  // Refresh when app returns from background
   useEffect(() => {
     const appStateRef = { current: AppState.currentState }
     const subscription = AppState.addEventListener("change", async (next: AppStateStatus) => {
       const prev = appStateRef.current
       appStateRef.current = next
-      console.log(`[useAuth] AppState: ${prev} → ${next}`)
       if (prev.match(/inactive|background/) && next === "active" && mounted.current) {
-        console.log("[useAuth] FOREGROUND DETECTED — triggering session + bootstrap refresh")
         try {
           const result = await refreshSession().catch(() => ({ ok: false } as AuthResult))
           if (result.ok && result.userId && result.email && mounted.current) {
             setState(s => ({ ...s, user: { id: result.userId!, email: result.email! } }))
           }
           await runBootstrap()
-        } catch (e: any) {
-          console.warn("[useAuth] foreground refresh error:", e?.message)
+        } catch {
+          // silent — next foreground attempt will retry
         }
       }
     })
@@ -187,13 +187,9 @@ export function useAuth() {
         if (mounted.current) setState(s => ({ ...s, loading: false, error: err }))
         return { ok: false, error: err }
       }
-      console.log("[useAuth] login attempt:", email)
       const result = await signIn(email, password)
-      console.log("[useAuth] login result:", result.ok, result.error ?? "")
       if (result.ok) {
         logEvent("login", { method: "email" })
-        // Set user immediately from signIn data so navigator transitions
-        // even if the subsequent bootstrap call is slow or fails
         if (mounted.current && result.userId && result.email) {
           setState(s => ({ ...s, user: { id: result.userId!, email: result.email! } }))
         }
@@ -205,10 +201,7 @@ export function useAuth() {
       return result
     } catch (e: any) {
       const msg = e?.message || "Login failed unexpectedly"
-      console.warn("[useAuth] login error:", msg)
-      if (mounted.current) {
-        setState(s => ({ ...s, loading: false, error: msg }))
-      }
+      if (mounted.current) setState(s => ({ ...s, loading: false, error: msg }))
       return { ok: false, error: msg }
     }
   }, [runBootstrap])
@@ -221,12 +214,9 @@ export function useAuth() {
         if (mounted.current) setState(s => ({ ...s, loading: false, error: err }))
         return { ok: false, error: err }
       }
-      console.log("[useAuth] register attempt:", email)
       const result = await signUp(email, password)
-      console.log("[useAuth] register result:", result.ok, result.error ?? "")
       if (result.ok && !result.error) {
         logEvent("register", { method: "email" })
-        // Set user immediately so navigator transitions without waiting for bootstrap
         if (mounted.current && result.userId && result.email) {
           setState(s => ({ ...s, user: { id: result.userId!, email: result.email! } }))
         }
@@ -238,20 +228,16 @@ export function useAuth() {
       return result
     } catch (e: any) {
       const msg = e?.message || "Registration failed unexpectedly"
-      console.warn("[useAuth] register error:", msg)
-      if (mounted.current) {
-        setState(s => ({ ...s, loading: false, error: msg }))
-      }
+      if (mounted.current) setState(s => ({ ...s, loading: false, error: msg }))
       return { ok: false, error: msg }
     }
   }, [runBootstrap])
 
   const logout = useCallback(async () => {
     try {
-      console.log("[useAuth] logout")
       await signOut()
-    } catch (e: any) {
-      console.warn("[useAuth] logout error:", e?.message)
+    } catch {
+      // silent
     }
     if (mounted.current) {
       setState({ ready: true, user: null, accessInfo: EMPTY_ACCESS, error: null, loading: false, bootstrapFailed: false })
@@ -266,4 +252,12 @@ export function useAuth() {
     refreshAccess: runBootstrap,
     retryBootstrap,
   }
+}
+
+/**
+ * Consume the shared auth context.
+ * All screens share the same state — refreshAccess() updates every consumer.
+ */
+export function useAuth(): AuthContextValue {
+  return useContext(AuthContext)
 }

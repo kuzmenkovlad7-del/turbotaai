@@ -85,8 +85,6 @@ export function useSubscription() {
       // 2. const purchases = await getAvailablePurchases()
       // 3. Validate each receipt with backend
       // 4. Refresh access status
-      console.log("[useSubscription] restore purchases requested")
-
       setState(s => ({ ...s, restoring: false, error: null }))
     } catch (e: any) {
       setState(s => ({ ...s, restoring: false, error: e?.message || "Restore failed" }))
