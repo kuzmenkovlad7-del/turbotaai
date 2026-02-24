@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react"
+import React, { useState, useCallback, useRef } from "react"
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native"
-import { useNavigation } from "@react-navigation/native"
+import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
@@ -61,13 +61,26 @@ const CHARACTERS: Character[] = [
 export default function VideoAssistantScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
-  const { accessInfo } = useAuth()
+  const { accessInfo, refreshAccess } = useAuth()
   const { t, locale } = useT()
   const accessState = getAccessState(accessInfo)
 
   const [selectedCharacter, setSelectedCharacter] = useState<Character>(CHARACTERS[0])
   const [starting, setStarting] = useState(false)
   const [permError, setPermError] = useState<string | null>(null)
+
+  // Refresh access state on focus — keeps gating in sync after a promo/purchase
+  // made on the web or another screen. Debounced to 30 s to match HomeScreen.
+  const lastFocusRefreshRef = useRef<number>(0)
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now()
+      if (now - lastFocusRefreshRef.current > 30_000) {
+        lastFocusRefreshRef.current = now
+        refreshAccess().catch(() => {})
+      }
+    }, [refreshAccess]),
+  )
 
   const requestPermissions = useCallback(async (): Promise<boolean> => {
     if (Platform.OS !== "android") return true

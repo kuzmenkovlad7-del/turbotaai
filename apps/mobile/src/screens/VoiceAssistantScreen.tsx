@@ -1,16 +1,15 @@
-import React, { useState, useCallback } from "react"
+import React, { useState, useCallback, useRef } from "react"
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   Platform,
   PermissionsAndroid,
   ScrollView,
   ActivityIndicator,
 } from "react-native"
-import { useNavigation } from "@react-navigation/native"
+import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
@@ -49,13 +48,26 @@ const GENDER_OPTIONS: GenderOption[] = [
 export default function VoiceAssistantScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
-  const { accessInfo } = useAuth()
+  const { accessInfo, refreshAccess } = useAuth()
   const { t, locale } = useT()
   const accessState = getAccessState(accessInfo)
 
   const [gender, setGender] = useState<VoiceGender>("female")
   const [starting, setStarting] = useState(false)
   const [permError, setPermError] = useState<string | null>(null)
+
+  // Refresh access state on focus — keeps gating in sync after a promo/purchase
+  // made on the web or another screen. Debounced to 30 s to match HomeScreen.
+  const lastFocusRefreshRef = useRef<number>(0)
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now()
+      if (now - lastFocusRefreshRef.current > 30_000) {
+        lastFocusRefreshRef.current = now
+        refreshAccess().catch(() => {})
+      }
+    }, [refreshAccess]),
+  )
 
   const requestMicPermission = useCallback(async (): Promise<boolean> => {
     if (Platform.OS !== "android") return true

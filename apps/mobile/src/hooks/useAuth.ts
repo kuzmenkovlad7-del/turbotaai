@@ -86,6 +86,12 @@ export function useAuthProvider(): AuthContextValue {
   })
   const mounted = useRef(true)
   const bootstrapping = useRef(false)
+  /**
+   * Set to true when refreshAccess() is called while a bootstrap is already
+   * in progress. The in-flight bootstrap will re-run once it finishes so the
+   * most recent server state (e.g. after promo apply) is always reflected.
+   */
+  const pendingRefresh = useRef(false)
 
   useEffect(() => {
     mounted.current = true
@@ -93,8 +99,14 @@ export function useAuthProvider(): AuthContextValue {
   }, [])
 
   const runBootstrap = useCallback(async () => {
-    if (bootstrapping.current) return
+    if (bootstrapping.current) {
+      // A bootstrap is already in-flight; queue a follow-up so the latest
+      // server state (e.g. after promo apply) is reflected once it finishes.
+      pendingRefresh.current = true
+      return
+    }
     bootstrapping.current = true
+    pendingRefresh.current = false
     try {
       await ensureDeviceHash()
       const data: BootstrapData = await bootstrap()
@@ -133,8 +145,15 @@ export function useAuthProvider(): AuthContextValue {
       }))
     } finally {
       bootstrapping.current = false
+      // If refreshAccess() was called while we were running, fetch again
+      // immediately so the caller's state change (e.g. promo applied) is
+      // picked up without requiring a manual retry or app restart.
+      if (pendingRefresh.current && mounted.current) {
+        pendingRefresh.current = false
+        runBootstrap()
+      }
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const retryBootstrap = useCallback(async () => {
     setState(s => ({ ...s, error: null, bootstrapFailed: false }))
