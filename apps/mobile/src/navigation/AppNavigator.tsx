@@ -104,7 +104,7 @@ function MainTabs() {
     >
       <Tab.Screen
         name="HomeTab"
-        options={{ tabBarLabel: t.homeWelcome }}
+        options={{ tabBarLabel: t.homeTabLabel }}
       >
         {(props) => <HomeScreen navigation={props.navigation.getParent() ?? props.navigation} />}
       </Tab.Screen>
@@ -175,15 +175,15 @@ export default function AppNavigator() {
     )
   }
 
-  // Bootstrap failed with no user — show error with retry
-  if (bootstrapFailed && !user && error) {
+  // Bootstrap failed with no user — show localized error with retry
+  if (bootstrapFailed && !user) {
     return (
       <View style={styles.splash}>
         <Text style={styles.splashLogo}>TurbotaAI</Text>
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorText}>{t.bootstrapErrorDesc}</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={retryBootstrap} activeOpacity={0.7}>
-            <Text style={styles.retryText}>{t.retry}</Text>
+            <Text style={styles.retryText}>{t.bootstrapRetry}</Text>
           </TouchableOpacity>
         </View>
       </View>

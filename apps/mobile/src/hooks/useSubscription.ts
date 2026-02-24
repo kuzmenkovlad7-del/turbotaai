@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react"
 import { Platform, Alert, Linking } from "react-native"
-import { IAP_ENABLED, IAP_PRODUCTS } from "@/constants/config"
-import * as api from "@/services/api"
+import { IAP_ENABLED } from "@/constants/config"
+import { useAuth } from "@/hooks/useAuth"
 
 type SubState = {
   purchasing: boolean
@@ -22,6 +22,7 @@ type SubState = {
  * 4. Backend receipt validation implemented
  */
 export function useSubscription() {
+  const { refreshAccess } = useAuth()
   const [state, setState] = useState<SubState>({
     purchasing: false,
     restoring: false,
@@ -42,31 +43,14 @@ export function useSubscription() {
     try {
       // TODO: When IAP is enabled and react-native-iap is installed:
       // 1. import { requestSubscription } from "react-native-iap"
-      // 2. const purchase = await requestSubscription({ sku: productId })
-      // 3. Send receipt to backend for validation
-      // 4. Refresh access status
-
-      const platform = Platform.OS === "ios" ? "ios" : "android"
-
-      const result = await api.validateReceipt({
-        platform: platform as "ios" | "android",
-        productId,
-        transactionReceipt: "MOBILE_PURCHASE_PENDING",
-      })
-
-      if (result?.ok) {
-        setState(s => ({ ...s, purchasing: false, error: null }))
-      } else {
-        setState(s => ({
-          ...s,
-          purchasing: false,
-          error: result?.message || result?.error || "Purchase could not be completed",
-        }))
-      }
+      // 2. const result = await requestSubscription({ sku: productId })
+      // 3. Validate receipt: await api.validateReceipt({ platform, productId, transactionReceipt: result.transactionReceipt })
+      // 4. await refreshAccess()
+      setState(s => ({ ...s, purchasing: false }))
     } catch (e: any) {
-      setState(s => ({ ...s, purchasing: false, error: e?.message || "Purchase failed" }))
+      setState(s => ({ ...s, purchasing: false, error: e?.message || "Purchase could not be completed" }))
     }
-  }, [])
+  }, [refreshAccess])
 
   const restorePurchases = useCallback(async () => {
     if (!IAP_ENABLED) {
@@ -84,12 +68,12 @@ export function useSubscription() {
       // 1. import { getAvailablePurchases } from "react-native-iap"
       // 2. const purchases = await getAvailablePurchases()
       // 3. Validate each receipt with backend
-      // 4. Refresh access status
+      // 4. await refreshAccess()
       setState(s => ({ ...s, restoring: false, error: null }))
     } catch (e: any) {
       setState(s => ({ ...s, restoring: false, error: e?.message || "Restore failed" }))
     }
-  }, [])
+  }, [refreshAccess])
 
   const manageSubscription = useCallback(() => {
     if (Platform.OS === "ios") {

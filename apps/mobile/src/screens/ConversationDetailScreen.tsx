@@ -35,7 +35,7 @@ export default function ConversationDetailScreen({ route }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [id])
+  }, [id, t])
 
   useEffect(() => {
     load()

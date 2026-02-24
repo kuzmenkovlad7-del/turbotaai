@@ -34,13 +34,15 @@ export default function WebViewScreen() {
   // as the native app — ensures trial/promo/paid access is correctly applied.
   const [cookieScript, setCookieScript] = useState<string>("")
   React.useEffect(() => {
-    getDeviceHash().then((hash) => {
-      if (hash) {
-        setCookieScript(
-          `document.cookie = 'ta_device_hash=${hash}; path=/; SameSite=Lax'; true;`,
-        )
-      }
-    })
+    getDeviceHash()
+      .then((hash) => {
+        if (hash) {
+          setCookieScript(
+            `document.cookie = 'ta_device_hash=${hash}; path=/; SameSite=Lax'; true;`,
+          )
+        }
+      })
+      .catch(() => {})
   }, [])
 
   const handleMessage = useCallback(

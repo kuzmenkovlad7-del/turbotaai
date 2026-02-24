@@ -182,6 +182,9 @@ const en = {
   badgePromo: "Promo",
   badgeTrial: (n: number) => `Trial (${n} left)`,
   badgeNone: "No access",
+
+  // Tab bar — short so labels don't overflow on narrow screens
+  homeTabLabel: "Home",
 } as const
 
 /** Widen literal string types to `string` while preserving function signatures */
@@ -341,6 +344,8 @@ const uk: Translations = {
   badgePromo: "Промо",
   badgeTrial: (n: number) => `Проб. (${n} зал.)`,
   badgeNone: "Немає доступу",
+
+  homeTabLabel: "Головна",
 }
 
 const ru: Translations = {
@@ -497,6 +502,8 @@ const ru: Translations = {
   badgePromo: "Промо",
   badgeTrial: (n: number) => `Проб. (${n} ост.)`,
   badgeNone: "Нет доступа",
+
+  homeTabLabel: "Главная",
 }
 
 export const translations: Record<Locale, Translations> = { en, uk, ru }
