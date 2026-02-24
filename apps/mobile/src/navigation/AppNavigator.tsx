@@ -35,6 +35,7 @@ import AccountScreen from "@/screens/AccountScreen"
 import VideoAssistantScreen from "@/screens/VideoAssistantScreen"
 import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen"
 import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen"
+import WebViewScreen, { type WebViewScreenParams } from "@/screens/WebViewScreen"
 
 /* ── Type definitions ── */
 
@@ -50,6 +51,7 @@ export type AppStackParams = {
   VideoAssistant: undefined
   VoiceAssistant: undefined
   ConversationDetail: { id: string; title?: string }
+  WebView: WebViewScreenParams
 }
 
 type TabParams = {
@@ -266,6 +268,17 @@ export default function AppNavigator() {
             options={({ route }) => ({
               headerShown: true,
               title: (route.params as any)?.title || "Conversation",
+              headerTintColor: colors.primary,
+              headerStyle: { backgroundColor: colors.surface },
+              headerTitleStyle: { fontWeight: "600" },
+            })}
+          />
+          <AppStack.Screen
+            name="WebView"
+            component={WebViewScreen}
+            options={({ route }) => ({
+              headerShown: true,
+              title: (route.params as any)?.title || "TurbotaAI",
               headerTintColor: colors.primary,
               headerStyle: { backgroundColor: colors.surface },
               headerTitleStyle: { fontWeight: "600" },

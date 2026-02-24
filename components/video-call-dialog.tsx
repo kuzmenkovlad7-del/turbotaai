@@ -91,6 +91,8 @@ interface VideoCallDialogProps {
   onClose: () => void
   openAiApiKey?: string
   onError?: (error: Error) => void
+  /** Pre-selected character ID from mobile launcher screen (e.g. "dr-maria") */
+  defaultCharacterId?: string
 }
 
 type ChatMessage = {
@@ -410,6 +412,7 @@ export default function VideoCallDialog({
   onClose,
   openAiApiKey,
   onError,
+  defaultCharacterId,
 }: VideoCallDialogProps) {
   const { t, currentLanguage } = useLanguage()
   const { user } = useAuth()
@@ -429,8 +432,13 @@ export default function VideoCallDialog({
   const currentLocale = getLocaleForLanguage(activeLanguage.code)
   const nativeVoicePreferences = getNativeVoicePreferences()
 
+  // Pre-select character when launched from mobile (defaultCharacterId prop)
   const [selectedCharacter, setSelectedCharacter] = useState<AICharacter>(
-    AI_CHARACTERS[1] || AI_CHARACTERS[0],
+    (defaultCharacterId
+      ? AI_CHARACTERS.find((c) => c.id === defaultCharacterId)
+      : undefined) ??
+    AI_CHARACTERS[1] ??
+    AI_CHARACTERS[0],
   )
 
   const [isCallActive, setIsCallActive] = useState(false)

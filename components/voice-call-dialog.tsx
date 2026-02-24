@@ -20,6 +20,10 @@ interface VoiceCallDialogProps {
   onError?: (error: Error) => void
   userEmail?: string
   webhookUrl?: string
+  /** Pre-selected voice gender (passed from mobile launcher screen) */
+  defaultGender?: "female" | "male"
+  /** When true, auto-start the call with defaultGender on mount (mobile WebView flow) */
+  autoStart?: boolean
 }
 
 type VoiceMessage = {
@@ -280,6 +284,8 @@ export default function VoiceCallDialog({
   onError,
   userEmail,
   webhookUrl,
+  defaultGender,
+  autoStart,
 }: VoiceCallDialogProps) {
   const { t, currentLanguage } = useLanguage()
   const { user } = useAuth()
@@ -292,7 +298,8 @@ export default function VoiceCallDialog({
   const [messages, setMessages] = useState<VoiceMessage[]>([])
   const [networkError, setNetworkError] = useState<string | null>(null)
 
-  const voiceGenderRef = useRef<"female" | "male">("female")
+  // Pre-select gender from prop (mobile launcher passes this)
+  const voiceGenderRef = useRef<"female" | "male">(defaultGender ?? "female")
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
   // фиксируем язык на момент старта звонка (STT/TTS/агент)
@@ -1283,6 +1290,20 @@ if (res.status === 402) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
+
+  // Auto-start when opened from mobile launcher (autoStart=true + defaultGender set)
+  const autoStartFiredRef = useRef(false)
+  useEffect(() => {
+    if (autoStart && isOpen && !autoStartFiredRef.current && !isCallActive) {
+      autoStartFiredRef.current = true
+      const gender = defaultGender ?? "female"
+      voiceGenderRef.current = gender
+      // Small delay to let the dialog render before requesting mic
+      const timer = setTimeout(() => { void startCall(gender) }, 600)
+      return () => clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, autoStart])
 
   useEffect(() => {
     return () => endCall()

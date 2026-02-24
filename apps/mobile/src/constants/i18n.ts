@@ -96,9 +96,24 @@ const en = {
   voiceStart: "Voice conversation",
   voiceSubtitle: "Speak or type your question — your AI companion will answer.",
   voicePlaceholder: "Type or speak your message...",
+  voiceStartCall: "Start voice call",
+  voiceCallDesc: "Choose voice and start a real-time call with your AI companion.",
   videoStart: "Video consultation",
   videoSubtitle: "Ask your question — your AI companion will guide you.",
   videoPlaceholder: "Type your question...",
+  videoStartCall: "Start video call",
+  videoCallDesc: "Choose your AI companion and start a live video session.",
+
+  // Permissions
+  permMicTitle: "Microphone Access",
+  permMicMessage: "TurbotaAI needs your microphone to have a voice conversation with your AI companion.",
+  permMicDenied: "Microphone access was denied. Please enable it in Settings \u2192 TurbotaAI.",
+  permCameraTitle: "Camera Access",
+  permCameraMessage: "TurbotaAI needs your camera for video calls with your AI companion.",
+  permCameraDenied: "Camera access was denied. Please enable it in Settings \u2192 TurbotaAI.",
+
+  // WebView
+  webViewLoadError: "Could not load the assistant. Check your connection.",
 
   // History
   historyTitle: "History",
@@ -242,9 +257,21 @@ const uk: Translations = {
   voiceStart: "Голосова розмова",
   voiceSubtitle: "Говоріть або пишіть запитання — AI-помічник відповість.",
   voicePlaceholder: "Введіть або скажіть повідомлення...",
+  voiceStartCall: "Почати голосовий дзвінок",
+  voiceCallDesc: "Оберіть голос та розпочніть розмову в реальному часі з AI-помічником.",
   videoStart: "Відеоконсультація",
   videoSubtitle: "Задайте запитання — AI-помічник допоможе.",
   videoPlaceholder: "Введіть запитання...",
+  videoStartCall: "Почати відеодзвінок",
+  videoCallDesc: "Оберіть AI-помічника та розпочніть живу відеосесію.",
+
+  permMicTitle: "Доступ до мікрофона",
+  permMicMessage: "TurbotaAI потребує мікрофон для голосової розмови з AI-помічником.",
+  permMicDenied: "Доступ до мікрофона заборонено. Увімкніть у Налаштування \u2192 TurbotaAI.",
+  permCameraTitle: "Доступ до камери",
+  permCameraMessage: "TurbotaAI потребує камеру для відеодзвінків з AI-помічником.",
+  permCameraDenied: "Доступ до камери заборонено. Увімкніть у Налаштування \u2192 TurbotaAI.",
+  webViewLoadError: "Не вдалося завантажити помічника. Перевірте з'єднання.",
 
   historyTitle: "Історія",
   historyEmpty: "Розмов ще немає",
@@ -381,9 +408,21 @@ const ru: Translations = {
   voiceStart: "Голосовой разговор",
   voiceSubtitle: "Говорите или пишите вопрос — AI-помощник ответит.",
   voicePlaceholder: "Введите или скажите сообщение...",
+  voiceStartCall: "Начать голосовой звонок",
+  voiceCallDesc: "Выберите голос и начните разговор в реальном времени с AI-помощником.",
   videoStart: "Видеоконсультация",
   videoSubtitle: "Задайте вопрос — AI-помощник поможет.",
   videoPlaceholder: "Введите вопрос...",
+  videoStartCall: "Начать видеозвонок",
+  videoCallDesc: "Выберите AI-помощника и начните живую видеосессию.",
+
+  permMicTitle: "Доступ к микрофону",
+  permMicMessage: "TurbotaAI нужен микрофон для голосового разговора с AI-помощником.",
+  permMicDenied: "Доступ к микрофону запрещён. Включите в Настройки \u2192 TurbotaAI.",
+  permCameraTitle: "Доступ к камере",
+  permCameraMessage: "TurbotaAI нужна камера для видеозвонков с AI-помощником.",
+  permCameraDenied: "Доступ к камере запрещён. Включите в Настройки \u2192 TurbotaAI.",
+  webViewLoadError: "Не удалось загрузить помощника. Проверьте соединение.",
 
   historyTitle: "История",
   historyEmpty: "Разговоров ещё нет",
