@@ -11,6 +11,7 @@ import { useNavigation, useRoute } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { WebView, type WebViewMessageEvent } from "react-native-webview"
 import { getDeviceHash } from "@/services/storage"
+import { API_BASE_URL } from "@/constants/config"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import { useT } from "@/hooks/useLanguage"
 
@@ -27,31 +28,38 @@ export default function WebViewScreen() {
   const { uri } = route.params as WebViewScreenParams
 
   const webViewRef = useRef<WebView>(null)
-  const [loading, setLoading] = useState(true)
+  const [pageLoading, setPageLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
 
-  // Inject ta_device_hash cookie so the web session is tied to the same device
-  // as the native app — ensures trial/promo/paid access is correctly applied.
-  const [cookieScript, setCookieScript] = useState<string>("")
+  // null = device-hash fetch still in-flight → show spinner and DO NOT render WebView yet.
+  // string (even "") = fetch complete → render WebView with the cookie already set.
+  //
+  // This eliminates the race where `injectedJavaScriptBeforeContentLoaded` was `undefined`
+  // on first render (hash not ready), causing the web app to receive no ta_device_hash
+  // cookie and treat the device as unknown — which can trigger a redirect to login and
+  // ultimately open an external browser window.
+  const [cookieScript, setCookieScript] = useState<string | null>(null)
+
   React.useEffect(() => {
     getDeviceHash()
       .then((hash) => {
-        if (hash) {
-          setCookieScript(
-            `document.cookie = 'ta_device_hash=${hash}; path=/; SameSite=Lax'; true;`,
-          )
-        }
+        setCookieScript(
+          hash
+            ? `document.cookie = 'ta_device_hash=${hash}; path=/; SameSite=Lax'; true;`
+            : "",
+        )
       })
-      .catch(() => {})
+      .catch(() => {
+        // Render without cookie on error rather than blocking indefinitely
+        setCookieScript("")
+      })
   }, [])
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
       try {
         const msg = JSON.parse(event.nativeEvent.data)
-        if (msg?.type === "close") {
-          navigation.goBack()
-        }
+        if (msg?.type === "close") navigation.goBack()
       } catch {
         // ignore non-JSON messages
       }
@@ -59,28 +67,56 @@ export default function WebViewScreen() {
     [navigation],
   )
 
-  const handleLoadEnd = useCallback(() => setLoading(false), [])
+  const handleLoadEnd = useCallback(() => setPageLoading(false), [])
   const handleLoadStart = useCallback(() => {
-    setLoading(true)
+    setPageLoading(true)
     setLoadError(false)
   }, [])
   const handleError = useCallback(() => {
-    setLoading(false)
+    setPageLoading(false)
     setLoadError(true)
   }, [])
-
   const handleRetry = useCallback(() => {
     setLoadError(false)
-    setLoading(true)
+    setPageLoading(true)
     webViewRef.current?.reload()
   }, [])
+
+  // Prevent the WebView from opening external HTTP(S) URLs in the system browser.
+  // Non-HTTP schemes (about:, blob:, data:) are always allowed — they're used by
+  // WebRTC, inline media, and the WebView bridge itself.
+  // If API_BASE_URL is empty (misconfigured env), allow everything so dev builds work.
+  const handleShouldStartLoadWithRequest = useCallback(
+    (request: { url: string }): boolean => {
+      const { url } = request
+      // Non-HTTP schemes: always allow (blob:, data:, about:, etc.)
+      if (!url.startsWith("http://") && !url.startsWith("https://")) return true
+      // Unconfigured env: allow all to avoid breaking dev builds
+      if (!API_BASE_URL) return true
+      // Only allow navigation within our own domain
+      return url.startsWith(API_BASE_URL)
+    },
+    [],
+  )
 
   // Android-only: grant camera/mic permissions when the embedded page requests them.
   // Typed as `any` because the prop exists at runtime but is absent from the shared
   // TypeScript types for this version of react-native-webview.
-  const androidPermissionProps: Record<string, any> = Platform.OS === "android"
-    ? { onPermissionRequest: (request: any) => request.grant(request.resources) }
-    : {}
+  const androidPermissionProps: Record<string, any> =
+    Platform.OS === "android"
+      ? { onPermissionRequest: (request: any) => request.grant(request.resources) }
+      : {}
+
+  // Show a spinner while we wait for the device hash so the WebView is only mounted
+  // once the cookie script is ready. This guarantees the hash cookie is set on the
+  // very first page load rather than arriving after content is already visible.
+  if (cookieScript === null) {
+    return (
+      <View style={[styles.root, styles.centered, { paddingBottom: insets.bottom }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    )
+  }
 
   return (
     <View style={[styles.root, { paddingBottom: insets.bottom }]}>
@@ -89,13 +125,15 @@ export default function WebViewScreen() {
           ref={webViewRef}
           source={{ uri }}
           style={styles.webView}
-          // Cookie injection so device hash is recognised by backend
+          // Cookie is guaranteed set before first render — no race condition
           injectedJavaScriptBeforeContentLoaded={cookieScript || undefined}
           // Events
           onLoadStart={handleLoadStart}
           onLoadEnd={handleLoadEnd}
           onError={handleError}
           onMessage={handleMessage}
+          // Block external navigation so the system browser never opens
+          onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
           // iOS: auto-grant camera/mic for pages on the same host
           mediaCapturePermissionGrantType="grantIfSameHostElseDeny"
           // Media settings
@@ -103,7 +141,7 @@ export default function WebViewScreen() {
           mediaPlaybackRequiresUserAction={false}
           javaScriptEnabled
           domStorageEnabled
-          // Prevent external navigation from hijacking the screen
+          // Prevent window.open() from spawning a new browser window
           setSupportMultipleWindows={false}
           // Android camera/mic permission grant (spread to bypass TS type limitation)
           {...androidPermissionProps}
@@ -111,7 +149,7 @@ export default function WebViewScreen() {
       )}
 
       {/* Loading overlay */}
-      {loading && !loadError && (
+      {pageLoading && !loadError && (
         <View style={styles.overlay}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -136,6 +174,7 @@ export default function WebViewScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
+  centered: { alignItems: "center", justifyContent: "center" },
   webView: { flex: 1 },
   overlay: {
     ...StyleSheet.absoluteFillObject,
