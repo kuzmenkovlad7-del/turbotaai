@@ -34,6 +34,7 @@ export default function AccountScreen() {
     restorePurchases,
     manageSubscription,
     iapEnabled,
+    storeSafe,
     error: iapError,
   } = useSubscription()
 
@@ -282,8 +283,10 @@ export default function AccountScreen() {
             </View>
           )}
 
-          {/* Manage Subscription — opens platform subscription management */}
-          {isPaid && (
+          {/* Manage Subscription — opens App Store / Play Store subscription management.
+              Only relevant for users with a native IAP subscription; web-only subscribers
+              have no entry in the platform stores to manage. */}
+          {isPaid && iapEnabled && (
             <View style={styles.actionSection}>
               <Button
                 title={t.accountManageSubscription}
@@ -293,10 +296,15 @@ export default function AccountScreen() {
             </View>
           )}
 
-          {/* Subscribe CTAs for non-unlimited users */}
+          {/* Subscribe CTAs for non-unlimited users.
+              Three modes, controlled by env flags:
+              1. iapEnabled=true  → native IAP buttons (Monthly / Yearly)
+              2. storeSafe=true   → store-safe info message, no external link
+              3. default (preview)→ "Subscribe on turbotaai.com" (QA only) */}
           {showSubscribeCTA && (
             <View style={styles.actionSection}>
               {iapEnabled ? (
+                // Native IAP — full billing integration required before enabling
                 <>
                   <Button
                     title={t.accountMonthly}
@@ -311,7 +319,13 @@ export default function AccountScreen() {
                     loading={purchasing}
                   />
                 </>
+              ) : storeSafe ? (
+                // Store-safe: no external purchase CTA (not permitted by store guidelines)
+                <View style={styles.iapComingSoon}>
+                  <Text style={styles.iapComingSoonText}>{t.accountIapSoon}</Text>
+                </View>
               ) : (
+                // Preview / QA mode only — opens external browser, not store-compliant
                 <Button
                   title={t.accountSubscribeWeb}
                   onPress={handleSubscribeWeb}
@@ -476,6 +490,19 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.error,
     marginTop: spacing.md,
+    textAlign: "center",
+  },
+
+  // Store-safe coming-soon notice
+  iapComingSoon: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+  },
+  iapComingSoonText: {
+    fontSize: fontSize.sm,
+    color: colors.primary,
+    lineHeight: 20,
     textAlign: "center",
   },
 
