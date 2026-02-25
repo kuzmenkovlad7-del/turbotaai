@@ -40,6 +40,13 @@ export type AuthContextValue = AuthState & {
    * immediately — the locked paywall is shown on the next render.
    */
   decrementTrialLeft: () => void
+  /**
+   * Optimistically apply promo access using the `promo_until` value returned
+   * by `redeemPromo()`. Updates local state immediately so every screen
+   * (Home badge, Chat, Voice, Video) reflects the new access without waiting
+   * for the background bootstrap round-trip to complete.
+   */
+  setAccessFromPromo: (promoUntil: string) => void
 }
 
 const EMPTY_ACCESS: AccessInfo = {
@@ -69,6 +76,7 @@ export const AuthContext = createContext<AuthContextValue>({
   refreshAccess: NOOP_ASYNC,
   retryBootstrap: NOOP_ASYNC,
   decrementTrialLeft: () => {},
+  setAccessFromPromo: () => {},
 })
 
 /**
@@ -290,6 +298,22 @@ export function useAuthProvider(): AuthContextValue {
     })
   }, [])
 
+  const setAccessFromPromo = useCallback((promoUntil: string) => {
+    setState((s) => {
+      if (!s.accessInfo) return s
+      return {
+        ...s,
+        accessInfo: {
+          ...s.accessInfo,
+          access: "promo" as const,
+          hasAccess: true,
+          unlimited: true,
+          promoUntil,
+        },
+      }
+    })
+  }, [])
+
   return {
     ...state,
     login,
@@ -298,6 +322,7 @@ export function useAuthProvider(): AuthContextValue {
     refreshAccess: runBootstrap,
     retryBootstrap,
     decrementTrialLeft,
+    setAccessFromPromo,
   }
 }
 

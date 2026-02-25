@@ -25,7 +25,7 @@ import { colors, fontSize, spacing, radii } from "@/constants/theme"
 const LOCALES: Locale[] = ["en", "uk", "ru"]
 
 export default function AccountScreen() {
-  const { user, accessInfo, logout, refreshAccess } = useAuth()
+  const { user, accessInfo, logout, refreshAccess, setAccessFromPromo } = useAuth()
   const { t, locale, setLocale } = useT()
   const {
     purchasing,
@@ -85,7 +85,14 @@ export default function AccountScreen() {
         logEvent("subscription_started", { method: "promo" })
         setPromoMsg({ text: t.accountPromoSuccess, ok: true })
         setPromoCode("")
-        await refreshAccess()
+        // Optimistic update: apply promo access immediately using the value
+        // from the API response so every screen reflects the change at once,
+        // without waiting for the background bootstrap round-trip.
+        if (result.promo_until) {
+          setAccessFromPromo(result.promo_until)
+        }
+        // Background sync to confirm server state (non-blocking)
+        refreshAccess().catch(() => {})
       } else {
         setPromoMsg({ text: result.error || "Invalid code", ok: false })
       }
@@ -94,7 +101,7 @@ export default function AccountScreen() {
     } finally {
       setPromoLoading(false)
     }
-  }, [promoCode, refreshAccess, t])
+  }, [promoCode, refreshAccess, setAccessFromPromo, t])
 
   const handleCancelAutoRenew = useCallback(() => {
     Alert.alert(t.accountCancelAutoRenew, t.accountCancelConfirm, [
