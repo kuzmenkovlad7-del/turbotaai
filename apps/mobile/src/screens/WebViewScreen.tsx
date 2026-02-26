@@ -83,17 +83,42 @@ export default function WebViewScreen() {
   }, [])
 
   // Prevent the WebView from opening external HTTP(S) URLs in the system browser.
-  // Non-HTTP schemes (about:, blob:, data:) are always allowed — they're used by
-  // WebRTC, inline media, and the WebView bridge itself.
-  // If API_BASE_URL is empty (misconfigured env), allow everything so dev builds work.
+  //
+  // Key Android bug: returning `true` for `intent://` or other non-HTTP schemes tells
+  // the Android WebView to "follow" the URL. Since it can't load non-HTTP schemes, it
+  // fires an Android Intent which Chrome (the default browser) picks up and opens.
+  // Fix: only return `true` for the small set of safe non-navigational schemes
+  // (about:, blob:, data:, javascript:) that WebRTC/inline-media genuinely need;
+  // everything else that is not http(s) on our own host gets blocked (return false).
+  //
+  // Sub-frame loads (iframes, analytics pixels, etc.) are always allowed so we don't
+  // accidentally break page content — only top-frame navigations are guarded.
   const handleShouldStartLoadWithRequest = useCallback(
-    (request: { url: string }): boolean => {
-      const { url } = request
-      // Non-HTTP schemes: always allow (blob:, data:, about:, etc.)
-      if (!url.startsWith("http://") && !url.startsWith("https://")) return true
-      // Unconfigured env: allow all to avoid breaking dev builds
+    (request: { url: string; isTopFrame: boolean }): boolean => {
+      const { url, isTopFrame } = request
+
+      // Only guard top-frame navigations; sub-frames (iframes, etc.) are always allowed.
+      if (!isTopFrame) return true
+
+      // Safe non-navigational schemes used by WebRTC, inline media, and bridge scripts.
+      if (
+        url.startsWith("about:") ||
+        url.startsWith("blob:") ||
+        url.startsWith("data:") ||
+        url.startsWith("javascript:")
+      ) {
+        return true
+      }
+
+      // ALL other non-HTTP schemes — including intent://, market://, tel:, mailto:, etc.
+      // — must be blocked. On Android, returning `true` for intent:// fires a system
+      // Intent which causes Chrome to open. Returning `false` cancels silently.
+      if (!url.startsWith("http://") && !url.startsWith("https://")) return false
+
+      // Unconfigured env: allow all http(s) to avoid breaking dev builds.
       if (!API_BASE_URL) return true
-      // Only allow navigation within our own domain
+
+      // Only allow navigation within our own domain.
       return url.startsWith(API_BASE_URL)
     },
     [],
