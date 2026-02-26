@@ -49,6 +49,7 @@ export default function AccountScreen() {
 
   // Refresh access state
   const [refreshingAccess, setRefreshingAccess] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
 
   // Refresh access when tab gains focus (e.g. returning from web browser after purchase/promo).
   // Debounced to 30 s so repeated tab switches don't spam the API.
@@ -351,11 +352,21 @@ export default function AccountScreen() {
               variant="outline"
               onPress={async () => {
                 setRefreshingAccess(true)
-                try { await refreshAccess() } finally { setRefreshingAccess(false) }
+                setRefreshError(null)
+                try {
+                  await refreshAccess()
+                } catch {
+                  setRefreshError(t.accountRefreshError)
+                } finally {
+                  setRefreshingAccess(false)
+                }
               }}
               loading={refreshingAccess}
               style={{ marginTop: spacing.sm }}
             />
+            {refreshError && (
+              <Text style={styles.error}>{refreshError}</Text>
+            )}
           </View>
 
           {/* Promo code input */}

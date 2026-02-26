@@ -100,6 +100,21 @@ export function useAuthProvider(): AuthContextValue {
    * most recent server state (e.g. after promo apply) is always reflected.
    */
   const pendingRefresh = useRef(false)
+  /**
+   * Incremented every time an optimistic access update is written locally
+   * (setAccessFromPromo, decrementTrialLeft). runBootstrap captures this at
+   * the moment the network request starts; if the value has changed by the
+   * time the response arrives, the server snapshot pre-dates the local change
+   * and must be discarded to avoid overwriting the optimistic state.
+   */
+  const optimisticVersionRef = useRef(0)
+  /**
+   * Resolve/reject callbacks queued by callers that hit runBootstrap while
+   * another bootstrap was already in-flight. Each entry is settled once the
+   * next bootstrap completes, so `await refreshAccess()` in UI handlers
+   * (e.g. the "Refresh Access" button) waits for genuinely fresh data.
+   */
+  const bootstrapListenersRef = useRef<Array<{ resolve: () => void; reject: (err: unknown) => void }>>([])
 
   useEffect(() => {
     mounted.current = true
@@ -107,11 +122,20 @@ export function useAuthProvider(): AuthContextValue {
   }, [])
 
   const runBootstrap = useCallback(async () => {
+    // Snapshot the optimistic version before any await so we can detect whether
+    // setAccessFromPromo / decrementTrialLeft ran while the request was in-flight.
+    const snapshotVersion = optimisticVersionRef.current
+
     if (bootstrapping.current) {
       // A bootstrap is already in-flight; queue a follow-up so the latest
       // server state (e.g. after promo apply) is reflected once it finishes.
       pendingRefresh.current = true
-      return
+      // Return a promise that resolves/rejects when the NEXT bootstrap finishes.
+      // This makes `await refreshAccess()` in UI handlers (e.g. "Refresh Access"
+      // button) wait for genuinely fresh data rather than returning immediately.
+      return new Promise<void>((resolve, reject) => {
+        bootstrapListenersRef.current.push({ resolve, reject })
+      })
     }
     bootstrapping.current = true
     pendingRefresh.current = false
@@ -134,14 +158,21 @@ export function useAuthProvider(): AuthContextValue {
         autoRenew: data.auto_renew ?? false,
       }
 
-      setState(s => ({
-        ...s,
-        ready: true,
-        user: user ?? s.user,
-        accessInfo,
-        error: null,
-        bootstrapFailed: false,
-      }))
+      setState(s => {
+        // Guard against stale-bootstrap overwrite: if setAccessFromPromo or
+        // decrementTrialLeft ran after this request was dispatched, our server
+        // snapshot pre-dates the local change.  Discarding it prevents reverting
+        // the optimistic state (e.g. "Promo applied" flash-back to trial UI).
+        if (optimisticVersionRef.current !== snapshotVersion) return s
+        return {
+          ...s,
+          ready: true,
+          user: user ?? s.user,
+          accessInfo,
+          error: null,
+          bootstrapFailed: false,
+        }
+      })
     } catch (e: any) {
       if (!mounted.current) return
       setState(s => ({
@@ -151,8 +182,14 @@ export function useAuthProvider(): AuthContextValue {
         bootstrapFailed: true,
         accessInfo: s.accessInfo ?? EMPTY_ACCESS,
       }))
+      // Notify any waiting callers (e.g. "Refresh Access" button) of the failure
+      // so their awaited promise rejects and they can show an inline error.
+      bootstrapListenersRef.current.splice(0).forEach(({ reject }) => reject(e))
+      throw e
     } finally {
       bootstrapping.current = false
+      // Resolve any remaining listeners (success path — catch block did not run).
+      bootstrapListenersRef.current.splice(0).forEach(({ resolve }) => resolve())
       // If refreshAccess() was called while we were running, fetch again
       // immediately so the caller's state change (e.g. promo applied) is
       // picked up without requiring a manual retry or app restart.
@@ -165,7 +202,11 @@ export function useAuthProvider(): AuthContextValue {
 
   const retryBootstrap = useCallback(async () => {
     setState(s => ({ ...s, error: null, bootstrapFailed: false }))
-    await runBootstrap()
+    try {
+      await runBootstrap()
+    } catch {
+      // state already has bootstrapFailed:true set inside runBootstrap's catch
+    }
   }, [runBootstrap])
 
   // On mount: refresh session then bootstrap
@@ -282,6 +323,9 @@ export function useAuthProvider(): AuthContextValue {
   }, [])
 
   const decrementTrialLeft = useCallback(() => {
+    // Bump version so any in-flight bootstrap cannot overwrite the local decrement
+    // with a stale server count (e.g. bootstrap started before the message was sent).
+    optimisticVersionRef.current += 1
     setState((s) => {
       if (!s.accessInfo || s.accessInfo.access !== "trial") return s
       const newLeft = Math.max(0, s.accessInfo.trialLeft - 1)
@@ -299,6 +343,9 @@ export function useAuthProvider(): AuthContextValue {
   }, [])
 
   const setAccessFromPromo = useCallback((promoUntil: string) => {
+    // Bump version so any in-flight bootstrap (started before the promo was applied)
+    // cannot overwrite this optimistic update with stale server data.
+    optimisticVersionRef.current += 1
     setState((s) => {
       if (!s.accessInfo) return s
       return {
