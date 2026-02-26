@@ -655,6 +655,22 @@ export default function VideoCallDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
+  // Regression fix (2026-02): VideoCallDialog uses a custom overlay instead of
+  // Radix Dialog, so Radix's built-in scroll-lock never fires.  Lock body scroll
+  // manually to match VoiceCallDialog behavior.  Voice is unaffected because its
+  // Radix <Dialog> already owns the lock.
+  useEffect(() => {
+    if (!isOpen) return
+    const prevDocOverflow = document.documentElement.style.overflow
+    const prevBodyOverflow = document.body.style.overflow
+    document.documentElement.style.overflow = "hidden"
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.documentElement.style.overflow = prevDocOverflow
+      document.body.style.overflow = prevBodyOverflow
+    }
+  }, [isOpen])
+
   function setSessionLangFromUi() {
     const code = String(activeLanguage.code || "uk").toLowerCase()
     if (code.startsWith("ru")) {
