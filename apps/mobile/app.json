@@ -28,13 +28,11 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#7c3aed"
+        "backgroundColor": "#ffffff"
       },
       "package": "com.turbotaai.app",
       "versionCode": 1,
       "permissions": [
-        "android.permission.RECORD_AUDIO",
-        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA"
       ],
