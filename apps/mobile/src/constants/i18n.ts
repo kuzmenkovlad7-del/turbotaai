@@ -111,6 +111,17 @@ const en = {
   videoStartCall: "Start video call",
   videoCallDesc: "Choose your AI companion and start a live video session.",
 
+  // Native voice call screen
+  voiceListening: "Listening...",
+  voiceProcessing: "Processing...",
+  voiceSpeaking: "Speaking...",
+  voiceEndCall: "End Call",
+  voiceSendNow: "Send",
+  voiceSessionError: "Something went wrong. Tap to retry.",
+  voiceYou: "You",
+  voiceAI: "AI",
+  voiceHint: "Speak now — I'm listening.",
+
   // Permissions
   permMicTitle: "Microphone Access",
   permMicMessage: "TurbotaAI needs your microphone to have a voice conversation with your AI companion.",
@@ -281,6 +292,16 @@ const uk: Translations = {
   videoStartCall: "Почати відеодзвінок",
   videoCallDesc: "Оберіть AI-помічника та розпочніть живу відеосесію.",
 
+  voiceListening: "Слухаю...",
+  voiceProcessing: "Обробка...",
+  voiceSpeaking: "Говорю...",
+  voiceEndCall: "Завершити дзвінок",
+  voiceSendNow: "Надіслати",
+  voiceSessionError: "Щось пішло не так. Торкніться, щоб спробувати ще.",
+  voiceYou: "Ви",
+  voiceAI: "AI",
+  voiceHint: "Говоріть зараз — я слухаю.",
+
   permMicTitle: "Доступ до мікрофона",
   permMicMessage: "TurbotaAI потребує мікрофон для голосової розмови з AI-помічником.",
   permMicDenied: "Доступ до мікрофона заборонено. Увімкніть у Налаштування \u2192 TurbotaAI.",
@@ -439,6 +460,16 @@ const ru: Translations = {
   videoPlaceholder: "Введите вопрос...",
   videoStartCall: "Начать видеозвонок",
   videoCallDesc: "Выберите AI-помощника и начните живую видеосессию.",
+
+  voiceListening: "Слушаю...",
+  voiceProcessing: "Обработка...",
+  voiceSpeaking: "Говорю...",
+  voiceEndCall: "Завершить звонок",
+  voiceSendNow: "Отправить",
+  voiceSessionError: "Что-то пошло не так. Нажмите, чтобы повторить.",
+  voiceYou: "Вы",
+  voiceAI: "AI",
+  voiceHint: "Говорите — я слушаю.",
 
   permMicTitle: "Доступ к микрофону",
   permMicMessage: "TurbotaAI нужен микрофон для голосового разговора с AI-помощником.",

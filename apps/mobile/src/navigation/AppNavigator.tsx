@@ -34,6 +34,7 @@ import ConversationDetailScreen from "@/screens/ConversationDetailScreen"
 import AccountScreen from "@/screens/AccountScreen"
 import VideoAssistantScreen from "@/screens/VideoAssistantScreen"
 import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen"
+import NativeVoiceCallScreen, { type NativeVoiceCallParams } from "@/screens/NativeVoiceCallScreen"
 import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen"
 import WebViewScreen, { type WebViewScreenParams } from "@/screens/WebViewScreen"
 
@@ -50,6 +51,7 @@ export type AppStackParams = {
   Chat: undefined
   VideoAssistant: undefined
   VoiceAssistant: undefined
+  NativeVoiceCall: NativeVoiceCallParams
   ConversationDetail: { id: string; title?: string }
   WebView: WebViewScreenParams
 }
@@ -257,6 +259,17 @@ export default function AppNavigator() {
             options={{
               headerShown: true,
               title: t.homeVoice,
+              headerTintColor: colors.primary,
+              headerStyle: { backgroundColor: colors.surface },
+              headerTitleStyle: { fontWeight: "600" },
+            }}
+          />
+          <AppStack.Screen
+            name="NativeVoiceCall"
+            component={NativeVoiceCallScreen}
+            options={{
+              headerShown: true,
+              title: t.voiceTitle,
               headerTintColor: colors.primary,
               headerStyle: { backgroundColor: colors.surface },
               headerTitleStyle: { fontWeight: "600" },

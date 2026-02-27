@@ -13,7 +13,6 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
-import { API_BASE_URL } from "@/constants/config"
 import { getAccessState } from "@/utils/accessState"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import { logEvent } from "@/services/analytics"
@@ -106,9 +105,8 @@ export default function VoiceAssistantScreen() {
 
       logEvent("voice_call_started", { gender })
 
-      // Build embedded URL — autostart=1 tells the web dialog to begin the call immediately
-      const uri = `${API_BASE_URL}/app/voice?gender=${gender}&lang=${locale}&autostart=1`
-      ;(navigation as any).navigate("WebView", { uri, title: t.voiceTitle })
+      // Navigate to the fully native call screen (no WebView)
+      ;(navigation as any).navigate("NativeVoiceCall", { gender, locale })
     } finally {
       setStarting(false)
     }
