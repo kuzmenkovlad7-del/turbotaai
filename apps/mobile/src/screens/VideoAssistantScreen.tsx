@@ -13,7 +13,6 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
-import { API_BASE_URL } from "@/constants/config"
 import { getAccessState } from "@/utils/accessState"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import { logEvent } from "@/services/analytics"
@@ -122,14 +121,13 @@ export default function VideoAssistantScreen() {
         avatarSlug: selectedCharacter.avatarSlug,
       })
 
-      // Build embedded URL — character and gender are pre-selected on the web side
-      const uri =
-        `${API_BASE_URL}/app/video` +
-        `?character=${selectedCharacter.id}` +
-        `&avatar=${selectedCharacter.avatarSlug}` +
-        `&gender=${selectedCharacter.gender}` +
-        `&lang=${locale}`
-      ;(navigation as any).navigate("WebView", { uri, title: t.videoTitle })
+      // Navigate to fully native video call screen (no WebView)
+      ;(navigation as any).navigate("NativeVideoCall", {
+        characterId: selectedCharacter.id,
+        avatarSlug: selectedCharacter.avatarSlug,
+        gender: selectedCharacter.gender,
+        locale,
+      })
     } finally {
       setStarting(false)
     }

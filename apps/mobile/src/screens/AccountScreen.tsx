@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react"
+import React, { useState, useCallback, useRef, useEffect } from "react"
 import {
   View,
   Text,
@@ -50,6 +50,7 @@ export default function AccountScreen() {
   // Refresh access state
   const [refreshingAccess, setRefreshingAccess] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
+  const [refreshDone, setRefreshDone] = useState(false)
 
   // Refresh access when tab gains focus (e.g. returning from web browser after purchase/promo).
   // Debounced to 30 s so repeated tab switches don't spam the API.
@@ -63,6 +64,13 @@ export default function AccountScreen() {
       }
     }, [refreshAccess]),
   )
+
+  // Auto-dismiss the promo success message after 3 s so it never stays stale
+  useEffect(() => {
+    if (!promoMsg?.ok) return
+    const timer = setTimeout(() => setPromoMsg(null), 3_000)
+    return () => clearTimeout(timer)
+  }, [promoMsg])
 
   const handleLogout = () => {
     Alert.alert(t.accountSignOut, t.accountSignOutConfirm, [
@@ -93,8 +101,9 @@ export default function AccountScreen() {
         if (result.promo_until) {
           setAccessFromPromo(result.promo_until)
         }
-        // Background sync to confirm server state (non-blocking)
-        refreshAccess().catch(() => {})
+        // Await server confirmation — spinner stays until the round-trip
+        // completes so the subscription box reflects the confirmed state.
+        try { await refreshAccess() } catch {}
       } else {
         setPromoMsg({ text: result.error || "Invalid code", ok: false })
       }
@@ -353,8 +362,11 @@ export default function AccountScreen() {
               onPress={async () => {
                 setRefreshingAccess(true)
                 setRefreshError(null)
+                setRefreshDone(false)
                 try {
                   await refreshAccess()
+                  setRefreshDone(true)
+                  setTimeout(() => setRefreshDone(false), 2_500)
                 } catch {
                   setRefreshError(t.accountRefreshError)
                 } finally {
@@ -366,6 +378,11 @@ export default function AccountScreen() {
             />
             {refreshError && (
               <Text style={styles.error}>{refreshError}</Text>
+            )}
+            {refreshDone && !refreshError && (
+              <Text style={[styles.actionFeedback, { color: colors.success }]}>
+                {t.accountRefreshDone}
+              </Text>
             )}
           </View>
 

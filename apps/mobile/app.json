@@ -43,7 +43,13 @@
     "plugins": [
       "expo-secure-store",
       "expo-font",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "TurbotaAI uses your microphone for real-time voice calls with your AI assistant."
+        }
+      ]
     ],
     "extra": {
       "eas": {

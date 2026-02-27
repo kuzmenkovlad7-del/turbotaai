@@ -111,6 +111,18 @@ const en = {
   videoStartCall: "Start video call",
   videoCallDesc: "Choose your AI companion and start a live video session.",
 
+  // Native voice call screen
+  voiceListening: "Listening...",
+  voiceProcessing: "Processing...",
+  voiceSpeaking: "Speaking...",
+  voiceEndCall: "End Call",
+  voiceSendNow: "Send",
+  voiceSessionError: "Something went wrong. Tap to retry.",
+  voiceYou: "You",
+  voiceAI: "AI",
+  voiceHint: "Speak now — I'm listening.",
+  videoSpeakHint: "Your AI companion is ready. Speak to start.",
+
   // Permissions
   permMicTitle: "Microphone Access",
   permMicMessage: "TurbotaAI needs your microphone to have a voice conversation with your AI companion.",
@@ -172,6 +184,7 @@ const en = {
   accountRestoreSuccess: "Purchases restored!",
   accountRestoreNone: "No purchases to restore.",
   accountRefreshError: "Could not refresh access. Check your connection.",
+  accountRefreshDone: "Access refreshed!",
 
   // Bootstrap
   bootstrapErrorTitle: "Connection Error",
@@ -281,6 +294,17 @@ const uk: Translations = {
   videoStartCall: "Почати відеодзвінок",
   videoCallDesc: "Оберіть AI-помічника та розпочніть живу відеосесію.",
 
+  voiceListening: "Слухаю...",
+  voiceProcessing: "Обробка...",
+  voiceSpeaking: "Говорю...",
+  voiceEndCall: "Завершити дзвінок",
+  voiceSendNow: "Надіслати",
+  voiceSessionError: "Щось пішло не так. Торкніться, щоб спробувати ще.",
+  voiceYou: "Ви",
+  voiceAI: "AI",
+  voiceHint: "Говоріть зараз — я слухаю.",
+  videoSpeakHint: "Ваш AI-помічник готовий. Говоріть, щоб розпочати.",
+
   permMicTitle: "Доступ до мікрофона",
   permMicMessage: "TurbotaAI потребує мікрофон для голосової розмови з AI-помічником.",
   permMicDenied: "Доступ до мікрофона заборонено. Увімкніть у Налаштування \u2192 TurbotaAI.",
@@ -337,6 +361,7 @@ const uk: Translations = {
   accountRestoreSuccess: "Покупки відновлено!",
   accountRestoreNone: "Немає покупок для відновлення.",
   accountRefreshError: "Не вдалося оновити доступ. Перевірте з'єднання.",
+  accountRefreshDone: "Доступ оновлено!",
 
   bootstrapErrorTitle: "Помилка з'єднання",
   bootstrapErrorDesc: "Не вдалося підключитися до TurbotaAI. Перевірте інтернет та спробуйте ще раз.",
@@ -440,6 +465,17 @@ const ru: Translations = {
   videoStartCall: "Начать видеозвонок",
   videoCallDesc: "Выберите AI-помощника и начните живую видеосессию.",
 
+  voiceListening: "Слушаю...",
+  voiceProcessing: "Обработка...",
+  voiceSpeaking: "Говорю...",
+  voiceEndCall: "Завершить звонок",
+  voiceSendNow: "Отправить",
+  voiceSessionError: "Что-то пошло не так. Нажмите, чтобы повторить.",
+  voiceYou: "Вы",
+  voiceAI: "AI",
+  voiceHint: "Говорите — я слушаю.",
+  videoSpeakHint: "Ваш AI-помощник готов. Говорите, чтобы начать.",
+
   permMicTitle: "Доступ к микрофону",
   permMicMessage: "TurbotaAI нужен микрофон для голосового разговора с AI-помощником.",
   permMicDenied: "Доступ к микрофону запрещён. Включите в Настройки \u2192 TurbotaAI.",
@@ -496,6 +532,7 @@ const ru: Translations = {
   accountRestoreSuccess: "Покупки восстановлены!",
   accountRestoreNone: "Нет покупок для восстановления.",
   accountRefreshError: "Не удалось обновить доступ. Проверьте соединение.",
+  accountRefreshDone: "Доступ обновлён!",
 
   bootstrapErrorTitle: "Ошибка соединения",
   bootstrapErrorDesc: "Не удалось подключиться к TurbotaAI. Проверьте интернет и попробуйте снова.",
