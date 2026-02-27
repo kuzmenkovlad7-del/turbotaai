@@ -39,7 +39,6 @@ export default function HomeScreen({ navigation }: Props) {
       const now = Date.now()
       if (now - lastFocusRefreshRef.current > 30_000) {
         lastFocusRefreshRef.current = now
-        console.log("[HomeScreen] focus refresh — fetching access status")
         refreshAccess().catch(() => {})
       }
     }, [refreshAccess]),

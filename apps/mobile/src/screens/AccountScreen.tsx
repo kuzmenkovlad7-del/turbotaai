@@ -25,7 +25,7 @@ import { colors, fontSize, spacing, radii } from "@/constants/theme"
 const LOCALES: Locale[] = ["en", "uk", "ru"]
 
 export default function AccountScreen() {
-  const { user, accessInfo, logout, refreshAccess } = useAuth()
+  const { user, accessInfo, logout, refreshAccess, setAccessFromPromo } = useAuth()
   const { t, locale, setLocale } = useT()
   const {
     purchasing,
@@ -34,6 +34,7 @@ export default function AccountScreen() {
     restorePurchases,
     manageSubscription,
     iapEnabled,
+    storeSafe,
     error: iapError,
   } = useSubscription()
 
@@ -48,6 +49,7 @@ export default function AccountScreen() {
 
   // Refresh access state
   const [refreshingAccess, setRefreshingAccess] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
 
   // Refresh access when tab gains focus (e.g. returning from web browser after purchase/promo).
   // Debounced to 30 s so repeated tab switches don't spam the API.
@@ -57,7 +59,6 @@ export default function AccountScreen() {
       const now = Date.now()
       if (now - lastFocusRefreshRef.current > 30_000) {
         lastFocusRefreshRef.current = now
-        console.log("[AccountScreen] FOCUS REFRESH triggered — calling refreshAccess")
         refreshAccess().catch(() => {})
       }
     }, [refreshAccess]),
@@ -81,13 +82,19 @@ export default function AccountScreen() {
     setPromoLoading(true)
     setPromoMsg(null)
     try {
-      console.log("[Account] applying promo code:", code)
       const result = await redeemPromo(code)
       if (result.ok) {
         logEvent("subscription_started", { method: "promo" })
         setPromoMsg({ text: t.accountPromoSuccess, ok: true })
         setPromoCode("")
-        await refreshAccess()
+        // Optimistic update: apply promo access immediately using the value
+        // from the API response so every screen reflects the change at once,
+        // without waiting for the background bootstrap round-trip.
+        if (result.promo_until) {
+          setAccessFromPromo(result.promo_until)
+        }
+        // Background sync to confirm server state (non-blocking)
+        refreshAccess().catch(() => {})
       } else {
         setPromoMsg({ text: result.error || "Invalid code", ok: false })
       }
@@ -96,7 +103,7 @@ export default function AccountScreen() {
     } finally {
       setPromoLoading(false)
     }
-  }, [promoCode, refreshAccess, t])
+  }, [promoCode, refreshAccess, setAccessFromPromo, t])
 
   const handleCancelAutoRenew = useCallback(() => {
     Alert.alert(t.accountCancelAutoRenew, t.accountCancelConfirm, [
@@ -277,8 +284,10 @@ export default function AccountScreen() {
             </View>
           )}
 
-          {/* Manage Subscription — opens platform subscription management */}
-          {isPaid && (
+          {/* Manage Subscription — opens App Store / Play Store subscription management.
+              Only relevant for users with a native IAP subscription; web-only subscribers
+              have no entry in the platform stores to manage. */}
+          {isPaid && iapEnabled && (
             <View style={styles.actionSection}>
               <Button
                 title={t.accountManageSubscription}
@@ -288,10 +297,15 @@ export default function AccountScreen() {
             </View>
           )}
 
-          {/* Subscribe CTAs for non-unlimited users */}
+          {/* Subscribe CTAs for non-unlimited users.
+              Three modes, controlled by env flags:
+              1. iapEnabled=true  → native IAP buttons (Monthly / Yearly)
+              2. storeSafe=true   → store-safe info message, no external link
+              3. default (preview)→ "Subscribe on turbotaai.com" (QA only) */}
           {showSubscribeCTA && (
             <View style={styles.actionSection}>
               {iapEnabled ? (
+                // Native IAP — full billing integration required before enabling
                 <>
                   <Button
                     title={t.accountMonthly}
@@ -306,7 +320,13 @@ export default function AccountScreen() {
                     loading={purchasing}
                   />
                 </>
+              ) : storeSafe ? (
+                // Store-safe: no external purchase CTA (not permitted by store guidelines)
+                <View style={styles.iapComingSoon}>
+                  <Text style={styles.iapComingSoonText}>{t.accountIapSoon}</Text>
+                </View>
               ) : (
+                // Preview / QA mode only — opens external browser, not store-compliant
                 <Button
                   title={t.accountSubscribeWeb}
                   onPress={handleSubscribeWeb}
@@ -332,11 +352,21 @@ export default function AccountScreen() {
               variant="outline"
               onPress={async () => {
                 setRefreshingAccess(true)
-                try { await refreshAccess() } finally { setRefreshingAccess(false) }
+                setRefreshError(null)
+                try {
+                  await refreshAccess()
+                } catch {
+                  setRefreshError(t.accountRefreshError)
+                } finally {
+                  setRefreshingAccess(false)
+                }
               }}
               loading={refreshingAccess}
               style={{ marginTop: spacing.sm }}
             />
+            {refreshError && (
+              <Text style={styles.error}>{refreshError}</Text>
+            )}
           </View>
 
           {/* Promo code input */}
@@ -471,6 +501,19 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.error,
     marginTop: spacing.md,
+    textAlign: "center",
+  },
+
+  // Store-safe coming-soon notice
+  iapComingSoon: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+  },
+  iapComingSoonText: {
+    fontSize: fontSize.sm,
+    color: colors.primary,
+    lineHeight: 20,
     textAlign: "center",
   },
 

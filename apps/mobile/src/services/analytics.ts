@@ -11,6 +11,7 @@
 type EventProps = Record<string, string | number | boolean | null | undefined>
 
 export function logEvent(name: string, props?: EventProps): void {
+  if (!__DEV__) return   // no log spam in production builds
   try {
     const line = props && Object.keys(props).length > 0
       ? `[Analytics] ${name} ${JSON.stringify(props)}`

@@ -17,6 +17,7 @@ import { useT } from "@/hooks/useLanguage"
 import * as api from "@/services/api"
 import { generateUUID, getSessionId, setSessionId } from "@/services/storage"
 import { buildMessagePayload } from "@/services/messagePayload"
+import { getAccessState } from "@/utils/accessState"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import { logEvent } from "@/services/analytics"
 
@@ -78,8 +79,9 @@ function TypingIndicator() {
 export default function ChatScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
-  const { user } = useAuth()
+  const { user, accessInfo, decrementTrialLeft, refreshAccess } = useAuth()
   const { t, locale } = useT()
+  const accessState = getAccessState(accessInfo)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
@@ -157,6 +159,23 @@ export default function ChatScreen() {
         email: user?.email,
       })
       const data = await api.sendMessage(payload)
+
+      // Payment required — trial exhausted server-side
+      if (data.paymentRequired) {
+        // Sync access state so all screens immediately show the paywall
+        refreshAccess().catch(() => {})
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `e-${Date.now()}`,
+            role: "assistant",
+            text: t.chatPaymentRequired,
+            isError: true,
+          },
+        ])
+        return
+      }
+
       const reply = api.extractReplyText(data)
       const isError = data?.ok === false
 
@@ -171,6 +190,9 @@ export default function ChatScreen() {
       // Trigger typewriter animation for non-error responses
       if (!isError) {
         setStreamingMsgId(aiMsg.id)
+        // Optimistically decrement trial count — keeps badge/account screen in sync
+        // without waiting for the next bootstrap refresh
+        decrementTrialLeft()
       }
 
       // Track analytics
@@ -209,7 +231,7 @@ export default function ChatScreen() {
       sendingRef.current = false
       setSending(false)
     }
-  }, [input, user, t, locale])
+  }, [input, user, t, locale, decrementTrialLeft, refreshAccess])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => {
@@ -267,39 +289,68 @@ export default function ChatScreen() {
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyIcon}>{"\uD83D\uDCAC"}</Text>
               <Text style={styles.emptyTitle}>{t.chatStart}</Text>
-              <Text style={styles.emptySubtitle}>{t.chatSubtitle}</Text>
+              <Text style={styles.emptySubtitle}>
+                {accessState.isTrial
+                  ? t.accessTrialRemaining(accessState.trialLeft)
+                  : t.chatSubtitle}
+              </Text>
             </View>
           }
           ListFooterComponent={sending ? <TypingIndicator /> : null}
         />
 
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            value={input}
-            onChangeText={setInput}
-            placeholder={t.chatPlaceholder}
-            placeholderTextColor={colors.textMuted}
-            multiline
-            maxLength={2000}
-            editable={!sending}
-            returnKeyType="send"
-            blurOnSubmit={false}
-            onSubmitEditing={sendMessage}
-          />
-          <TouchableOpacity
-            style={[styles.sendBtn, (!input.trim() || sending) && styles.sendBtnDisabled]}
-            onPress={sendMessage}
-            disabled={!input.trim() || sending}
-            activeOpacity={0.7}
-          >
-            {sending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.sendIcon}>{"\u2191"}</Text>
+        {/* Paywall bar — replaces input when user has no access */}
+        {accessState.isLocked ? (
+          <View style={styles.paywallBar}>
+            <View style={styles.paywallText}>
+              <Text style={styles.paywallTitle}>{t.accessLockedTitle}</Text>
+              <Text style={styles.paywallDesc}>{t.accessLockedDesc}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.paywallBtn}
+              onPress={() => (navigation as any).navigate("MainTabs", { screen: "AccountTab" })}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.paywallBtnText}>{t.accessGoToAccount}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.inputRow}>
+            {/* Trial counter chip above input when on trial */}
+            {accessState.isTrial && (
+              <Text style={styles.trialChip}>
+                {t.accessTrialRemaining(accessState.trialLeft)}
+              </Text>
             )}
-          </TouchableOpacity>
-        </View>
+            <View style={styles.inputRowInner}>
+              <TextInput
+                style={styles.input}
+                value={input}
+                onChangeText={setInput}
+                placeholder={t.chatPlaceholder}
+                placeholderTextColor={colors.textMuted}
+                multiline
+                maxLength={2000}
+                editable={!sending}
+                returnKeyType="send"
+                blurOnSubmit={false}
+                onSubmitEditing={sendMessage}
+              />
+              <TouchableOpacity
+                style={[styles.sendBtn, (!input.trim() || sending) && styles.sendBtnDisabled]}
+                onPress={sendMessage}
+                disabled={!input.trim() || sending}
+                activeOpacity={0.7}
+              >
+                {sending ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.sendIcon}>{"\u2191"}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </View>
   )
@@ -364,13 +415,24 @@ const styles = StyleSheet.create({
     maxWidth: 260,
   },
   inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  trialChip: {
+    fontSize: fontSize.xs,
+    color: colors.primary,
+    fontWeight: "600",
+    paddingTop: spacing.xs,
+    paddingBottom: 2,
+    textAlign: "center",
+  },
+  inputRowInner: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    paddingTop: spacing.sm,
   },
   input: {
     flex: 1,
@@ -395,4 +457,23 @@ const styles = StyleSheet.create({
   sendIcon: { color: "#fff", fontSize: 20, fontWeight: "700" },
   newChatBtn: { marginRight: 12 },
   newChatText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: "600" },
+
+  // Paywall bar — shown when access is "none"
+  paywallBar: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.errorLight,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  paywallText: { gap: spacing.xs },
+  paywallTitle: { fontSize: fontSize.md, fontWeight: "700", color: colors.error },
+  paywallDesc: { fontSize: fontSize.sm, color: colors.error, lineHeight: 18 },
+  paywallBtn: {
+    backgroundColor: colors.error,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    alignItems: "center",
+  },
+  paywallBtnText: { color: "#fff", fontWeight: "700", fontSize: fontSize.sm },
 })

@@ -1,456 +1,338 @@
-import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react"
+import React, { useState, useCallback, useRef } from "react"
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
-  FlatList,
   StyleSheet,
-  KeyboardAvoidingView,
   Platform,
+  PermissionsAndroid,
+  ScrollView,
   ActivityIndicator,
 } from "react-native"
-import { useNavigation } from "@react-navigation/native"
+import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
-import * as api from "@/services/api"
-import { generateUUID, getSessionId, setSessionId } from "@/services/storage"
-import { buildMessagePayload } from "@/services/messagePayload"
+import { API_BASE_URL } from "@/constants/config"
+import { getAccessState } from "@/utils/accessState"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import { logEvent } from "@/services/analytics"
 
-type Message = {
-  id: string
-  role: "user" | "assistant"
-  text: string
-  isError?: boolean
-}
-
-/* ── Typewriter reveal for AI responses ── */
-
-const STREAM_CHARS = 3
-const STREAM_MS = 20
-
-function StreamingText({ fullText, onComplete }: { fullText: string; onComplete: () => void }) {
-  const [len, setLen] = useState(0)
-  const doneRef = useRef(false)
-
-  useEffect(() => {
-    if (doneRef.current) return
-    if (len >= fullText.length) {
-      doneRef.current = true
-      onComplete()
-      return
-    }
-    const t = setTimeout(() => setLen((l) => Math.min(l + STREAM_CHARS, fullText.length)), STREAM_MS)
-    return () => clearTimeout(t)
-  }, [len, fullText.length, onComplete])
-
-  return (
-    <Text style={styles.aiText}>
-      {fullText.slice(0, len)}
-      {len < fullText.length ? "\u2588" : ""}
-    </Text>
-  )
-}
-
-/* ── Typing indicator (pulsing dots) ── */
-
-function TypingIndicator() {
-  const [dots, setDots] = useState("")
-
-  useEffect(() => {
-    const t = setInterval(() => setDots((d) => (d.length >= 3 ? "" : d + ".")), 400)
-    return () => clearInterval(t)
-  }, [])
-
-  return (
-    <View style={[styles.bubble, styles.aiBubble]}>
-      <Text style={styles.aiLabel}>TurbotaAI</Text>
-      <Text style={styles.typingDots}>{dots || "."}</Text>
-    </View>
-  )
-}
-
-/* ── Main screen ── */
-
 type VoiceGender = "female" | "male"
+
+type GenderOption = {
+  id: VoiceGender
+  emoji: string
+  labelKey: "voiceGenderFemale" | "voiceGenderMale"
+  accent: string
+  accentLight: string
+}
+
+const GENDER_OPTIONS: GenderOption[] = [
+  {
+    id: "female",
+    emoji: "\u2640\uFE0F",
+    labelKey: "voiceGenderFemale",
+    accent: "#db2777",
+    accentLight: "#fce7f3",
+  },
+  {
+    id: "male",
+    emoji: "\u2642\uFE0F",
+    labelKey: "voiceGenderMale",
+    accent: "#2563eb",
+    accentLight: "#dbeafe",
+  },
+]
 
 export default function VoiceAssistantScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
-  const { user } = useAuth()
+  const { accessInfo, refreshAccess } = useAuth()
   const { t, locale } = useT()
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState("")
-  const [sending, setSending] = useState(false)
-  const flatListRef = useRef<FlatList>(null)
-  const conversationIdRef = useRef<string | null>(null)
-  const sessionIdRef = useRef<string>("")
-  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null)
-  const sendingRef = useRef(false)
-  const isNearBottomRef = useRef(true)
+  const accessState = getAccessState(accessInfo)
+
   const [gender, setGender] = useState<VoiceGender>("female")
+  const [starting, setStarting] = useState(false)
+  const [permError, setPermError] = useState<string | null>(null)
 
-  // Load or create persistent sessionId
-  useEffect(() => {
-    ;(async () => {
-      const stored = await getSessionId("voice")
-      if (stored) {
-        sessionIdRef.current = stored
-      } else {
-        const newId = generateUUID()
-        sessionIdRef.current = newId
-        await setSessionId("voice", newId)
+  // Refresh access state on focus — keeps gating in sync after a promo/purchase
+  // made on the web or another screen. Debounced to 30 s to match HomeScreen.
+  const lastFocusRefreshRef = useRef<number>(0)
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now()
+      if (now - lastFocusRefreshRef.current > 30_000) {
+        lastFocusRefreshRef.current = now
+        refreshAccess().catch(() => {})
       }
-    })()
-  }, [])
+    }, [refreshAccess]),
+  )
 
-  // New Chat — reset session, messages, conversation
-  const resetSession = useCallback(async () => {
-    const newId = generateUUID()
-    sessionIdRef.current = newId
-    await setSessionId("voice", newId)
-    conversationIdRef.current = null
-    setMessages([])
-    setInput("")
-    setStreamingMsgId(null)
-  }, [])
-
-  // Add New Chat button to header
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity onPress={resetSession} style={styles.newChatBtn} activeOpacity={0.7}>
-          <Text style={styles.newChatText}>{t.newChat}</Text>
-        </TouchableOpacity>
-      ),
-    })
-  }, [navigation, resetSession, t])
-
-  const handleStreamComplete = useCallback(() => {
-    setStreamingMsgId(null)
-  }, [])
-
-  const sendMessage = useCallback(async () => {
-    const text = input.trim()
-    if (!text || sendingRef.current) return
-    // Session ID may not have loaded from storage yet on very first tap — generate inline
-    if (!sessionIdRef.current) {
-      const newId = generateUUID()
-      sessionIdRef.current = newId
-      setSessionId("voice", newId).catch(() => {})
+  const requestMicPermission = useCallback(async (): Promise<boolean> => {
+    if (Platform.OS !== "android") return true
+    try {
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        {
+          title: t.permMicTitle,
+          message: t.permMicMessage,
+          buttonPositive: "OK",
+        },
+      )
+      return result === PermissionsAndroid.RESULTS.GRANTED
+    } catch {
+      return false
     }
+  }, [t])
 
-    sendingRef.current = true
-    setSending(true)
-
-    const userMsg: Message = { id: `u-${Date.now()}`, role: "user", text }
-    setMessages((prev) => [...prev, userMsg])
-    setInput("")
+  const handleStart = useCallback(async () => {
+    if (starting) return
+    setStarting(true)
+    setPermError(null)
 
     try {
-      const payload = await buildMessagePayload({
-        query: text,
-        language: locale,
-        mode: "voice",
-        userId: user?.id || null,
-        sessionId: sessionIdRef.current,
-        email: user?.email,
-        gender,
-      })
-      console.log("[VoiceAssistant] PAYLOAD:", JSON.stringify({
-        mode: payload.mode,
-        gender: payload.gender,
-        sessionId: payload.sessionId,
-        userId: payload.userId,
-      }))
-      const data = await api.sendMessage(payload)
-      const reply = api.extractReplyText(data)
-      const isError = data?.ok === false
-
-      const aiMsg: Message = {
-        id: `a-${Date.now()}`,
-        role: "assistant",
-        text: reply,
-        isError,
-      }
-      setMessages((prev) => [...prev, aiMsg])
-
-      // Trigger typewriter animation for non-error responses
-      if (!isError) {
-        setStreamingMsgId(aiMsg.id)
+      // Access gate — same rules as web platform (paid | promo | trial with questions left)
+      if (accessState.isLocked) {
+        setPermError(t.accessLockedTitle)
+        return
       }
 
-      // Track analytics
-      if (!isError) {
-        const isFirstMessage = !conversationIdRef.current
-        if (isFirstMessage) logEvent("chat_started", { mode: "voice", gender })
-        logEvent("message_sent", { mode: "voice", gender })
+      const granted = await requestMicPermission()
+      if (!granted) {
+        setPermError(t.permMicDenied)
+        return
       }
 
-      // Save to history (fire-and-forget)
-      if (!isError) {
-        const isFirstMessage = !conversationIdRef.current
-        const convId = conversationIdRef.current || generateUUID()
-        conversationIdRef.current = convId
-        api
-          .saveConversation({
-            conversationId: convId,
-            messages: [
-              { role: "user", content: text },
-              { role: "assistant", content: reply },
-            ],
-            mode: "voice",
-            title: isFirstMessage ? text.slice(0, 64) : undefined,
-          })
-          .catch(() => {})
-      }
-    } catch (e: any) {
-      const errText =
-        e?.message === "Network request failed"
-          ? t.chatNoInternet
-          : t.chatError
-      setMessages((prev) => [
-        ...prev,
-        { id: `e-${Date.now()}`, role: "assistant", text: errText, isError: true },
-      ])
+      logEvent("voice_call_started", { gender })
+
+      // Build embedded URL — autostart=1 tells the web dialog to begin the call immediately
+      const uri = `${API_BASE_URL}/app/voice?gender=${gender}&lang=${locale}&autostart=1`
+      ;(navigation as any).navigate("WebView", { uri, title: t.voiceTitle })
     } finally {
-      sendingRef.current = false
-      setSending(false)
+      setStarting(false)
     }
-  }, [input, user, t, locale, gender])
+  }, [starting, gender, locale, t, navigation, requestMicPermission, accessState.isLocked])
 
-  const renderMessage = useCallback(
-    ({ item }: { item: Message }) => {
-      const isStreaming = item.id === streamingMsgId && !item.isError
-
-      return (
-        <View
-          style={[
-            styles.bubble,
-            item.role === "user" ? styles.userBubble : styles.aiBubble,
-            item.isError && styles.errorBubble,
-          ]}
-        >
-          {item.role === "assistant" && !item.isError && (
-            <Text style={styles.aiLabel}>TurbotaAI</Text>
-          )}
-          {item.isError && <Text style={styles.errorLabel}>Error</Text>}
-          {isStreaming ? (
-            <StreamingText fullText={item.text} onComplete={handleStreamComplete} />
-          ) : (
-            <Text style={item.role === "user" ? styles.userText : styles.aiText}>{item.text}</Text>
-          )}
-        </View>
-      )
-    },
-    [streamingMsgId, handleStreamComplete],
-  )
+  const selectedOption = GENDER_OPTIONS.find((g) => g.id === gender)!
 
   return (
     <View style={[styles.root, { paddingBottom: insets.bottom }]}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Gender selector */}
-        <View style={styles.selectorRow}>
-          <TouchableOpacity
-            style={[styles.selectorBtn, gender === "female" && styles.selectorBtnActive, styles.selectorBtnFemale]}
-            onPress={() => setGender("female")}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.selectorLabel, gender === "female" && styles.selectorLabelActiveFemale]}>
-              {"\u2640\uFE0F"} {t.voiceGenderFemale}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.selectorBtn, gender === "male" && styles.selectorBtnActive, styles.selectorBtnMale]}
-            onPress={() => setGender("male")}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.selectorLabel, gender === "male" && styles.selectorLabelActiveMale]}>
-              {"\u2642\uFE0F"} {t.voiceGenderMale}
-            </Text>
-          </TouchableOpacity>
+        {/* Hero section */}
+        <View style={styles.hero}>
+          <Text style={styles.heroIcon}>{"\uD83C\uDF99\uFE0F"}</Text>
+          <Text style={styles.heroTitle}>{t.voiceTitle}</Text>
+          <Text style={styles.heroDesc}>{t.voiceCallDesc}</Text>
         </View>
 
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(m) => m.id}
-          extraData={streamingMsgId}
-          contentContainerStyle={[styles.list, messages.length === 0 && styles.listEmpty]}
-          onContentSizeChange={() => {
-            if (isNearBottomRef.current) {
-              flatListRef.current?.scrollToEnd({ animated: true })
-            }
-          }}
-          onScroll={({ nativeEvent }) => {
-            const { contentOffset, layoutMeasurement, contentSize } = nativeEvent
-            isNearBottomRef.current =
-              contentOffset.y + layoutMeasurement.height >= contentSize.height - 80
-          }}
-          scrollEventThrottle={100}
-          ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <Text style={styles.emptyIcon}>{"\uD83C\uDF99\uFE0F"}</Text>
-              <Text style={styles.emptyTitle}>{t.voiceStart}</Text>
-              <Text style={styles.emptySubtitle}>{t.voiceSubtitle}</Text>
-            </View>
-          }
-          ListFooterComponent={sending ? <TypingIndicator /> : null}
-        />
+        {/* Gender selector */}
+        <Text style={styles.sectionLabel}>{"\uD83C\uDFA4"} {t.voiceTitle}</Text>
+        <View style={styles.genderRow}>
+          {GENDER_OPTIONS.map((opt) => {
+            const isActive = gender === opt.id
+            return (
+              <TouchableOpacity
+                key={opt.id}
+                style={[
+                  styles.genderCard,
+                  isActive && { borderColor: opt.accent, backgroundColor: opt.accentLight },
+                ]}
+                onPress={() => setGender(opt.id)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.genderEmoji}>{opt.emoji}</Text>
+                <Text style={[styles.genderLabel, isActive && { color: opt.accent }]}>
+                  {t[opt.labelKey]}
+                </Text>
+                {isActive && (
+                  <View style={[styles.genderCheck, { backgroundColor: opt.accent }]}>
+                    <Text style={styles.genderCheckMark}>✓</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )
+          })}
+        </View>
 
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            value={input}
-            onChangeText={setInput}
-            placeholder={t.voicePlaceholder}
-            placeholderTextColor={colors.textMuted}
-            multiline
-            maxLength={2000}
-            editable={!sending}
-            returnKeyType="send"
-            blurOnSubmit={false}
-            onSubmitEditing={sendMessage}
-          />
+        {/* Permission / access error */}
+        {permError && (
+          <View style={styles.permErrorBox}>
+            <Text style={styles.permErrorText}>{permError}</Text>
+          </View>
+        )}
+
+      </ScrollView>
+
+      {/* CTA bar */}
+      {accessState.isLocked ? (
+        /* Paywall — user has no access */
+        <View style={[styles.paywallBar, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          <View>
+            <Text style={styles.paywallTitle}>{t.accessLockedTitle}</Text>
+            <Text style={styles.paywallDesc}>{t.accessLockedDesc}</Text>
+          </View>
           <TouchableOpacity
-            style={[styles.sendBtn, (!input.trim() || sending) && styles.sendBtnDisabled]}
-            onPress={sendMessage}
-            disabled={!input.trim() || sending}
-            activeOpacity={0.7}
+            style={styles.paywallBtn}
+            onPress={() => (navigation as any).navigate("MainTabs", { screen: "AccountTab" })}
+            activeOpacity={0.8}
           >
-            {sending ? (
+            <Text style={styles.paywallBtnText}>{t.accessGoToAccount}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          {accessState.isTrial && (
+            <Text style={styles.trialChip}>{t.accessTrialRemaining(accessState.trialLeft)}</Text>
+          )}
+          <TouchableOpacity
+            style={[
+              styles.startBtn,
+              { backgroundColor: selectedOption.accent },
+              starting && styles.startBtnDisabled,
+            ]}
+            onPress={handleStart}
+            disabled={starting}
+            activeOpacity={0.85}
+          >
+            {starting ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={styles.sendIcon}>{"\u2191"}</Text>
+              <>
+                <Text style={styles.startBtnIcon}>{"\uD83D\uDCDE"}</Text>
+                <Text style={styles.startBtnText}>{t.voiceStartCall}</Text>
+              </>
             )}
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      )}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
-  list: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  listEmpty: { flexGrow: 1 },
-  bubble: {
-    maxWidth: "82%",
-    borderRadius: radii.lg,
-    padding: spacing.md,
+  scroll: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+
+  // Hero
+  hero: { alignItems: "center", paddingVertical: spacing.xl },
+  heroIcon: { fontSize: 56, marginBottom: spacing.md },
+  heroTitle: {
+    fontSize: fontSize.xxl,
+    fontWeight: "800",
+    color: colors.text,
     marginBottom: spacing.sm,
   },
-  userBubble: { alignSelf: "flex-end", backgroundColor: colors.userBubble },
-  aiBubble: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.aiBubble,
-    borderWidth: 1,
-    borderColor: colors.aiBubbleBorder,
-  },
-  errorBubble: {
-    backgroundColor: colors.errorLight,
-    borderWidth: 1,
-    borderColor: colors.error,
-  },
-  aiLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    color: colors.success,
-    marginBottom: 4,
-  },
-  errorLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    color: colors.error,
-    marginBottom: 4,
-  },
-  userText: { color: "#fff", fontSize: fontSize.md, lineHeight: 22 },
-  aiText: { color: colors.text, fontSize: fontSize.md, lineHeight: 22 },
-  typingDots: {
-    color: colors.textMuted,
-    fontSize: fontSize.lg,
-    fontWeight: "600",
-    letterSpacing: 2,
-  },
-  emptyWrap: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: spacing.xxl,
-  },
-  emptyIcon: { fontSize: 48, marginBottom: spacing.md },
-  emptyTitle: { fontSize: fontSize.lg, fontWeight: "600", color: colors.textSecondary },
-  emptySubtitle: {
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
+  heroDesc: {
+    fontSize: fontSize.md,
+    color: colors.textSecondary,
     textAlign: "center",
-    marginTop: spacing.xs,
-    maxWidth: 260,
+    lineHeight: 22,
+    maxWidth: 280,
   },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+
+  // Section label
+  sectionLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: spacing.sm,
+    marginTop: spacing.md,
+  },
+
+  // Gender cards
+  genderRow: { flexDirection: "row", gap: spacing.md },
+  genderCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    paddingVertical: spacing.xl,
+    alignItems: "center",
+    position: "relative",
+  },
+  genderEmoji: { fontSize: 32, marginBottom: spacing.sm },
+  genderLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: "600",
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+  genderCheck: {
+    position: "absolute",
+    top: spacing.sm,
+    right: spacing.sm,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  genderCheckMark: { color: "#fff", fontSize: 11, fontWeight: "700" },
+
+  // Permission error
+  permErrorBox: {
+    marginTop: spacing.md,
+    backgroundColor: colors.errorLight,
+    borderRadius: radii.md,
+    padding: spacing.md,
+  },
+  permErrorText: { fontSize: fontSize.sm, color: colors.error, lineHeight: 20 },
+
+  // CTA bar
+  ctaBar: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    backgroundColor: colors.background,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    backgroundColor: colors.surface,
   },
-  input: {
-    flex: 1,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radii.xl,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: Platform.OS === "ios" ? 12 : 8,
-    fontSize: fontSize.md,
-    color: colors.text,
-    maxHeight: 100,
-  },
-  sendBtn: {
-    backgroundColor: "#10b981",
-    width: 40,
-    height: 40,
-    borderRadius: radii.full,
+  startBtn: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: spacing.sm,
-  },
-  sendBtnDisabled: { opacity: 0.4 },
-  sendIcon: { color: "#fff", fontSize: 20, fontWeight: "700" },
-  newChatBtn: { marginRight: 12 },
-  newChatText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: "600" },
-
-  // Gender selector
-  selectorRow: {
-    flexDirection: "row",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.lg,
+    borderRadius: radii.xl,
     gap: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
   },
-  selectorBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm,
+  startBtnDisabled: { opacity: 0.6 },
+  startBtnIcon: { fontSize: 20 },
+  startBtnText: { color: "#fff", fontSize: fontSize.lg, fontWeight: "700" },
+  trialChip: {
+    fontSize: fontSize.xs,
+    color: colors.primary,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: spacing.xs,
+  },
+
+  // Paywall bar — shown when access is "none"
+  paywallBar: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    backgroundColor: colors.errorLight,
+    borderTopWidth: 1,
+    borderTopColor: colors.error,
+    gap: spacing.md,
+  },
+  paywallTitle: { fontSize: fontSize.md, fontWeight: "700", color: colors.error },
+  paywallDesc: { fontSize: fontSize.sm, color: colors.error, lineHeight: 18, marginTop: 2 },
+  paywallBtn: {
+    backgroundColor: colors.error,
+    paddingVertical: spacing.md,
     borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
+    alignItems: "center" as const,
   },
-  selectorBtnActive: { borderWidth: 2 },
-  selectorBtnFemale: {},
-  selectorBtnMale: {},
-  selectorLabel: { fontSize: fontSize.sm, fontWeight: "600", color: colors.textSecondary },
-  selectorLabelActiveFemale: { color: "#db2777" },
-  selectorLabelActiveMale: { color: "#2563eb" },
+  paywallBtnText: { color: "#fff", fontWeight: "700", fontSize: fontSize.sm },
 })

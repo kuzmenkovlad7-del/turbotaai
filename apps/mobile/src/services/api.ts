@@ -150,6 +150,12 @@ export type AgentResponse = {
   response?: string
   output?: string
   error?: string
+  /**
+   * Set to true when the backend returned 402 / "payment_required".
+   * Screens should display a localised paywall message and call refreshAccess()
+   * rather than rendering the raw `error` string.
+   */
+  paymentRequired?: boolean
 }
 
 /** Payload contract for every webhook message */
@@ -210,13 +216,12 @@ export async function sendMessage(payload: MessagePayload): Promise<AgentRespons
   })
   const data = await safeJson(res, { ok: false, error: `HTTP ${res.status}` } as AgentResponse)
 
-  // Surface access control errors clearly
+  // Surface access-control errors — screens translate paymentRequired themselves
   if (!res.ok) {
-    const errMsg =
-      data?.error === "payment_required"
-        ? "You have used all your free questions. Subscribe to continue."
-        : data?.error || `Request failed (${res.status})`
-    return { ok: false, error: errMsg }
+    if (data?.error === "payment_required") {
+      return { ok: false, paymentRequired: true, error: "payment_required" }
+    }
+    return { ok: false, error: data?.error || `Request failed (${res.status})` }
   }
 
   return data

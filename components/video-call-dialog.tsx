@@ -91,6 +91,8 @@ interface VideoCallDialogProps {
   onClose: () => void
   openAiApiKey?: string
   onError?: (error: Error) => void
+  /** Pre-selected character ID from mobile launcher screen (e.g. "dr-maria") */
+  defaultCharacterId?: string
 }
 
 type ChatMessage = {
@@ -410,6 +412,7 @@ export default function VideoCallDialog({
   onClose,
   openAiApiKey,
   onError,
+  defaultCharacterId,
 }: VideoCallDialogProps) {
   const { t, currentLanguage } = useLanguage()
   const { user } = useAuth()
@@ -429,8 +432,13 @@ export default function VideoCallDialog({
   const currentLocale = getLocaleForLanguage(activeLanguage.code)
   const nativeVoicePreferences = getNativeVoicePreferences()
 
+  // Pre-select character when launched from mobile (defaultCharacterId prop)
   const [selectedCharacter, setSelectedCharacter] = useState<AICharacter>(
-    AI_CHARACTERS[1] || AI_CHARACTERS[0],
+    (defaultCharacterId
+      ? AI_CHARACTERS.find((c) => c.id === defaultCharacterId)
+      : undefined) ??
+    AI_CHARACTERS[1] ??
+    AI_CHARACTERS[0],
   )
 
   const [isCallActive, setIsCallActive] = useState(false)
@@ -645,6 +653,22 @@ export default function VideoCallDialog({
   useEffect(() => {
     if (!isOpen && isCallActive) endCall()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen])
+
+  // Regression fix (2026-02): VideoCallDialog uses a custom overlay instead of
+  // Radix Dialog, so Radix's built-in scroll-lock never fires.  Lock body scroll
+  // manually to match VoiceCallDialog behavior.  Voice is unaffected because its
+  // Radix <Dialog> already owns the lock.
+  useEffect(() => {
+    if (!isOpen) return
+    const prevDocOverflow = document.documentElement.style.overflow
+    const prevBodyOverflow = document.body.style.overflow
+    document.documentElement.style.overflow = "hidden"
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.documentElement.style.overflow = prevDocOverflow
+      document.body.style.overflow = prevBodyOverflow
+    }
   }, [isOpen])
 
   function setSessionLangFromUi() {

@@ -80,6 +80,13 @@ const en = {
   chatPlaceholder: "Type a message...",
   chatNoInternet: "No internet connection. Check your network and try again.",
   chatError: "Something went wrong. Please try again.",
+  chatPaymentRequired: "You\u2019ve used all your free questions. Subscribe to continue.",
+
+  // Access gating — shown when a feature is locked (matching web paywall copy)
+  accessLockedTitle: "No active plan",
+  accessLockedDesc: "Subscribe to get unlimited access to Chat, Voice & Video sessions.",
+  accessGoToAccount: "View subscription options",
+  accessTrialRemaining: (n: number) => `${n} free question${n !== 1 ? "s" : ""} remaining`,
 
   // Video / Voice
   videoTitle: "Video Assistant",
@@ -96,9 +103,24 @@ const en = {
   voiceStart: "Voice conversation",
   voiceSubtitle: "Speak or type your question — your AI companion will answer.",
   voicePlaceholder: "Type or speak your message...",
+  voiceStartCall: "Start voice call",
+  voiceCallDesc: "Choose voice and start a real-time call with your AI companion.",
   videoStart: "Video consultation",
   videoSubtitle: "Ask your question — your AI companion will guide you.",
   videoPlaceholder: "Type your question...",
+  videoStartCall: "Start video call",
+  videoCallDesc: "Choose your AI companion and start a live video session.",
+
+  // Permissions
+  permMicTitle: "Microphone Access",
+  permMicMessage: "TurbotaAI needs your microphone to have a voice conversation with your AI companion.",
+  permMicDenied: "Microphone access was denied. Please enable it in Settings \u2192 TurbotaAI.",
+  permCameraTitle: "Camera Access",
+  permCameraMessage: "TurbotaAI needs your camera for video calls with your AI companion.",
+  permCameraDenied: "Camera access was denied. Please enable it in Settings \u2192 TurbotaAI.",
+
+  // WebView
+  webViewLoadError: "Could not load the assistant. Check your connection.",
 
   // History
   historyTitle: "History",
@@ -126,7 +148,7 @@ const en = {
   accountNoPlanDesc: "Subscribe to get unlimited access",
   accountMonthly: "Monthly Subscription",
   accountYearly: "Yearly Subscription (Best Value)",
-  accountIapSoon: "In-app purchases will be available soon. Visit turbotaai.com to subscribe now.",
+  accountIapSoon: "In-app subscription purchase coming soon. Sign in with an existing subscription to access all features.",
   accountLanguage: "Language",
   accountAutoRenew: "Auto-renew",
   accountAutoRenewOn: "Active",
@@ -149,6 +171,7 @@ const en = {
   accountRefreshAccess: "Refresh Access",
   accountRestoreSuccess: "Purchases restored!",
   accountRestoreNone: "No purchases to restore.",
+  accountRefreshError: "Could not refresh access. Check your connection.",
 
   // Bootstrap
   bootstrapErrorTitle: "Connection Error",
@@ -160,6 +183,9 @@ const en = {
   badgePromo: "Promo",
   badgeTrial: (n: number) => `Trial (${n} left)`,
   badgeNone: "No access",
+
+  // Tab bar — short so labels don't overflow on narrow screens
+  homeTabLabel: "Home",
 } as const
 
 /** Widen literal string types to `string` while preserving function signatures */
@@ -227,6 +253,11 @@ const uk: Translations = {
   chatPlaceholder: "Введіть повідомлення...",
   chatNoInternet: "Немає інтернету. Перевірте мережу.",
   chatError: "Щось пішло не так. Спробуйте ще раз.",
+  chatPaymentRequired: "Ви використали всі безкоштовні запитання. Підпишіться, щоб продовжити.",
+  accessLockedTitle: "Немає активного плану",
+  accessLockedDesc: "Підпишіться для необмеженого доступу до Чату, Голосу та Відео.",
+  accessGoToAccount: "Переглянути плани підписки",
+  accessTrialRemaining: (n: number) => `${n} безкоштовн${n === 1 ? "е запитання" : "их запитань"} залишилося`,
 
   videoTitle: "Відео-помічник",
   videoDesc: "Спілкуйтесь віч-на-віч з AI-помічником. Оберіть персонажа та розпочніть відеоконсультацію.",
@@ -242,9 +273,21 @@ const uk: Translations = {
   voiceStart: "Голосова розмова",
   voiceSubtitle: "Говоріть або пишіть запитання — AI-помічник відповість.",
   voicePlaceholder: "Введіть або скажіть повідомлення...",
+  voiceStartCall: "Почати голосовий дзвінок",
+  voiceCallDesc: "Оберіть голос та розпочніть розмову в реальному часі з AI-помічником.",
   videoStart: "Відеоконсультація",
   videoSubtitle: "Задайте запитання — AI-помічник допоможе.",
   videoPlaceholder: "Введіть запитання...",
+  videoStartCall: "Почати відеодзвінок",
+  videoCallDesc: "Оберіть AI-помічника та розпочніть живу відеосесію.",
+
+  permMicTitle: "Доступ до мікрофона",
+  permMicMessage: "TurbotaAI потребує мікрофон для голосової розмови з AI-помічником.",
+  permMicDenied: "Доступ до мікрофона заборонено. Увімкніть у Налаштування \u2192 TurbotaAI.",
+  permCameraTitle: "Доступ до камери",
+  permCameraMessage: "TurbotaAI потребує камеру для відеодзвінків з AI-помічником.",
+  permCameraDenied: "Доступ до камери заборонено. Увімкніть у Налаштування \u2192 TurbotaAI.",
+  webViewLoadError: "Не вдалося завантажити помічника. Перевірте з'єднання.",
 
   historyTitle: "Історія",
   historyEmpty: "Розмов ще немає",
@@ -270,7 +313,7 @@ const uk: Translations = {
   accountNoPlanDesc: "Підпишіться для необмеженого доступу",
   accountMonthly: "Місячна підписка",
   accountYearly: "Річна підписка (найвигідніше)",
-  accountIapSoon: "Покупки в додатку скоро будуть доступні. Підпишіться на turbotaai.com.",
+  accountIapSoon: "Покупки в додатку скоро будуть доступні. Увійдіть з існуючою підпискою для доступу до всіх функцій.",
   accountLanguage: "Мова",
   accountAutoRenew: "Автопродовження",
   accountAutoRenewOn: "Активне",
@@ -293,6 +336,7 @@ const uk: Translations = {
   accountRefreshAccess: "Оновити доступ",
   accountRestoreSuccess: "Покупки відновлено!",
   accountRestoreNone: "Немає покупок для відновлення.",
+  accountRefreshError: "Не вдалося оновити доступ. Перевірте з'єднання.",
 
   bootstrapErrorTitle: "Помилка з'єднання",
   bootstrapErrorDesc: "Не вдалося підключитися до TurbotaAI. Перевірте інтернет та спробуйте ще раз.",
@@ -302,6 +346,8 @@ const uk: Translations = {
   badgePromo: "Промо",
   badgeTrial: (n: number) => `Проб. (${n} зал.)`,
   badgeNone: "Немає доступу",
+
+  homeTabLabel: "Головна",
 }
 
 const ru: Translations = {
@@ -366,6 +412,11 @@ const ru: Translations = {
   chatPlaceholder: "Введите сообщение...",
   chatNoInternet: "Нет интернета. Проверьте сеть.",
   chatError: "Что-то пошло не так. Попробуйте ещё раз.",
+  chatPaymentRequired: "Вы использовали все бесплатные вопросы. Подпишитесь, чтобы продолжить.",
+  accessLockedTitle: "Нет активного плана",
+  accessLockedDesc: "Подпишитесь для неограниченного доступа к Чату, Голосу и Видео.",
+  accessGoToAccount: "Посмотреть варианты подписки",
+  accessTrialRemaining: (n: number) => `${n} бесплатн${n === 1 ? "ый вопрос" : "ых вопроса"} осталось`,
 
   videoTitle: "Видео-помощник",
   videoDesc: "Общайтесь лицом к лицу с AI-помощником. Выберите персонажа и начните видеоконсультацию.",
@@ -381,9 +432,21 @@ const ru: Translations = {
   voiceStart: "Голосовой разговор",
   voiceSubtitle: "Говорите или пишите вопрос — AI-помощник ответит.",
   voicePlaceholder: "Введите или скажите сообщение...",
+  voiceStartCall: "Начать голосовой звонок",
+  voiceCallDesc: "Выберите голос и начните разговор в реальном времени с AI-помощником.",
   videoStart: "Видеоконсультация",
   videoSubtitle: "Задайте вопрос — AI-помощник поможет.",
   videoPlaceholder: "Введите вопрос...",
+  videoStartCall: "Начать видеозвонок",
+  videoCallDesc: "Выберите AI-помощника и начните живую видеосессию.",
+
+  permMicTitle: "Доступ к микрофону",
+  permMicMessage: "TurbotaAI нужен микрофон для голосового разговора с AI-помощником.",
+  permMicDenied: "Доступ к микрофону запрещён. Включите в Настройки \u2192 TurbotaAI.",
+  permCameraTitle: "Доступ к камере",
+  permCameraMessage: "TurbotaAI нужна камера для видеозвонков с AI-помощником.",
+  permCameraDenied: "Доступ к камере запрещён. Включите в Настройки \u2192 TurbotaAI.",
+  webViewLoadError: "Не удалось загрузить помощника. Проверьте соединение.",
 
   historyTitle: "История",
   historyEmpty: "Разговоров ещё нет",
@@ -409,7 +472,7 @@ const ru: Translations = {
   accountNoPlanDesc: "Подпишитесь для неограниченного доступа",
   accountMonthly: "Месячная подписка",
   accountYearly: "Годовая подписка (самая выгодная)",
-  accountIapSoon: "Покупки в приложении скоро будут доступны. Подпишитесь на turbotaai.com.",
+  accountIapSoon: "Покупки в приложении скоро будут доступны. Войдите с существующей подпиской для доступа ко всем функциям.",
   accountLanguage: "Язык",
   accountAutoRenew: "Автопродление",
   accountAutoRenewOn: "Активно",
@@ -432,6 +495,7 @@ const ru: Translations = {
   accountRefreshAccess: "Обновить доступ",
   accountRestoreSuccess: "Покупки восстановлены!",
   accountRestoreNone: "Нет покупок для восстановления.",
+  accountRefreshError: "Не удалось обновить доступ. Проверьте соединение.",
 
   bootstrapErrorTitle: "Ошибка соединения",
   bootstrapErrorDesc: "Не удалось подключиться к TurbotaAI. Проверьте интернет и попробуйте снова.",
@@ -441,6 +505,8 @@ const ru: Translations = {
   badgePromo: "Промо",
   badgeTrial: (n: number) => `Проб. (${n} ост.)`,
   badgeNone: "Нет доступа",
+
+  homeTabLabel: "Главная",
 }
 
 export const translations: Record<Locale, Translations> = { en, uk, ru }
