@@ -184,6 +184,7 @@ const en = {
   accountRestoreSuccess: "Purchases restored!",
   accountRestoreNone: "No purchases to restore.",
   accountRefreshError: "Could not refresh access. Check your connection.",
+  accountRefreshDone: "Access refreshed!",
 
   // Bootstrap
   bootstrapErrorTitle: "Connection Error",
@@ -360,6 +361,7 @@ const uk: Translations = {
   accountRestoreSuccess: "Покупки відновлено!",
   accountRestoreNone: "Немає покупок для відновлення.",
   accountRefreshError: "Не вдалося оновити доступ. Перевірте з'єднання.",
+  accountRefreshDone: "Доступ оновлено!",
 
   bootstrapErrorTitle: "Помилка з'єднання",
   bootstrapErrorDesc: "Не вдалося підключитися до TurbotaAI. Перевірте інтернет та спробуйте ще раз.",
@@ -530,6 +532,7 @@ const ru: Translations = {
   accountRestoreSuccess: "Покупки восстановлены!",
   accountRestoreNone: "Нет покупок для восстановления.",
   accountRefreshError: "Не удалось обновить доступ. Проверьте соединение.",
+  accountRefreshDone: "Доступ обновлён!",
 
   bootstrapErrorTitle: "Ошибка соединения",
   bootstrapErrorDesc: "Не удалось подключиться к TurbotaAI. Проверьте интернет и попробуйте снова.",
