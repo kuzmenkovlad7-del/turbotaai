@@ -32,7 +32,6 @@ import { useNavigation, useRoute } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Audio, Video, ResizeMode } from "expo-av"
 import { useT } from "@/hooks/useLanguage"
-import { useAuth } from "@/hooks/useAuth"
 import { useVideoSession, type VideoPhase } from "@/hooks/useVideoSession"
 import { logEvent } from "@/services/analytics"
 import { API_BASE_URL } from "@/constants/config"
@@ -83,7 +82,6 @@ export default function NativeVideoCallScreen() {
   const route = useRoute()
   const insets = useSafeAreaInsets()
   const { t } = useT()
-  const { decrementTrialLeft } = useAuth()
 
   const { characterId, avatarSlug, gender, locale } = route.params as NativeVideoCallParams
 
@@ -96,7 +94,8 @@ export default function NativeVideoCallScreen() {
   const [permGranted, setPermGranted] = useState<boolean | null>(null)
   const [videoReady, setVideoReady] = useState(false)
 
-  const { phase, transcript, reply, error, start, stop, sendNow, retryFromError } =
+  // decrementTrialLeft is now called inside useVideoSession after each AI reply
+  const { phase, transcript, reply, error, start, stop, retryFromError } =
     useVideoSession(characterId, avatarSlug, gender, locale)
 
   // ── Permission request + session start ────────────────────────────────────
@@ -139,15 +138,6 @@ export default function NativeVideoCallScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Decrement trial counter on each AI reply ───────────────────────────────
-  const prevReplyRef = useRef("")
-  useEffect(() => {
-    if (reply && reply !== prevReplyRef.current) {
-      prevReplyRef.current = reply
-      decrementTrialLeft()
-    }
-  }, [reply, decrementTrialLeft])
-
   // ── End call ──────────────────────────────────────────────────────────────
   const handleEnd = useCallback(async () => {
     logEvent("native_video_call_ended", { characterId })
@@ -163,7 +153,7 @@ export default function NativeVideoCallScreen() {
       case "listening":  return t.voiceListening
       case "processing": return t.voiceProcessing
       case "speaking":   return t.voiceSpeaking
-      case "error":      return isPaymentError ? t.chatPaymentRequired : (error ?? t.voiceSessionError)
+      case "error":      return isPaymentError ? t.chatPaymentRequired : t.voiceSessionError
       default:           return t[meta.nameKey]
     }
   }
@@ -281,6 +271,14 @@ export default function NativeVideoCallScreen() {
           )
         )}
 
+        {/* ── Debug error box — shows full error string with status code ── */}
+        {phase === "error" && error && !isPaymentError && (
+          <View style={styles.debugBox}>
+            <Text style={styles.debugTitle}>⚠ API error</Text>
+            <Text style={styles.debugMsg} selectable>{error}</Text>
+          </View>
+        )}
+
         {/* Control buttons */}
         <View style={styles.controls}>
           {phase === "error" ? (
@@ -302,16 +300,6 @@ export default function NativeVideoCallScreen() {
                 activeOpacity={0.85}
               >
                 <Text style={styles.actionBtnText}>{t.retry}</Text>
-              </TouchableOpacity>
-            )
-          ) : (
-            phase === "listening" && (
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: "rgba(14,165,233,0.9)" }]}
-                onPress={sendNow}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.actionBtnText}>{t.voiceSendNow}</Text>
               </TouchableOpacity>
             )
           )}
@@ -490,6 +478,30 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: fontSize.md,
     fontWeight: "700",
+  },
+
+  // Debug error box
+  debugBox: {
+    backgroundColor: "rgba(220,38,38,0.85)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: "rgba(255,100,100,0.5)",
+    padding: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  debugTitle: {
+    fontSize: fontSize.xs,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 2,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  debugMsg: {
+    fontSize: fontSize.sm,
+    color: "rgba(255,255,255,0.9)",
+    fontFamily: "monospace",
+    lineHeight: 18,
   },
 
   // Permission denied

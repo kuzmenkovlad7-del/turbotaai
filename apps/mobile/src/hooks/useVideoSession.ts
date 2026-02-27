@@ -5,12 +5,18 @@
  * the agent payload and sets mode to "video". The avatar animation (idle vs speaking
  * video) is driven by the exposed `phase` field — the UI swaps videos when
  * phase === "speaking".
+ *
+ * The agent call uses the same buildMessagePayload + sendMessage path as Chat,
+ * so userId / sessionId / deviceId / clientMessageId are always included.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Audio } from "expo-av"
 import * as FileSystem from "expo-file-system"
-import { apiFetch } from "@/services/api"
+import { sendMessage, extractReplyText, apiFetch } from "@/services/api"
+import { buildMessagePayload } from "@/services/messagePayload"
+import { generateUUID } from "@/services/storage"
+import { useAuth } from "@/hooks/useAuth"
 import type { Locale } from "@/constants/i18n"
 
 export type VideoPhase = "idle" | "listening" | "processing" | "speaking" | "error"
@@ -55,7 +61,6 @@ export type UseVideoSessionReturn = {
   error: string | null
   start: () => Promise<void>
   stop: () => Promise<void>
-  sendNow: () => void
   retryFromError: () => Promise<void>
 }
 
@@ -70,10 +75,13 @@ export function useVideoSession(
   const [reply, setReply] = useState("")
   const [error, setError] = useState<string | null>(null)
 
+  const { user, refreshAccess, decrementTrialLeft } = useAuth()
+
   const S = useRef({
     mounted: true,
     active: false,
     processing: false,
+    sessionId: "",       // UUID for this call session — set on start()
     recording: null as Audio.Recording | null,
     sound: null as Audio.Sound | null,
     pollTimer: null as ReturnType<typeof setInterval> | null,
@@ -135,7 +143,10 @@ export function useVideoSession(
           headers: { "X-STT-Lang": sttLang(locale) },
           body: formData,
         })
-        if (!sttRes.ok) throw new Error(`STT error (${sttRes.status})`)
+        if (!sttRes.ok) {
+          const body = await sttRes.text().catch(() => "")
+          throw new Error(`STT ${sttRes.status}: ${body || sttRes.statusText}`)
+        }
         const sttData = await sttRes.json()
         const text: string = (sttData?.text || "").toString().trim()
 
@@ -146,38 +157,34 @@ export function useVideoSession(
         }
         setTranscript(text)
 
-        // 2. Agent (mode:"video" with character context)
-        const agentRes = await apiFetch("/api/turbotaai-agent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query: text,
-            language: locale,
-            mode: "video",
-            gender: gender === "female" ? "FEMALE" : "MALE",
-            characterId,
-            avatarSlug,
-          }),
+        // 2. Agent — mode:"video" with character context, full Chat-compatible payload
+        const payload = await buildMessagePayload({
+          query: text,
+          language: locale,
+          mode: "video",
+          userId: user?.id || null,
+          sessionId: s.sessionId,
+          email: user?.email,
+          gender,
+          characterId,
+          avatarSlug,
         })
-        if (!agentRes.ok) {
-          if (agentRes.status === 402) throw new Error("payment_required")
-          throw new Error(`Agent error (${agentRes.status})`)
-        }
-        const agentData = await agentRes.json()
-        const replyText: string = (
-          agentData?.output ||
-          agentData?.text ||
-          agentData?.response ||
-          agentData?.message ||
-          ""
-        ).toString().trim()
+        const agentData = await sendMessage(payload)
 
+        if (agentData.paymentRequired) {
+          refreshAccess().catch(() => {})
+          throw new Error("payment_required")
+        }
+
+        const replyText = extractReplyText(agentData)
         if (!replyText || !s.mounted || !s.active) {
           s.processing = false
           if (s.mounted && s.active) s.startListen()
           return
         }
         setReply(replyText)
+        // Decrement trial counter — consistent with Chat flow
+        decrementTrialLeft()
 
         // 3. TTS
         const ttsRes = await apiFetch("/api/tts", {
@@ -185,7 +192,10 @@ export function useVideoSession(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: replyText, language: locale, gender }),
         })
-        if (!ttsRes.ok) throw new Error(`TTS error (${ttsRes.status})`)
+        if (!ttsRes.ok) {
+          const body = await ttsRes.text().catch(() => "")
+          throw new Error(`TTS ${ttsRes.status}: ${body || ttsRes.statusText}`)
+        }
         const ttsData = await ttsRes.json()
         const audioContent: string = ttsData?.audioContent || ""
         const contentType: string = ttsData?.contentType || "audio/wav"
@@ -216,13 +226,19 @@ export function useVideoSession(
         )
         s.sound = sound
 
+        // Wait for playback to finish.
+        // IMPORTANT: only resolve on didJustFinish (or unload/error).
+        // Do NOT resolve on !isPlaying — the first status callback fires before
+        // playback actually starts with isPlaying:false, which would resolve
+        // the promise immediately and unload the sound before audio plays.
         await new Promise<void>((resolve) => {
           let done = false
           const finish = () => { if (!done) { done = true; resolve() } }
           sound.setOnPlaybackStatusUpdate((st) => {
-            if (!st.isLoaded || st.didJustFinish || !st.isPlaying) finish()
+            if (!st.isLoaded) finish()         // unloaded or error
+            else if (st.didJustFinish) finish() // normal completion
           })
-          setTimeout(finish, 30_000)
+          setTimeout(finish, 30_000) // safety timeout
         })
 
         await sound.unloadAsync().catch(() => {})
@@ -298,7 +314,7 @@ export function useVideoSession(
 
     s.startListen = startListen
     s.runTurn = runTurn
-  }, [characterId, avatarSlug, gender, locale])
+  }, [characterId, avatarSlug, gender, locale, user, refreshAccess, decrementTrialLeft])
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -307,6 +323,7 @@ export function useVideoSession(
     if (s.active) return
     s.active = true
     s.processing = false
+    s.sessionId = generateUUID() // fresh session ID per call
     setError(null)
     setTranscript("")
     setReply("")
@@ -332,13 +349,6 @@ export function useVideoSession(
     if (s.mounted) setPhase("idle")
   }, [])
 
-  const sendNow = useCallback(() => {
-    const s = S.current
-    if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
-    if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
-    s.runTurn()
-  }, [])
-
   const retryFromError = useCallback(async () => {
     const s = S.current
     if (!s.active) return
@@ -347,5 +357,5 @@ export function useVideoSession(
     await s.startListen()
   }, [])
 
-  return { phase, transcript, reply, error, start, stop, sendNow, retryFromError }
+  return { phase, transcript, reply, error, start, stop, retryFromError }
 }
