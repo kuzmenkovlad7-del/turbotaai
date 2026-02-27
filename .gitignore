@@ -64,3 +64,7 @@ node_modules/
 apps/mobile/.expo/
 apps/mobile/dist/
 apps/mobile/google-play-key.json
+
+# mobile build artifacts
+apps/mobile/artifacts/
+apps/mobile/dist/
