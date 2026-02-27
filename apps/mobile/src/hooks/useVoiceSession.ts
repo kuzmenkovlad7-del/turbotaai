@@ -7,13 +7,18 @@
  *
  * Silence detection works by polling expo-av metering every 150 ms.
  * After speech is detected, 1.5 s of continuous silence triggers auto-submit.
- * The caller can also trigger submit immediately via `sendNow()`.
+ *
+ * The agent call uses the same buildMessagePayload + sendMessage path as Chat,
+ * so userId / sessionId / deviceId / clientMessageId are always included.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Audio } from "expo-av"
 import * as FileSystem from "expo-file-system"
-import { apiFetch } from "@/services/api"
+import { sendMessage, extractReplyText, apiFetch } from "@/services/api"
+import { buildMessagePayload } from "@/services/messagePayload"
+import { generateUUID } from "@/services/storage"
+import { useAuth } from "@/hooks/useAuth"
 import type { Locale } from "@/constants/i18n"
 
 export type VoicePhase = "idle" | "listening" | "processing" | "speaking" | "error"
@@ -60,7 +65,6 @@ export type UseVoiceSessionReturn = {
   error: string | null
   start: () => Promise<void>
   stop: () => Promise<void>
-  sendNow: () => void   // force-submit the current recording immediately
   retryFromError: () => Promise<void>
 }
 
@@ -73,6 +77,8 @@ export function useVoiceSession(
   const [reply, setReply] = useState("")
   const [error, setError] = useState<string | null>(null)
 
+  const { user, refreshAccess, decrementTrialLeft } = useAuth()
+
   /**
    * All mutable session state lives in a single ref to avoid stale-closure
    * problems inside setInterval / setTimeout callbacks.  We also store the
@@ -83,6 +89,7 @@ export function useVoiceSession(
     mounted: true,
     active: false,
     processing: false,
+    sessionId: "",       // UUID for this call session — set on start()
     recording: null as Audio.Recording | null,
     sound: null as Audio.Sound | null,
     pollTimer: null as ReturnType<typeof setInterval> | null,
@@ -102,7 +109,7 @@ export function useVoiceSession(
   }, [])
 
   /**
-   * Re-create startListen / runTurn whenever gender or locale changes.
+   * Re-create startListen / runTurn whenever dependencies change.
    * Both are stored in S.current so they can reference each other without
    * creating a dependency cycle in React hooks.
    */
@@ -168,7 +175,10 @@ export function useVoiceSession(
           headers: { "X-STT-Lang": sttLang(locale) },
           body: formData,
         })
-        if (!sttRes.ok) throw new Error(`STT error (${sttRes.status})`)
+        if (!sttRes.ok) {
+          const body = await sttRes.text().catch(() => "")
+          throw new Error(`STT ${sttRes.status}: ${body || sttRes.statusText}`)
+        }
         const sttData = await sttRes.json()
         const text: string = (sttData?.text || "").toString().trim()
 
@@ -180,38 +190,32 @@ export function useVoiceSession(
         }
         setTranscript(text)
 
-        // 2. Agent
-        const agentRes = await apiFetch("/api/turbotaai-agent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query: text,
-            language: locale,
-            mode: "voice",
-            gender: gender === "female" ? "FEMALE" : "MALE",
-          }),
+        // 2. Agent — use same full payload as Chat (userId, sessionId, deviceId, etc.)
+        const payload = await buildMessagePayload({
+          query: text,
+          language: locale,
+          mode: "voice",
+          userId: user?.id || null,
+          sessionId: s.sessionId,
+          email: user?.email,
+          gender,
         })
-        if (!agentRes.ok) {
-          if (agentRes.status === 402) {
-            throw new Error("payment_required")
-          }
-          throw new Error(`Agent error (${agentRes.status})`)
-        }
-        const agentData = await agentRes.json()
-        const replyText: string = (
-          agentData?.output ||
-          agentData?.text ||
-          agentData?.response ||
-          agentData?.message ||
-          ""
-        ).toString().trim()
+        const agentData = await sendMessage(payload)
 
+        if (agentData.paymentRequired) {
+          refreshAccess().catch(() => {})
+          throw new Error("payment_required")
+        }
+
+        const replyText = extractReplyText(agentData)
         if (!replyText || !s.mounted || !s.active) {
           s.processing = false
           if (s.mounted && s.active) s.startListen()
           return
         }
         setReply(replyText)
+        // Decrement trial counter here — consistent with Chat flow
+        decrementTrialLeft()
 
         // 3. TTS
         const ttsRes = await apiFetch("/api/tts", {
@@ -219,7 +223,10 @@ export function useVoiceSession(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: replyText, language: locale, gender }),
         })
-        if (!ttsRes.ok) throw new Error(`TTS error (${ttsRes.status})`)
+        if (!ttsRes.ok) {
+          const body = await ttsRes.text().catch(() => "")
+          throw new Error(`TTS ${ttsRes.status}: ${body || ttsRes.statusText}`)
+        }
         const ttsData = await ttsRes.json()
         const audioContent: string = ttsData?.audioContent || ""
         const contentType: string = ttsData?.contentType || "audio/wav"
@@ -250,7 +257,11 @@ export function useVoiceSession(
         )
         s.sound = sound
 
-        // Wait for playback to finish (with a 30 s safety timeout)
+        // Wait for playback to finish.
+        // IMPORTANT: only resolve on didJustFinish (or unload/error).
+        // Do NOT resolve on !isPlaying — the first status callback fires before
+        // playback actually starts with isPlaying:false, which would resolve
+        // the promise immediately and unload the sound before audio plays.
         await new Promise<void>((resolve) => {
           let done = false
           const finish = () => {
@@ -260,9 +271,10 @@ export function useVoiceSession(
             }
           }
           sound.setOnPlaybackStatusUpdate((st) => {
-            if (!st.isLoaded || st.didJustFinish || !st.isPlaying) finish()
+            if (!st.isLoaded) finish()         // unloaded or error
+            else if (st.didJustFinish) finish() // normal completion
           })
-          setTimeout(finish, 30_000)
+          setTimeout(finish, 30_000) // safety timeout
         })
 
         await sound.unloadAsync().catch(() => {})
@@ -348,7 +360,7 @@ export function useVoiceSession(
     // Wire up circular refs
     s.startListen = startListen
     s.runTurn = runTurn
-  }, [gender, locale])
+  }, [gender, locale, user, refreshAccess, decrementTrialLeft])
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -357,6 +369,7 @@ export function useVoiceSession(
     if (s.active) return
     s.active = true
     s.processing = false
+    s.sessionId = generateUUID() // fresh session ID per call
     setError(null)
     setTranscript("")
     setReply("")
@@ -382,14 +395,6 @@ export function useVoiceSession(
     if (s.mounted) setPhase("idle")
   }, [])
 
-  /** Force-submit the current recording without waiting for silence */
-  const sendNow = useCallback(() => {
-    const s = S.current
-    if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
-    if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
-    s.runTurn()
-  }, [])
-
   /** Restart listening after an error (session stays active) */
   const retryFromError = useCallback(async () => {
     const s = S.current
@@ -399,5 +404,5 @@ export function useVoiceSession(
     await s.startListen()
   }, [])
 
-  return { phase, transcript, reply, error, start, stop, sendNow, retryFromError }
+  return { phase, transcript, reply, error, start, stop, retryFromError }
 }
