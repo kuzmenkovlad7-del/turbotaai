@@ -4,6 +4,13 @@
  * Receives { gender, locale } from VoiceAssistantScreen via route params.
  * Requests microphone permission (iOS: expo-av; Android: already gated in the
  * previous screen), then runs the STT → Agent → TTS loop via useVoiceSession.
+ *
+ * Primary flow: silence detection auto-submits after 1.5 s of quiet.
+ * No "Send Now" button — matches web voice experience.
+ *
+ * Error debug box: any API error (STT / Agent / TTS) is shown in full in a
+ * red card at the bottom of the screen so failures are immediately visible
+ * during QA without having to inspect logs.
  */
 
 import React, { useEffect, useRef, useCallback, useState } from "react"
@@ -23,7 +30,6 @@ import { useNavigation, useRoute } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Audio } from "expo-av"
 import { useT } from "@/hooks/useLanguage"
-import { useAuth } from "@/hooks/useAuth"
 import { useVoiceSession, type VoicePhase, type VoiceGender } from "@/hooks/useVoiceSession"
 import { logEvent } from "@/services/analytics"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
@@ -56,13 +62,13 @@ export default function NativeVoiceCallScreen() {
   const route = useRoute()
   const insets = useSafeAreaInsets()
   const { t } = useT()
-  const { decrementTrialLeft } = useAuth()
 
   const { gender, locale } = route.params as NativeVoiceCallParams
 
   const [permGranted, setPermGranted] = useState<boolean | null>(null)
 
-  const { phase, transcript, reply, error, start, stop, sendNow, retryFromError } =
+  // decrementTrialLeft is now called inside useVoiceSession after each AI reply
+  const { phase, transcript, reply, error, start, stop, retryFromError } =
     useVoiceSession(gender, locale)
 
   // ── Pulse animation during listening ───────────────────────────────────────
@@ -137,15 +143,6 @@ export default function NativeVoiceCallScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Decrement trial counter on each completed turn ─────────────────────────
-  const prevReplyRef = useRef("")
-  useEffect(() => {
-    if (reply && reply !== prevReplyRef.current) {
-      prevReplyRef.current = reply
-      decrementTrialLeft()
-    }
-  }, [reply, decrementTrialLeft])
-
   // ── End call ──────────────────────────────────────────────────────────────
   const handleEnd = useCallback(async () => {
     logEvent("native_voice_call_ended", { turns: !!reply ? 1 : 0 })
@@ -162,7 +159,7 @@ export default function NativeVoiceCallScreen() {
       case "listening":  return t.voiceListening
       case "processing": return t.voiceProcessing
       case "speaking":   return t.voiceSpeaking
-      case "error":      return isPaymentError ? t.chatPaymentRequired : (error ?? t.voiceSessionError)
+      case "error":      return isPaymentError ? t.chatPaymentRequired : t.voiceSessionError
       default:           return t.voiceTitle
     }
   }
@@ -234,11 +231,19 @@ export default function NativeVoiceCallScreen() {
         {phase === "listening" && !transcript && !reply && (
           <Text style={styles.hint}>{t.voiceHint}</Text>
         )}
+
+        {/* ── Debug error box — shows full error string with status code ── */}
+        {phase === "error" && error && !isPaymentError && (
+          <View style={styles.debugBox}>
+            <Text style={styles.debugTitle}>⚠ API error</Text>
+            <Text style={styles.debugMsg} selectable>{error}</Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* ── Controls ──────────────────────────────────────────────────────── */}
       <View style={styles.controls}>
-        {phase === "error" ? (
+        {phase === "error" && (
           isPaymentError ? (
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: colors.primary }]}
@@ -257,16 +262,6 @@ export default function NativeVoiceCallScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.actionBtnText}>{t.retry}</Text>
-            </TouchableOpacity>
-          )
-        ) : (
-          phase === "listening" && (
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: "#0ea5e9" }]}
-              onPress={sendNow}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.actionBtnText}>{t.voiceSendNow}</Text>
             </TouchableOpacity>
           )
         )}
@@ -377,6 +372,30 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     color: colors.text,
     lineHeight: 22,
+  },
+
+  // Debug error box
+  debugBox: {
+    backgroundColor: "#fee2e2",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: "#fca5a5",
+    padding: spacing.md,
+    marginTop: spacing.sm,
+  },
+  debugTitle: {
+    fontSize: fontSize.xs,
+    fontWeight: "700",
+    color: "#b91c1c",
+    marginBottom: spacing.xs,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  debugMsg: {
+    fontSize: fontSize.sm,
+    color: "#7f1d1d",
+    fontFamily: "monospace",
+    lineHeight: 18,
   },
 
   // Controls
