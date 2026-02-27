@@ -35,6 +35,7 @@ import AccountScreen from "@/screens/AccountScreen"
 import VideoAssistantScreen from "@/screens/VideoAssistantScreen"
 import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen"
 import NativeVoiceCallScreen, { type NativeVoiceCallParams } from "@/screens/NativeVoiceCallScreen"
+import NativeVideoCallScreen, { type NativeVideoCallParams } from "@/screens/NativeVideoCallScreen"
 import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen"
 import WebViewScreen, { type WebViewScreenParams } from "@/screens/WebViewScreen"
 
@@ -52,6 +53,7 @@ export type AppStackParams = {
   VideoAssistant: undefined
   VoiceAssistant: undefined
   NativeVoiceCall: NativeVoiceCallParams
+  NativeVideoCall: NativeVideoCallParams
   ConversationDetail: { id: string; title?: string }
   WebView: WebViewScreenParams
 }
@@ -273,6 +275,14 @@ export default function AppNavigator() {
               headerTintColor: colors.primary,
               headerStyle: { backgroundColor: colors.surface },
               headerTitleStyle: { fontWeight: "600" },
+            }}
+          />
+          <AppStack.Screen
+            name="NativeVideoCall"
+            component={NativeVideoCallScreen}
+            options={{
+              headerShown: false,   // full-screen video call — no header bar
+              orientation: "portrait",
             }}
           />
           <AppStack.Screen

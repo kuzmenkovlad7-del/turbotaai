@@ -121,6 +121,7 @@ const en = {
   voiceYou: "You",
   voiceAI: "AI",
   voiceHint: "Speak now — I'm listening.",
+  videoSpeakHint: "Your AI companion is ready. Speak to start.",
 
   // Permissions
   permMicTitle: "Microphone Access",
@@ -301,6 +302,7 @@ const uk: Translations = {
   voiceYou: "Ви",
   voiceAI: "AI",
   voiceHint: "Говоріть зараз — я слухаю.",
+  videoSpeakHint: "Ваш AI-помічник готовий. Говоріть, щоб розпочати.",
 
   permMicTitle: "Доступ до мікрофона",
   permMicMessage: "TurbotaAI потребує мікрофон для голосової розмови з AI-помічником.",
@@ -470,6 +472,7 @@ const ru: Translations = {
   voiceYou: "Вы",
   voiceAI: "AI",
   voiceHint: "Говорите — я слушаю.",
+  videoSpeakHint: "Ваш AI-помощник готов. Говорите, чтобы начать.",
 
   permMicTitle: "Доступ к микрофону",
   permMicMessage: "TurbotaAI нужен микрофон для голосового разговора с AI-помощником.",
