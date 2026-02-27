@@ -302,7 +302,7 @@ export default function NativeVideoCallScreen() {
                 <Text style={styles.actionBtnText}>{t.retry}</Text>
               </TouchableOpacity>
             )
-          )}
+          ) : null}
 
           <TouchableOpacity
             style={styles.endBtn}
