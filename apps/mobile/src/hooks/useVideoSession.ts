@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Audio } from "expo-av"
 import * as FileSystem from "expo-file-system"
-import { sendMessage, extractReplyText, apiFetch } from "@/services/api"
+import { sendMessage, extractReplyText, apiFetch, saveConversation } from "@/services/api"
 import { buildMessagePayload } from "@/services/messagePayload"
 import { generateUUID } from "@/services/storage"
 import { useAuth } from "@/hooks/useAuth"
@@ -81,7 +81,8 @@ export function useVideoSession(
     mounted: true,
     active: false,
     processing: false,
-    sessionId: "",       // UUID for this call session — set on start()
+    sessionId: "",          // UUID for this call session — set on start()
+    sessionFirstTurn: true, // true until first successful turn is saved to history
     recording: null as Audio.Recording | null,
     sound: null as Audio.Sound | null,
     pollTimer: null as ReturnType<typeof setInterval> | null,
@@ -183,6 +184,19 @@ export function useVideoSession(
           return
         }
         setReply(replyText)
+        // Save turn to conversation history — fire-and-forget, same pattern as Chat.
+        // All turns in one call share the session UUID as conversationId.
+        const isFirstTurn = s.sessionFirstTurn
+        s.sessionFirstTurn = false
+        saveConversation({
+          conversationId: s.sessionId,
+          messages: [
+            { role: "user", content: text },
+            { role: "assistant", content: replyText },
+          ],
+          mode: "video",
+          title: isFirstTurn ? text.slice(0, 64) : undefined,
+        }).catch(() => {})
         // Decrement trial counter — consistent with Chat flow
         decrementTrialLeft()
 
@@ -314,6 +328,14 @@ export function useVideoSession(
 
     s.startListen = startListen
     s.runTurn = runTurn
+
+    // Cleanup: cancel poll/max timers if any dependency changes (e.g. locale
+    // toggle while a call is active). The session stays alive (s.active stays
+    // true) but stale timers are cleared so the new closures take over cleanly.
+    return () => {
+      if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
+      if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
+    }
   }, [characterId, avatarSlug, gender, locale, user, refreshAccess, decrementTrialLeft])
 
   // ── Public API ──────────────────────────────────────────────────────────────
@@ -324,6 +346,7 @@ export function useVideoSession(
     s.active = true
     s.processing = false
     s.sessionId = generateUUID() // fresh session ID per call
+    s.sessionFirstTurn = true     // reset history title flag for each new call
     setError(null)
     setTranscript("")
     setReply("")
