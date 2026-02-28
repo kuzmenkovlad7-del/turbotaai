@@ -202,11 +202,12 @@ export default function NativeVideoCallScreen() {
           onLoad={() => setVideoReady(true)}
         />
 
-        {/* Speaking video — visible when speaking */}
+        {/* Speaking video — rendered on top; transparent when not speaking so the
+            idle loop below shows through instead of a frozen last frame. */}
         <Video
           ref={speakingVideoRef}
           source={{ uri: avatarUri(meta.avatarNum, "speaking") }}
-          style={StyleSheet.absoluteFillObject}
+          style={[StyleSheet.absoluteFillObject, { opacity: isSpeaking ? 1 : 0 }]}
           resizeMode={ResizeMode.CONTAIN}
           isLooping
           shouldPlay={isSpeaking}
