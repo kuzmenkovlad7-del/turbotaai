@@ -216,6 +216,10 @@ export function useVoiceSession(
         setReply(replyText)
         // Decrement trial counter here — consistent with Chat flow
         decrementTrialLeft()
+        // Sync server access state after every turn so the local counter never
+        // drifts from reality (e.g. user has promo on web but trial on device).
+        // Fire-and-forget — does not block TTS playback.
+        refreshAccess().catch(() => {})
 
         // 3. TTS
         const ttsRes = await apiFetch("/api/tts", {

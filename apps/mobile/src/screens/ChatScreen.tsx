@@ -193,6 +193,9 @@ export default function ChatScreen() {
         // Optimistically decrement trial count — keeps badge/account screen in sync
         // without waiting for the next bootstrap refresh
         decrementTrialLeft()
+        // Sync server access state so promo/paid transitions are picked up
+        // immediately and the local counter never drifts from reality.
+        refreshAccess().catch(() => {})
       }
 
       // Track analytics

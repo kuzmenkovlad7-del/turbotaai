@@ -323,11 +323,12 @@ export function useAuthProvider(): AuthContextValue {
   }, [])
 
   const decrementTrialLeft = useCallback(() => {
-    // Bump version so any in-flight bootstrap cannot overwrite the local decrement
-    // with a stale server count (e.g. bootstrap started before the message was sent).
-    optimisticVersionRef.current += 1
     setState((s) => {
       if (!s.accessInfo || s.accessInfo.access !== "trial") return s
+      // Bump version here — only when we are actually changing local state.
+      // For paid/promo users this callback returns early above, so their
+      // in-flight bootstrap refreshes are never blocked by a spurious bump.
+      optimisticVersionRef.current += 1
       const newLeft = Math.max(0, s.accessInfo.trialLeft - 1)
       return {
         ...s,
