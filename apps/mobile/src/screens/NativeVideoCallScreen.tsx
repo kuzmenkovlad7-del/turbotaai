@@ -26,8 +26,8 @@ import {
   ActivityIndicator,
   Platform,
   PermissionsAndroid,
-  StatusBar,
 } from "react-native"
+import { StatusBar } from "expo-status-bar"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Audio, Video, ResizeMode } from "expo-av"
@@ -97,6 +97,18 @@ export default function NativeVideoCallScreen() {
   // decrementTrialLeft is now called inside useVideoSession after each AI reply
   const { phase, transcript, reply, error, start, stop, retryFromError } =
     useVideoSession(characterId, avatarSlug, gender, locale)
+
+  // ── Idle video resume on speaking end ─────────────────────────────────────
+  // When speaking → listening transition occurs, explicitly call playAsync on
+  // the idle video so the looping animation is never frozen on last frame.
+  const isSpeaking = phase === "speaking"
+  const prevIsSpeakingRef = useRef(false)
+  useEffect(() => {
+    if (prevIsSpeakingRef.current && !isSpeaking) {
+      idleVideoRef.current?.playAsync().catch(() => {})
+    }
+    prevIsSpeakingRef.current = isSpeaking
+  }, [isSpeaking])
 
   // ── Permission request + session start ────────────────────────────────────
   useEffect(() => {
@@ -180,13 +192,13 @@ export default function NativeVideoCallScreen() {
     )
   }
 
-  const isSpeaking = phase === "speaking"
   const statusColor = STATUS_COLOR[phase]
   const accentColor = meta.accent
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" />
+      {/* Lock status bar style so OS theme switches don't flicker during a call */}
+      <StatusBar style="light" backgroundColor="#000000" />
 
       {/* ── Avatar video: idle + speaking stacked, only one plays ──────────── */}
       <View style={styles.videoContainer}>

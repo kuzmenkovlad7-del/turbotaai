@@ -31,6 +31,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Audio } from "expo-av"
 import { useT } from "@/hooks/useLanguage"
 import { useVoiceSession, type VoicePhase, type VoiceGender } from "@/hooks/useVoiceSession"
+import { StatusBar } from "expo-status-bar"
 import { logEvent } from "@/services/analytics"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import type { Locale } from "@/constants/i18n"
@@ -191,6 +192,8 @@ export default function NativeVoiceCallScreen() {
 
   return (
     <View style={[styles.root, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+      {/* Lock status bar style so OS theme switches don't flicker during a call */}
+      <StatusBar style="dark" backgroundColor={colors.background} />
 
       {/* ── Orb ─────────────────────────────────────────────────────────── */}
       <View style={styles.orbWrap}>
