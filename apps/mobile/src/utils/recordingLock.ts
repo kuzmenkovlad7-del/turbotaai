@@ -19,14 +19,16 @@
  * Voice → Video → Voice navigation is safe.
  */
 
-let _pendingUnload: Promise<void> | null = null
+let _pendingUnload: Promise<unknown> | null = null
 
 /**
  * Register an in-flight stopAndUnloadAsync call.
  * The lock is automatically released when `fn` resolves or rejects.
+ * Accepts `Promise<unknown>` so callers can pass stopAndUnloadAsync()
+ * which resolves to `void | RecordingStatus`.
  */
-export function lockForUnload(fn: () => Promise<void>): void {
-  _pendingUnload = fn().finally(() => {
+export function lockForUnload(fn: () => Promise<unknown>): void {
+  _pendingUnload = fn().then(() => {}, () => {}).finally(() => {
     _pendingUnload = null
   })
 }

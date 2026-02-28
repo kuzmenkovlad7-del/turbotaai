@@ -278,7 +278,7 @@ export default function NativeVideoCallScreen() {
           </ScrollView>
         ) : (
           phase === "listening" && (
-            <Text style={styles.hint} pointerEvents="none">
+            <Text style={[styles.hint, { pointerEvents: "none" }]}>
               {t.videoSpeakHint}
             </Text>
           )
