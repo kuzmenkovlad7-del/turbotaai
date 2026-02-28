@@ -19,6 +19,7 @@ import { sendMessage, extractReplyText, apiFetch, saveConversation } from "@/ser
 import { buildMessagePayload } from "@/services/messagePayload"
 import { generateUUID } from "@/services/storage"
 import { useAuth } from "@/hooks/useAuth"
+import { lockForUnload, waitForUnlock } from "@/utils/recordingLock"
 import type { Locale } from "@/constants/i18n"
 
 export type VoicePhase = "idle" | "listening" | "processing" | "speaking" | "error"
@@ -98,10 +99,16 @@ export function useVoiceSession(
     maxTimer: null as ReturnType<typeof setTimeout> | null,
     speechDetected: false,
     silenceAt: 0,
+    // Latest-ref for user — updated on every render so the effect closure always
+    // reads current data without needing user in the effect's dependency array.
+    user: user,
     // Circular-call refs — set by the useEffect below
     startListen: async (): Promise<void> => {},
     runTurn: async (): Promise<void> => {},
   })
+
+  // Keep user ref in sync on every render (cheap, no effect re-run).
+  S.current.user = user
 
   useEffect(() => {
     S.current.mounted = true
@@ -116,7 +123,7 @@ export function useVoiceSession(
       if (s.maxTimer)  { clearTimeout(s.maxTimer);  s.maxTimer = null  }
       const rec = s.recording
       s.recording = null
-      if (rec) rec.stopAndUnloadAsync().catch(() => {})
+      if (rec) lockForUnload(() => rec.stopAndUnloadAsync().catch(() => {}))
       if (s.sound) {
         s.sound.stopAsync().catch(() => {})
         s.sound.unloadAsync().catch(() => {})
@@ -212,9 +219,9 @@ export function useVoiceSession(
           query: text,
           language: locale,
           mode: "voice",
-          userId: user?.id || null,
+          userId: s.user?.id || null,
           sessionId: s.sessionId,
-          email: user?.email,
+          email: s.user?.email,
           gender,
         })
         const agentData = await sendMessage(payload)
@@ -347,6 +354,10 @@ export function useVoiceSession(
       s.silenceAt = 0
 
       try {
+        // Wait for any previous screen's recording to finish unloading before
+        // calling createAsync — prevents "Only one Recording" across screens.
+        await waitForUnlock()
+        if (!s.mounted || !s.active) { s.preparing = false; return }
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: true,
           playsInSilentModeIOS: true,
@@ -409,14 +420,27 @@ export function useVoiceSession(
     s.startListen = startListen
     s.runTurn = runTurn
 
-    // Cleanup: cancel poll/max timers if any dependency changes (e.g. locale
-    // toggle while a call is active). The session stays alive (s.active stays
-    // true) but stale timers are cleared so the new closures take over cleanly.
+    // If deps changed while a session was active but NOT mid-processing (e.g.
+    // locale changed), restart listening with the new closures so silence
+    // detection picks up the updated locale.
+    if (s.active && !s.processing && !s.recording && !s.preparing) {
+      startListen()
+    }
+
+    // Cleanup: cancel poll/max timers and stop stale recording so the
+    // replacement closures (installed by the next effect run) start clean.
     return () => {
       if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
-      if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
+      if (s.maxTimer)  { clearTimeout(s.maxTimer);  s.maxTimer = null  }
+      // Stop any recording left from the previous closure so the new startListen
+      // can createAsync without hitting the "Only one Recording" error.
+      const stale = s.recording
+      if (stale) {
+        s.recording = null
+        lockForUnload(() => stale.stopAndUnloadAsync().catch(() => {}))
+      }
     }
-  }, [gender, locale, user, refreshAccess, decrementTrialLeft])
+  }, [gender, locale, refreshAccess, decrementTrialLeft])
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -442,7 +466,7 @@ export function useVoiceSession(
     if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
     const rec = s.recording
     s.recording = null
-    if (rec) try { await rec.stopAndUnloadAsync() } catch {}
+    if (rec) lockForUnload(() => rec.stopAndUnloadAsync().catch(() => {}))
     if (s.sound) {
       try { await s.sound.stopAsync(); await s.sound.unloadAsync() } catch {}
       s.sound = null

@@ -13,10 +13,11 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Audio } from "expo-av"
 import * as FileSystem from "expo-file-system"
-import { sendMessage, extractReplyText, apiFetch } from "@/services/api"
+import { sendMessage, extractReplyText, apiFetch, saveConversation } from "@/services/api"
 import { buildMessagePayload } from "@/services/messagePayload"
 import { generateUUID } from "@/services/storage"
 import { useAuth } from "@/hooks/useAuth"
+import { lockForUnload, waitForUnlock } from "@/utils/recordingLock"
 import type { Locale } from "@/constants/i18n"
 
 export type VideoPhase = "idle" | "listening" | "processing" | "speaking" | "error"
@@ -83,15 +84,22 @@ export function useVideoSession(
     processing: false,
     preparing: false,    // lock: prevent parallel Audio.Recording.createAsync calls
     sessionId: "",       // UUID for this call session — set on start()
+    sessionFirstTurn: true, // true until first successful turn is saved to history
     recording: null as Audio.Recording | null,
     sound: null as Audio.Sound | null,
     pollTimer: null as ReturnType<typeof setInterval> | null,
     maxTimer: null as ReturnType<typeof setTimeout> | null,
     speechDetected: false,
     silenceAt: 0,
+    // Latest-ref for user — updated on every render so the effect closure always
+    // reads current data without needing user in the effect's dependency array.
+    user: user,
     startListen: async (): Promise<void> => {},
     runTurn: async (): Promise<void> => {},
   })
+
+  // Keep user ref in sync on every render (cheap, no effect re-run).
+  S.current.user = user
 
   useEffect(() => {
     S.current.mounted = true
@@ -106,7 +114,7 @@ export function useVideoSession(
       if (s.maxTimer)  { clearTimeout(s.maxTimer);  s.maxTimer = null  }
       const rec = s.recording
       s.recording = null
-      if (rec) rec.stopAndUnloadAsync().catch(() => {})
+      if (rec) lockForUnload(() => rec.stopAndUnloadAsync().catch(() => {}))
       if (s.sound) {
         s.sound.stopAsync().catch(() => {})
         s.sound.unloadAsync().catch(() => {})
@@ -180,9 +188,9 @@ export function useVideoSession(
           query: text,
           language: locale,
           mode: "video",
-          userId: user?.id || null,
+          userId: s.user?.id || null,
           sessionId: s.sessionId,
-          email: user?.email,
+          email: s.user?.email,
           gender,
           characterId,
           avatarSlug,
@@ -201,6 +209,19 @@ export function useVideoSession(
           return
         }
         setReply(replyText)
+        // Save turn to conversation history — same pattern as Chat and Voice.
+        // All turns in one call share the session UUID as conversationId.
+        const isFirstTurn = s.sessionFirstTurn
+        s.sessionFirstTurn = false
+        saveConversation({
+          conversationId: s.sessionId,
+          messages: [
+            { role: "user", content: text },
+            { role: "assistant", content: replyText },
+          ],
+          mode: "video",
+          title: isFirstTurn ? text.slice(0, 64) : undefined,
+        }).catch(() => {})
         // Decrement trial counter — consistent with Chat flow
         decrementTrialLeft()
         // Sync server access state after every turn so the local counter never
@@ -299,6 +320,10 @@ export function useVideoSession(
       s.silenceAt = 0
 
       try {
+        // Wait for any previous screen's recording to finish unloading before
+        // calling createAsync — prevents "Only one Recording" across screens.
+        await waitForUnlock()
+        if (!s.mounted || !s.active) { s.preparing = false; return }
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: true,
           playsInSilentModeIOS: true,
@@ -350,7 +375,26 @@ export function useVideoSession(
 
     s.startListen = startListen
     s.runTurn = runTurn
-  }, [characterId, avatarSlug, gender, locale, user, refreshAccess, decrementTrialLeft])
+
+    // If deps changed while a session was active but NOT mid-processing,
+    // restart listening with the new closures so silence detection picks up
+    // the updated params (e.g. locale change).
+    if (s.active && !s.processing && !s.recording && !s.preparing) {
+      startListen()
+    }
+
+    return () => {
+      if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
+      if (s.maxTimer)  { clearTimeout(s.maxTimer);  s.maxTimer = null  }
+      // Stop any recording left from the previous closure so the replacement
+      // startListen can createAsync without hitting "Only one Recording".
+      const stale = s.recording
+      if (stale) {
+        s.recording = null
+        lockForUnload(() => stale.stopAndUnloadAsync().catch(() => {}))
+      }
+    }
+  }, [characterId, avatarSlug, gender, locale, refreshAccess, decrementTrialLeft])
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -361,6 +405,7 @@ export function useVideoSession(
     s.processing = false
     s.preparing = false          // reset lock for fresh session
     s.sessionId = generateUUID() // fresh session ID per call
+    s.sessionFirstTurn = true    // reset history title flag for each new call
     setError(null)
     setTranscript("")
     setReply("")
@@ -375,7 +420,7 @@ export function useVideoSession(
     if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
     const rec = s.recording
     s.recording = null
-    if (rec) try { await rec.stopAndUnloadAsync() } catch {}
+    if (rec) lockForUnload(() => rec.stopAndUnloadAsync().catch(() => {}))
     if (s.sound) {
       try { await s.sound.stopAsync(); await s.sound.unloadAsync() } catch {}
       s.sound = null
