@@ -89,6 +89,7 @@ export function useVoiceSession(
     mounted: true,
     active: false,
     processing: false,
+    preparing: false,    // lock: prevent parallel Audio.Recording.createAsync calls
     sessionId: "",       // UUID for this call session — set on start()
     recording: null as Audio.Recording | null,
     sound: null as Audio.Sound | null,
@@ -104,7 +105,22 @@ export function useVoiceSession(
   useEffect(() => {
     S.current.mounted = true
     return () => {
-      S.current.mounted = false
+      // Full teardown on unmount — prevents "Only one Recording can be prepared" on
+      // the next screen if the user navigates away while a recording is active.
+      const s = S.current
+      s.mounted = false
+      s.active = false
+      s.preparing = false
+      if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
+      if (s.maxTimer)  { clearTimeout(s.maxTimer);  s.maxTimer = null  }
+      const rec = s.recording
+      s.recording = null
+      if (rec) rec.stopAndUnloadAsync().catch(() => {})
+      if (s.sound) {
+        s.sound.stopAsync().catch(() => {})
+        s.sound.unloadAsync().catch(() => {})
+        s.sound = null
+      }
     }
   }, [])
 
@@ -297,6 +313,18 @@ export function useVoiceSession(
 
     async function startListen() {
       if (!s.mounted || !s.active) return
+      if (s.preparing) return   // lock: createAsync already in flight
+
+      // Stop any stale recording before creating a new one.
+      const staleRec = s.recording
+      if (staleRec) {
+        s.recording = null
+        try { await staleRec.stopAndUnloadAsync() } catch {}
+      }
+      // Stop any active playback so the audio session can switch to record mode.
+      await stopSound()
+
+      s.preparing = true        // acquire lock
       s.speechDetected = false
       s.silenceAt = 0
 
@@ -306,6 +334,7 @@ export function useVoiceSession(
           playsInSilentModeIOS: true,
         })
         const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS)
+        s.preparing = false     // release lock after successful prepare
         if (!s.mounted || !s.active) {
           await recording.stopAndUnloadAsync()
           return
@@ -350,6 +379,7 @@ export function useVoiceSession(
           }
         }, MAX_REC_MS)
       } catch (err: any) {
+        s.preparing = false   // release lock on error
         if (s.mounted) {
           setError(err?.message || "Microphone error")
           setPhase("error")
@@ -369,6 +399,7 @@ export function useVoiceSession(
     if (s.active) return
     s.active = true
     s.processing = false
+    s.preparing = false          // reset lock for fresh session
     s.sessionId = generateUUID() // fresh session ID per call
     setError(null)
     setTranscript("")
@@ -379,6 +410,7 @@ export function useVoiceSession(
   const stop = useCallback(async () => {
     const s = S.current
     s.active = false
+    s.preparing = false          // reset lock so next session can record
     if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
     if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
     const rec = s.recording
@@ -400,6 +432,11 @@ export function useVoiceSession(
     const s = S.current
     if (!s.active) return
     s.processing = false
+    s.preparing = false           // reset lock in case it was stuck
+    // Stop any stale recording left over from the failed turn.
+    const rec = s.recording
+    s.recording = null
+    if (rec) try { await rec.stopAndUnloadAsync() } catch {}
     setError(null)
     await s.startListen()
   }, [])

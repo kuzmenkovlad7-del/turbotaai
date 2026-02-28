@@ -271,10 +271,10 @@ export default function NativeVideoCallScreen() {
           )
         )}
 
-        {/* ── Debug error box — shows full error string with status code ── */}
+        {/* ── Debug error box — shows phase + full error string with status code ── */}
         {phase === "error" && error && !isPaymentError && (
           <View style={styles.debugBox}>
-            <Text style={styles.debugTitle}>⚠ API error</Text>
+            <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
             <Text style={styles.debugMsg} selectable>{error}</Text>
           </View>
         )}
