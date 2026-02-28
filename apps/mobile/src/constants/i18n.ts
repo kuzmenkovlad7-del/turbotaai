@@ -121,6 +121,7 @@ const en = {
   voiceYou: "You",
   voiceAI: "AI",
   voiceHint: "Speak now — I'm listening.",
+  voiceRepeat: "Didn't catch that — please speak again",
   videoSpeakHint: "Your AI companion is ready. Speak to start.",
 
   // Permissions
@@ -303,6 +304,7 @@ const uk: Translations = {
   voiceYou: "Ви",
   voiceAI: "AI",
   voiceHint: "Говоріть зараз — я слухаю.",
+  voiceRepeat: "Не розпізнано — спробуйте ще раз",
   videoSpeakHint: "Ваш AI-помічник готовий. Говоріть, щоб розпочати.",
 
   permMicTitle: "Доступ до мікрофона",
@@ -474,6 +476,7 @@ const ru: Translations = {
   voiceYou: "Вы",
   voiceAI: "AI",
   voiceHint: "Говорите — я слушаю.",
+  voiceRepeat: "Не распознано — повторите, пожалуйста",
   videoSpeakHint: "Ваш AI-помощник готов. Говорите, чтобы начать.",
 
   permMicTitle: "Доступ к микрофону",

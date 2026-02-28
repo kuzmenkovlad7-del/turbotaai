@@ -40,6 +40,7 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
     sampleRate: 16000,
     numberOfChannels: 1,
     bitRate: 128000,
+    audioSource: 7, // VOICE_COMMUNICATION — enables AEC, noise suppression, AGC on Android
   },
   ios: {
     extension: ".m4a",
@@ -63,6 +64,7 @@ export type UseVoiceSessionReturn = {
   transcript: string  // last user speech
   reply: string       // last AI reply text
   error: string | null
+  unheard: boolean    // true when STT returned empty after speech was detected
   start: () => Promise<void>
   stop: () => Promise<void>
   retryFromError: () => Promise<void>
@@ -76,6 +78,7 @@ export function useVoiceSession(
   const [transcript, setTranscript] = useState("")
   const [reply, setReply] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [unheard, setUnheard] = useState(false)
 
   const { user, refreshAccess, decrementTrialLeft } = useAuth()
 
@@ -158,6 +161,7 @@ export function useVoiceSession(
       if (s.processing || !s.mounted || !s.active) return
       s.processing = true
       setPhase("processing")
+      setUnheard(false)
 
       const uri = await grabRecording()
       if (!uri || !s.mounted || !s.active) {
@@ -183,7 +187,7 @@ export function useVoiceSession(
         const text: string = (sttData?.text || "").toString().trim()
 
         if (!text || !s.mounted || !s.active) {
-          // Empty / garbage transcript — loop back silently
+          if (!text && s.mounted && s.active && s.speechDetected) setUnheard(true)
           s.processing = false
           if (s.mounted && s.active) s.startListen()
           return
@@ -373,6 +377,7 @@ export function useVoiceSession(
     setError(null)
     setTranscript("")
     setReply("")
+    setUnheard(false)
     await s.startListen()
   }, [])
 
@@ -404,5 +409,5 @@ export function useVoiceSession(
     await s.startListen()
   }, [])
 
-  return { phase, transcript, reply, error, start, stop, retryFromError }
+  return { phase, transcript, reply, error, unheard, start, stop, retryFromError }
 }

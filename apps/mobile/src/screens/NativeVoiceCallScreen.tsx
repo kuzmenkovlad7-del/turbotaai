@@ -68,7 +68,7 @@ export default function NativeVoiceCallScreen() {
   const [permGranted, setPermGranted] = useState<boolean | null>(null)
 
   // decrementTrialLeft is now called inside useVoiceSession after each AI reply
-  const { phase, transcript, reply, error, start, stop, retryFromError } =
+  const { phase, transcript, reply, error, unheard, start, stop, retryFromError } =
     useVoiceSession(gender, locale)
 
   // ── Pulse animation during listening ───────────────────────────────────────
@@ -229,7 +229,13 @@ export default function NativeVoiceCallScreen() {
         ) : null}
 
         {phase === "listening" && !transcript && !reply && (
-          <Text style={styles.hint}>{t.voiceHint}</Text>
+          <Text style={unheard ? styles.hintRepeat : styles.hint}>
+            {unheard ? t.voiceRepeat : t.voiceHint}
+          </Text>
+        )}
+
+        {unheard && phase === "listening" && !!(transcript || reply) && (
+          <Text style={styles.hintRepeat}>{t.voiceRepeat}</Text>
         )}
 
         {/* ── Debug error box — shows full error string with status code ── */}
@@ -338,6 +344,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: spacing.xl,
     lineHeight: 20,
+  },
+  hintRepeat: {
+    fontSize: fontSize.sm,
+    color: "#f59e0b",
+    textAlign: "center",
+    marginTop: spacing.xl,
+    lineHeight: 20,
+    fontWeight: "600",
   },
 
   // Bubbles

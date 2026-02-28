@@ -95,7 +95,7 @@ export default function NativeVideoCallScreen() {
   const [videoReady, setVideoReady] = useState(false)
 
   // decrementTrialLeft is now called inside useVideoSession after each AI reply
-  const { phase, transcript, reply, error, start, stop, retryFromError } =
+  const { phase, transcript, reply, error, unheard, start, stop, retryFromError } =
     useVideoSession(characterId, avatarSlug, gender, locale)
 
   // ── Permission request + session start ────────────────────────────────────
@@ -265,10 +265,14 @@ export default function NativeVideoCallScreen() {
           </ScrollView>
         ) : (
           phase === "listening" && (
-            <Text style={styles.hint} pointerEvents="none">
-              {t.videoSpeakHint}
+            <Text style={unheard ? styles.hintRepeat : styles.hint} pointerEvents="none">
+              {unheard ? t.voiceRepeat : t.videoSpeakHint}
             </Text>
           )
+        )}
+
+        {unheard && phase === "listening" && !!(transcript || reply) && (
+          <Text style={styles.hintRepeat} pointerEvents="none">{t.voiceRepeat}</Text>
         )}
 
         {/* ── Debug error box — shows full error string with status code ── */}
@@ -419,6 +423,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: spacing.sm,
     lineHeight: 20,
+  },
+  hintRepeat: {
+    color: "#f59e0b",
+    fontSize: fontSize.sm,
+    textAlign: "center",
+    marginBottom: spacing.sm,
+    lineHeight: 20,
+    fontWeight: "600",
   },
 
   // Bubbles
