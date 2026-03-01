@@ -10,6 +10,8 @@
  *
  * The agent call uses the same buildMessagePayload + sendMessage path as Chat,
  * so userId / sessionId / deviceId / clientMessageId are always included.
+ *
+ * Diagnostics: diagLog string returned by the hook; shown in the UI debug box.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react"
@@ -30,6 +32,9 @@ const SILENCE_DB = -45        // dBFS — below this counts as silence
 const SILENCE_AFTER_MS = 1500 // ms of silence after speech → auto-submit
 const MAX_REC_MS = 60_000     // max single recording (safety cutoff)
 const POLL_MS = 150           // metering poll interval
+// Max wait for Audio.Recording.createAsync before releasing lock and retrying.
+// Android can hang here after an audio-session mode transition (record→play→record).
+const PREPARE_TIMEOUT_MS = 8_000
 
 // ── Recording options (metering enabled, 16 kHz mono) ────────────────────────
 const RECORDING_OPTIONS: Audio.RecordingOptions = {
@@ -63,6 +68,8 @@ export type UseVoiceSessionReturn = {
   transcript: string  // last user speech
   reply: string       // last AI reply text
   error: string | null
+  /** Running diagnostic log — shown in the red debug box in the UI. */
+  diagLog: string
   start: () => Promise<void>
   stop: () => Promise<void>
   retryFromError: () => Promise<void>
@@ -76,6 +83,7 @@ export function useVoiceSession(
   const [transcript, setTranscript] = useState("")
   const [reply, setReply] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [diagLog, setDiagLog] = useState("")
 
   const { user, refreshAccess, decrementTrialLeft } = useAuth()
 
@@ -84,6 +92,9 @@ export function useVoiceSession(
    * problems inside setInterval / setTimeout callbacks.  We also store the
    * two functions that call each other (startListen ↔ runTurn) as ref fields
    * so each can invoke the latest version of the other.
+   *
+   * appendDiag closes over the stable setDiagLog setter (React guarantees
+   * setter identity is stable across renders).
    */
   const S = useRef({
     mounted: true,
@@ -96,11 +107,22 @@ export function useVoiceSession(
     sound: null as Audio.Sound | null,
     pollTimer: null as ReturnType<typeof setInterval> | null,
     maxTimer: null as ReturnType<typeof setTimeout> | null,
+    preparingTimer: null as ReturnType<typeof setTimeout> | null, // timeout-safe lock release
     speechDetected: false,
     silenceAt: 0,
     // Circular-call refs — set by the useEffect below
     startListen: async (): Promise<void> => {},
     runTurn: async (): Promise<void> => {},
+    // Diagnostic logger — appends a timestamped line to diagLog state
+    appendDiag(line: string) {
+      if (!S.current.mounted) return
+      const ts = new Date().toISOString().slice(11, 23) // HH:mm:ss.mmm
+      setDiagLog(prev => {
+        const lines = prev.split("\n").filter(Boolean)
+        lines.push(`${ts} ${line}`)
+        return lines.slice(-12).join("\n")
+      })
+    },
   })
 
   useEffect(() => {
@@ -112,8 +134,9 @@ export function useVoiceSession(
       s.mounted = false
       s.active = false
       s.preparing = false
-      if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
-      if (s.maxTimer)  { clearTimeout(s.maxTimer);  s.maxTimer = null  }
+      if (s.pollTimer)    { clearInterval(s.pollTimer); s.pollTimer = null }
+      if (s.maxTimer)     { clearTimeout(s.maxTimer);   s.maxTimer = null  }
+      if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
       const rec = s.recording
       s.recording = null
       if (rec) rec.stopAndUnloadAsync().catch(() => {})
@@ -175,16 +198,20 @@ export function useVoiceSession(
       if (s.processing || !s.mounted || !s.active) return
       s.processing = true
       setPhase("processing")
+      s.appendDiag("REC stop — grabbing URI")
 
       const uri = await grabRecording()
       if (!uri || !s.mounted || !s.active) {
+        s.appendDiag("REC: no URI — loop")
         s.processing = false
         if (s.mounted && s.active) s.startListen()
         return
       }
+      s.appendDiag("REC done — got URI")
 
       try {
         // 1. STT — FormData upload (file:// URI, works on iOS + Android)
+        s.appendDiag("STT → sending")
         const formData = new FormData()
         formData.append("audio", { uri, name: "audio.m4a", type: "audio/m4a" } as any)
         const sttRes = await apiFetch("/api/stt", {
@@ -192,6 +219,7 @@ export function useVoiceSession(
           headers: { "X-STT-Lang": sttLang(locale) },
           body: formData,
         })
+        s.appendDiag(`STT ← ${sttRes.status}`)
         if (!sttRes.ok) {
           const body = await sttRes.text().catch(() => "")
           throw new Error(`STT ${sttRes.status}: ${body || sttRes.statusText}`)
@@ -201,13 +229,16 @@ export function useVoiceSession(
 
         if (!text || !s.mounted || !s.active) {
           // Empty / garbage transcript — loop back silently
+          s.appendDiag("STT: empty transcript — loop")
           s.processing = false
           if (s.mounted && s.active) s.startListen()
           return
         }
+        s.appendDiag(`STT: "${text.slice(0, 30)}"`)
         setTranscript(text)
 
         // 2. Agent — use same full payload as Chat (userId, sessionId, deviceId, etc.)
+        s.appendDiag("AGT → sending")
         const payload = await buildMessagePayload({
           query: text,
           language: locale,
@@ -218,21 +249,34 @@ export function useVoiceSession(
           gender,
         })
         const agentData = await sendMessage(payload)
+        s.appendDiag(`AGT ← ok=${agentData.ok ?? "?"} pay=${!!agentData.paymentRequired}`)
 
         if (agentData.paymentRequired) {
           refreshAccess().catch(() => {})
           throw new Error("payment_required")
         }
 
+        // FIX #1: surface agent-side HTTP errors immediately.
+        // Without this check, sendMessage's { ok: false, error: "Request failed (502)" }
+        // reaches extractReplyText which returns the error string as "reply text",
+        // TTS is called with it, and the debug box never shows the real cause.
+        if (agentData.ok === false) {
+          throw new Error(agentData.error || "Agent request failed")
+        }
+
         const replyText = extractReplyText(agentData)
-        if (!replyText || !s.mounted || !s.active) {
+        // Guard against the extractReplyText fallback "..." so we don't TTS a literal
+        // "dot dot dot" when the backend returns an empty/malformed success body.
+        if (!replyText || replyText === "..." || !s.mounted || !s.active) {
+          s.appendDiag("AGT: empty reply — loop")
           s.processing = false
           if (s.mounted && s.active) s.startListen()
           return
         }
+        s.appendDiag(`AGT: "${replyText.slice(0, 30)}"`)
         setReply(replyText)
+
         // Save turn to conversation history — fire-and-forget, same pattern as Chat.
-        // All turns in one call share the session UUID as conversationId.
         const isFirstTurn = s.sessionFirstTurn
         s.sessionFirstTurn = false
         saveConversation({
@@ -246,17 +290,17 @@ export function useVoiceSession(
         }).catch(() => {})
         // Decrement trial counter here — consistent with Chat flow
         decrementTrialLeft()
-        // Sync server access state after every turn so the local counter never
-        // drifts from reality (e.g. user has promo on web but trial on device).
-        // Fire-and-forget — does not block TTS playback.
+        // Sync server access state after every turn. Fire-and-forget.
         refreshAccess().catch(() => {})
 
         // 3. TTS
+        s.appendDiag("TTS → sending")
         const ttsRes = await apiFetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: replyText, language: locale, gender }),
         })
+        s.appendDiag(`TTS ← ${ttsRes.status}`)
         if (!ttsRes.ok) {
           const body = await ttsRes.text().catch(() => "")
           throw new Error(`TTS ${ttsRes.status}: ${body || ttsRes.statusText}`)
@@ -266,10 +310,12 @@ export function useVoiceSession(
         const contentType: string = ttsData?.contentType || "audio/wav"
 
         if (!audioContent || !s.mounted || !s.active) {
+          s.appendDiag("TTS: empty audio — loop")
           s.processing = false
           if (s.mounted && s.active) s.startListen()
           return
         }
+        s.appendDiag(`TTS: audioLen=${audioContent.length}`)
 
         // 4. Playback — write base64 to a temp file (data URIs unsupported on Android)
         setPhase("speaking")
@@ -290,6 +336,7 @@ export function useVoiceSession(
           { shouldPlay: true },
         )
         s.sound = sound
+        s.appendDiag("PLAY start")
 
         // Wait for playback to finish.
         // IMPORTANT: only resolve on didJustFinish (or unload/error).
@@ -314,9 +361,12 @@ export function useVoiceSession(
         await sound.unloadAsync().catch(() => {})
         s.sound = null
         await FileSystem.deleteAsync(tmpPath, { idempotent: true }).catch(() => {})
+        s.appendDiag("PLAY done")
       } catch (err: any) {
+        const msg: string = err?.message || "Voice session error"
+        s.appendDiag(`ERR: ${msg.slice(0, 60)}`)
         if (s.mounted) {
-          setError(err?.message || "Voice session error")
+          setError(msg)
           setPhase("error")
         }
         s.processing = false
@@ -324,6 +374,7 @@ export function useVoiceSession(
       }
 
       s.processing = false
+      s.appendDiag("LOOP")
       if (s.mounted && s.active) s.startListen()
     }
 
@@ -345,6 +396,21 @@ export function useVoiceSession(
       s.preparing = true        // acquire lock
       s.speechDetected = false
       s.silenceAt = 0
+      s.appendDiag("REC start — createAsync")
+
+      // FIX #2: timeout-safe lock release.
+      // On Android, Audio.Recording.createAsync() can hang indefinitely after
+      // an audio-session mode transition (playback → recording), keeping
+      // s.preparing = true and blocking all future startListen() calls.
+      // After PREPARE_TIMEOUT_MS we release the lock and retry.
+      s.preparingTimer = setTimeout(() => {
+        s.preparingTimer = null
+        if (s.preparing) {
+          s.preparing = false
+          s.appendDiag("WARN: createAsync timed out — retry listen")
+          if (s.mounted && s.active) s.startListen()
+        }
+      }, PREPARE_TIMEOUT_MS)
 
       try {
         await Audio.setAudioModeAsync({
@@ -352,7 +418,11 @@ export function useVoiceSession(
           playsInSilentModeIOS: true,
         })
         const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS)
+
+        // Clear the timeout — createAsync resolved before the deadline
+        if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
         s.preparing = false     // release lock after successful prepare
+
         if (!s.mounted || !s.active) {
           await recording.stopAndUnloadAsync()
           return
@@ -397,9 +467,12 @@ export function useVoiceSession(
           }
         }, MAX_REC_MS)
       } catch (err: any) {
+        if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
         s.preparing = false   // release lock on error
+        const msg: string = err?.message || "Microphone error"
+        s.appendDiag(`ERR: ${msg.slice(0, 60)}`)
         if (s.mounted) {
-          setError(err?.message || "Microphone error")
+          setError(msg)
           setPhase("error")
         }
       }
@@ -431,6 +504,7 @@ export function useVoiceSession(
     setError(null)
     setTranscript("")
     setReply("")
+    setDiagLog("")               // clear diagnostics for fresh session
     await s.startListen()
   }, [])
 
@@ -438,8 +512,9 @@ export function useVoiceSession(
     const s = S.current
     s.active = false
     s.preparing = false          // reset lock so next session can record
-    if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
-    if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
+    if (s.pollTimer)    { clearInterval(s.pollTimer); s.pollTimer = null }
+    if (s.maxTimer)     { clearTimeout(s.maxTimer);   s.maxTimer = null  }
+    if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
     const rec = s.recording
     s.recording = null
     if (rec) try { await rec.stopAndUnloadAsync() } catch {}
@@ -460,6 +535,7 @@ export function useVoiceSession(
     if (!s.active) return
     s.processing = false
     s.preparing = false           // reset lock in case it was stuck
+    if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
     // Stop any stale recording left over from the failed turn.
     const rec = s.recording
     s.recording = null
@@ -468,5 +544,5 @@ export function useVoiceSession(
     await s.startListen()
   }, [])
 
-  return { phase, transcript, reply, error, start, stop, retryFromError }
+  return { phase, transcript, reply, error, diagLog, start, stop, retryFromError }
 }

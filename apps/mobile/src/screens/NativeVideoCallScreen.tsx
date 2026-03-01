@@ -28,7 +28,7 @@ import {
   PermissionsAndroid,
   StatusBar,
 } from "react-native"
-import { useNavigation, useRoute } from "@react-navigation/native"
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Audio, Video, ResizeMode } from "expo-av"
 import { useT } from "@/hooks/useLanguage"
@@ -95,8 +95,19 @@ export default function NativeVideoCallScreen() {
   const [videoReady, setVideoReady] = useState(false)
 
   // decrementTrialLeft is now called inside useVideoSession after each AI reply
-  const { phase, transcript, reply, error, start, stop, retryFromError } =
+  const { phase, transcript, reply, error, diagLog, start, stop, retryFromError } =
     useVideoSession(characterId, avatarSlug, gender, locale)
+
+  // Stop session when the screen loses focus (e.g. Android hardware back while
+  // session is active). The hook's unmount cleanup also fires, but this runs
+  // earlier — during the blur animation — ensuring audio is released promptly.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        stop().catch(() => {})
+      }
+    }, [stop]),
+  )
 
   // ── Permission request + session start ────────────────────────────────────
   useEffect(() => {
@@ -272,13 +283,25 @@ export default function NativeVideoCallScreen() {
           )
         )}
 
-        {/* ── Debug error box — shows phase + full error string with status code ── */}
-        {phase === "error" && error && !isPaymentError && (
+        {/* ── Debug box — error + live diagnostic log ── */}
+        {(phase === "error" && error && !isPaymentError) || diagLog ? (
           <View style={styles.debugBox}>
-            <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
-            <Text style={styles.debugMsg} selectable>{error}</Text>
+            {phase === "error" && error && !isPaymentError && (
+              <>
+                <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
+                <Text style={styles.debugMsg} selectable>{error}</Text>
+              </>
+            )}
+            {diagLog ? (
+              <>
+                <Text style={[styles.debugTitle, { marginTop: phase === "error" ? 6 : 0 }]}>
+                  📋 Diagnostics
+                </Text>
+                <Text style={styles.debugMsg} selectable>{diagLog}</Text>
+              </>
+            ) : null}
           </View>
-        )}
+        ) : null}
 
         {/* Control buttons */}
         <View style={styles.controls}>
