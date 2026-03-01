@@ -26,9 +26,9 @@ import {
   ActivityIndicator,
   Platform,
   PermissionsAndroid,
+  StatusBar,
 } from "react-native"
-import { StatusBar } from "expo-status-bar"
-import { useNavigation, useRoute } from "@react-navigation/native"
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Audio, Video, ResizeMode } from "expo-av"
 import { useT } from "@/hooks/useLanguage"
@@ -95,20 +95,19 @@ export default function NativeVideoCallScreen() {
   const [videoReady, setVideoReady] = useState(false)
 
   // decrementTrialLeft is now called inside useVideoSession after each AI reply
-  const { phase, transcript, reply, error, start, stop, retryFromError } =
+  const { phase, transcript, reply, error, diagLog, start, stop, retryFromError } =
     useVideoSession(characterId, avatarSlug, gender, locale)
 
-  // ── Idle video resume on speaking end ─────────────────────────────────────
-  // When speaking → listening transition occurs, explicitly call playAsync on
-  // the idle video so the looping animation is never frozen on last frame.
-  const isSpeaking = phase === "speaking"
-  const prevIsSpeakingRef = useRef(false)
-  useEffect(() => {
-    if (prevIsSpeakingRef.current && !isSpeaking) {
-      idleVideoRef.current?.playAsync().catch(() => {})
-    }
-    prevIsSpeakingRef.current = isSpeaking
-  }, [isSpeaking])
+  // Stop session when the screen loses focus (e.g. Android hardware back while
+  // session is active). The hook's unmount cleanup also fires, but this runs
+  // earlier — during the blur animation — ensuring audio is released promptly.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        stop().catch(() => {})
+      }
+    }, [stop]),
+  )
 
   // ── Permission request + session start ────────────────────────────────────
   useEffect(() => {
@@ -192,13 +191,13 @@ export default function NativeVideoCallScreen() {
     )
   }
 
+  const isSpeaking = phase === "speaking"
   const statusColor = STATUS_COLOR[phase]
   const accentColor = meta.accent
 
   return (
     <View style={styles.root}>
-      {/* Lock status bar style so OS theme switches don't flicker during a call */}
-      <StatusBar style="light" backgroundColor="#000000" />
+      <StatusBar barStyle="light-content" />
 
       {/* ── Avatar video: idle + speaking stacked, only one plays ──────────── */}
       <View style={styles.videoContainer}>
@@ -278,19 +277,31 @@ export default function NativeVideoCallScreen() {
           </ScrollView>
         ) : (
           phase === "listening" && (
-            <Text style={[styles.hint, { pointerEvents: "none" }]}>
+            <Text style={styles.hint} pointerEvents="none">
               {t.videoSpeakHint}
             </Text>
           )
         )}
 
-        {/* ── Debug error box — shows phase + full error string with status code ── */}
-        {phase === "error" && error && !isPaymentError && (
+        {/* ── Debug box — error + live diagnostic log ── */}
+        {(phase === "error" && error && !isPaymentError) || diagLog ? (
           <View style={styles.debugBox}>
-            <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
-            <Text style={styles.debugMsg} selectable>{error}</Text>
+            {phase === "error" && error && !isPaymentError && (
+              <>
+                <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
+                <Text style={styles.debugMsg} selectable>{error}</Text>
+              </>
+            )}
+            {diagLog ? (
+              <>
+                <Text style={[styles.debugTitle, { marginTop: phase === "error" ? 6 : 0 }]}>
+                  📋 Diagnostics
+                </Text>
+                <Text style={styles.debugMsg} selectable>{diagLog}</Text>
+              </>
+            ) : null}
           </View>
-        )}
+        ) : null}
 
         {/* Control buttons */}
         <View style={styles.controls}>

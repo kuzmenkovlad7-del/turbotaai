@@ -8,16 +8,17 @@
  *
  * The agent call uses the same buildMessagePayload + sendMessage path as Chat,
  * so userId / sessionId / deviceId / clientMessageId are always included.
+ *
+ * Diagnostics: diagLog string returned by the hook; shown in the UI debug box.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Audio } from "expo-av"
 import * as FileSystem from "expo-file-system"
-import { sendMessage, extractReplyText, apiFetch, saveConversation } from "@/services/api"
+import { sendMessage, extractReplyText, apiFetch } from "@/services/api"
 import { buildMessagePayload } from "@/services/messagePayload"
 import { generateUUID } from "@/services/storage"
 import { useAuth } from "@/hooks/useAuth"
-import { lockForUnload, waitForUnlock } from "@/utils/recordingLock"
 import type { Locale } from "@/constants/i18n"
 
 export type VideoPhase = "idle" | "listening" | "processing" | "speaking" | "error"
@@ -28,6 +29,9 @@ const SILENCE_DB = -45
 const SILENCE_AFTER_MS = 1500
 const MAX_REC_MS = 60_000
 const POLL_MS = 150
+// Max wait for Audio.Recording.createAsync before releasing lock and retrying.
+// Android can hang here after an audio-session mode transition (record→play→record).
+const PREPARE_TIMEOUT_MS = 8_000
 
 const RECORDING_OPTIONS: Audio.RecordingOptions = {
   android: {
@@ -60,6 +64,8 @@ export type UseVideoSessionReturn = {
   transcript: string
   reply: string
   error: string | null
+  /** Running diagnostic log — shown in the UI debug box. */
+  diagLog: string
   start: () => Promise<void>
   stop: () => Promise<void>
   retryFromError: () => Promise<void>
@@ -75,31 +81,40 @@ export function useVideoSession(
   const [transcript, setTranscript] = useState("")
   const [reply, setReply] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [diagLog, setDiagLog] = useState("")
 
   const { user, refreshAccess, decrementTrialLeft } = useAuth()
 
+  /**
+   * appendDiag closes over the stable setDiagLog setter (React guarantees
+   * setter identity is stable across renders).
+   */
   const S = useRef({
     mounted: true,
     active: false,
     processing: false,
     preparing: false,    // lock: prevent parallel Audio.Recording.createAsync calls
     sessionId: "",       // UUID for this call session — set on start()
-    sessionFirstTurn: true, // true until first successful turn is saved to history
     recording: null as Audio.Recording | null,
     sound: null as Audio.Sound | null,
     pollTimer: null as ReturnType<typeof setInterval> | null,
     maxTimer: null as ReturnType<typeof setTimeout> | null,
+    preparingTimer: null as ReturnType<typeof setTimeout> | null, // timeout-safe lock release
     speechDetected: false,
     silenceAt: 0,
-    // Latest-ref for user — updated on every render so the effect closure always
-    // reads current data without needing user in the effect's dependency array.
-    user: user,
     startListen: async (): Promise<void> => {},
     runTurn: async (): Promise<void> => {},
+    // Diagnostic logger — appends a timestamped line to diagLog state
+    appendDiag(line: string) {
+      if (!S.current.mounted) return
+      const ts = new Date().toISOString().slice(11, 23) // HH:mm:ss.mmm
+      setDiagLog(prev => {
+        const lines = prev.split("\n").filter(Boolean)
+        lines.push(`${ts} ${line}`)
+        return lines.slice(-12).join("\n")
+      })
+    },
   })
-
-  // Keep user ref in sync on every render (cheap, no effect re-run).
-  S.current.user = user
 
   useEffect(() => {
     S.current.mounted = true
@@ -110,11 +125,12 @@ export function useVideoSession(
       s.mounted = false
       s.active = false
       s.preparing = false
-      if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
-      if (s.maxTimer)  { clearTimeout(s.maxTimer);  s.maxTimer = null  }
+      if (s.pollTimer)    { clearInterval(s.pollTimer); s.pollTimer = null }
+      if (s.maxTimer)     { clearTimeout(s.maxTimer);   s.maxTimer = null  }
+      if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
       const rec = s.recording
       s.recording = null
-      if (rec) lockForUnload(() => rec.stopAndUnloadAsync().catch(() => {}))
+      if (rec) rec.stopAndUnloadAsync().catch(() => {})
       if (s.sound) {
         s.sound.stopAsync().catch(() => {})
         s.sound.unloadAsync().catch(() => {})
@@ -152,16 +168,20 @@ export function useVideoSession(
       if (s.processing || !s.mounted || !s.active) return
       s.processing = true
       setPhase("processing")
+      s.appendDiag("REC stop — grabbing URI")
 
       const uri = await grabRecording()
       if (!uri || !s.mounted || !s.active) {
+        s.appendDiag("REC: no URI — loop")
         s.processing = false
         if (s.mounted && s.active) s.startListen()
         return
       }
+      s.appendDiag("REC done — got URI")
 
       try {
         // 1. STT
+        s.appendDiag("STT → sending")
         const formData = new FormData()
         formData.append("audio", { uri, name: "audio.m4a", type: "audio/m4a" } as any)
         const sttRes = await apiFetch("/api/stt", {
@@ -169,6 +189,7 @@ export function useVideoSession(
           headers: { "X-STT-Lang": sttLang(locale) },
           body: formData,
         })
+        s.appendDiag(`STT ← ${sttRes.status}`)
         if (!sttRes.ok) {
           const body = await sttRes.text().catch(() => "")
           throw new Error(`STT ${sttRes.status}: ${body || sttRes.statusText}`)
@@ -177,64 +198,67 @@ export function useVideoSession(
         const text: string = (sttData?.text || "").toString().trim()
 
         if (!text || !s.mounted || !s.active) {
+          s.appendDiag("STT: empty transcript — loop")
           s.processing = false
           if (s.mounted && s.active) s.startListen()
           return
         }
+        s.appendDiag(`STT: "${text.slice(0, 30)}"`)
         setTranscript(text)
 
         // 2. Agent — mode:"video" with character context, full Chat-compatible payload
+        s.appendDiag("AGT → sending")
         const payload = await buildMessagePayload({
           query: text,
           language: locale,
           mode: "video",
-          userId: s.user?.id || null,
+          userId: user?.id || null,
           sessionId: s.sessionId,
-          email: s.user?.email,
+          email: user?.email,
           gender,
           characterId,
           avatarSlug,
         })
         const agentData = await sendMessage(payload)
+        s.appendDiag(`AGT ← ok=${agentData.ok ?? "?"} pay=${!!agentData.paymentRequired}`)
 
         if (agentData.paymentRequired) {
           refreshAccess().catch(() => {})
           throw new Error("payment_required")
         }
 
+        // FIX #1: surface agent-side HTTP errors immediately.
+        // Without this check, sendMessage's { ok: false, error: "Request failed (502)" }
+        // reaches extractReplyText which returns the error string as "reply text",
+        // TTS is called with it, and the debug box never shows the real cause.
+        if (agentData.ok === false) {
+          throw new Error(agentData.error || "Agent request failed")
+        }
+
         const replyText = extractReplyText(agentData)
-        if (!replyText || !s.mounted || !s.active) {
+        // Guard against the extractReplyText fallback "..." so we don't TTS a literal
+        // "dot dot dot" when the backend returns an empty/malformed success body.
+        if (!replyText || replyText === "..." || !s.mounted || !s.active) {
+          s.appendDiag("AGT: empty reply — loop")
           s.processing = false
           if (s.mounted && s.active) s.startListen()
           return
         }
+        s.appendDiag(`AGT: "${replyText.slice(0, 30)}"`)
         setReply(replyText)
-        // Save turn to conversation history — same pattern as Chat and Voice.
-        // All turns in one call share the session UUID as conversationId.
-        const isFirstTurn = s.sessionFirstTurn
-        s.sessionFirstTurn = false
-        saveConversation({
-          conversationId: s.sessionId,
-          messages: [
-            { role: "user", content: text },
-            { role: "assistant", content: replyText },
-          ],
-          mode: "video",
-          title: isFirstTurn ? text.slice(0, 64) : undefined,
-        }).catch(() => {})
         // Decrement trial counter — consistent with Chat flow
         decrementTrialLeft()
-        // Sync server access state after every turn so the local counter never
-        // drifts from reality (e.g. user has promo on web but trial on device).
-        // Fire-and-forget — does not block TTS playback.
+        // Sync server access state after every turn. Fire-and-forget.
         refreshAccess().catch(() => {})
 
         // 3. TTS
+        s.appendDiag("TTS → sending")
         const ttsRes = await apiFetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: replyText, language: locale, gender }),
         })
+        s.appendDiag(`TTS ← ${ttsRes.status}`)
         if (!ttsRes.ok) {
           const body = await ttsRes.text().catch(() => "")
           throw new Error(`TTS ${ttsRes.status}: ${body || ttsRes.statusText}`)
@@ -244,10 +268,12 @@ export function useVideoSession(
         const contentType: string = ttsData?.contentType || "audio/wav"
 
         if (!audioContent || !s.mounted || !s.active) {
+          s.appendDiag("TTS: empty audio — loop")
           s.processing = false
           if (s.mounted && s.active) s.startListen()
           return
         }
+        s.appendDiag(`TTS: audioLen=${audioContent.length}`)
 
         // 4. Playback — phase "speaking" triggers the avatar speaking video in the UI
         setPhase("speaking")
@@ -268,6 +294,7 @@ export function useVideoSession(
           { shouldPlay: true },
         )
         s.sound = sound
+        s.appendDiag("PLAY start")
 
         // Wait for playback to finish.
         // IMPORTANT: only resolve on didJustFinish (or unload/error).
@@ -287,9 +314,12 @@ export function useVideoSession(
         await sound.unloadAsync().catch(() => {})
         s.sound = null
         await FileSystem.deleteAsync(tmpPath, { idempotent: true }).catch(() => {})
+        s.appendDiag("PLAY done")
       } catch (err: any) {
+        const msg: string = err?.message || "Video session error"
+        s.appendDiag(`ERR: ${msg.slice(0, 60)}`)
         if (s.mounted) {
-          setError(err?.message || "Video session error")
+          setError(msg)
           setPhase("error")
         }
         s.processing = false
@@ -297,6 +327,7 @@ export function useVideoSession(
       }
 
       s.processing = false
+      s.appendDiag("LOOP")
       if (s.mounted && s.active) s.startListen()
     }
 
@@ -318,18 +349,33 @@ export function useVideoSession(
       s.preparing = true        // acquire lock
       s.speechDetected = false
       s.silenceAt = 0
+      s.appendDiag("REC start — createAsync")
+
+      // FIX #2: timeout-safe lock release.
+      // On Android, Audio.Recording.createAsync() can hang indefinitely after
+      // an audio-session mode transition (playback → recording), keeping
+      // s.preparing = true and blocking all future startListen() calls.
+      // After PREPARE_TIMEOUT_MS we release the lock and retry.
+      s.preparingTimer = setTimeout(() => {
+        s.preparingTimer = null
+        if (s.preparing) {
+          s.preparing = false
+          s.appendDiag("WARN: createAsync timed out — retry listen")
+          if (s.mounted && s.active) s.startListen()
+        }
+      }, PREPARE_TIMEOUT_MS)
 
       try {
-        // Wait for any previous screen's recording to finish unloading before
-        // calling createAsync — prevents "Only one Recording" across screens.
-        await waitForUnlock()
-        if (!s.mounted || !s.active) { s.preparing = false; return }
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: true,
           playsInSilentModeIOS: true,
         })
         const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS)
+
+        // Clear the timeout — createAsync resolved before the deadline
+        if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
         s.preparing = false     // release lock after successful prepare
+
         if (!s.mounted || !s.active) { await recording.stopAndUnloadAsync(); return }
         s.recording = recording
         setPhase("listening")
@@ -365,9 +411,12 @@ export function useVideoSession(
           }
         }, MAX_REC_MS)
       } catch (err: any) {
+        if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
         s.preparing = false   // release lock on error
+        const msg: string = err?.message || "Microphone error"
+        s.appendDiag(`ERR: ${msg.slice(0, 60)}`)
         if (s.mounted) {
-          setError(err?.message || "Microphone error")
+          setError(msg)
           setPhase("error")
         }
       }
@@ -376,25 +425,11 @@ export function useVideoSession(
     s.startListen = startListen
     s.runTurn = runTurn
 
-    // If deps changed while a session was active but NOT mid-processing,
-    // restart listening with the new closures so silence detection picks up
-    // the updated params (e.g. locale change).
-    if (s.active && !s.processing && !s.recording && !s.preparing) {
-      startListen()
-    }
-
     return () => {
       if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
-      if (s.maxTimer)  { clearTimeout(s.maxTimer);  s.maxTimer = null  }
-      // Stop any recording left from the previous closure so the replacement
-      // startListen can createAsync without hitting "Only one Recording".
-      const stale = s.recording
-      if (stale) {
-        s.recording = null
-        lockForUnload(() => stale.stopAndUnloadAsync().catch(() => {}))
-      }
+      if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
     }
-  }, [characterId, avatarSlug, gender, locale, refreshAccess, decrementTrialLeft])
+  }, [characterId, avatarSlug, gender, locale, user, refreshAccess, decrementTrialLeft])
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -405,10 +440,10 @@ export function useVideoSession(
     s.processing = false
     s.preparing = false          // reset lock for fresh session
     s.sessionId = generateUUID() // fresh session ID per call
-    s.sessionFirstTurn = true    // reset history title flag for each new call
     setError(null)
     setTranscript("")
     setReply("")
+    setDiagLog("")               // clear diagnostics for fresh session
     await s.startListen()
   }, [])
 
@@ -416,11 +451,12 @@ export function useVideoSession(
     const s = S.current
     s.active = false
     s.preparing = false          // reset lock so next session can record
-    if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
-    if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
+    if (s.pollTimer)    { clearInterval(s.pollTimer); s.pollTimer = null }
+    if (s.maxTimer)     { clearTimeout(s.maxTimer);   s.maxTimer = null  }
+    if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
     const rec = s.recording
     s.recording = null
-    if (rec) lockForUnload(() => rec.stopAndUnloadAsync().catch(() => {}))
+    if (rec) try { await rec.stopAndUnloadAsync() } catch {}
     if (s.sound) {
       try { await s.sound.stopAsync(); await s.sound.unloadAsync() } catch {}
       s.sound = null
@@ -437,6 +473,7 @@ export function useVideoSession(
     if (!s.active) return
     s.processing = false
     s.preparing = false           // reset lock in case it was stuck
+    if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
     // Stop any stale recording left over from the failed turn.
     const rec = s.recording
     s.recording = null
@@ -445,5 +482,5 @@ export function useVideoSession(
     await s.startListen()
   }, [])
 
-  return { phase, transcript, reply, error, start, stop, retryFromError }
+  return { phase, transcript, reply, error, diagLog, start, stop, retryFromError }
 }

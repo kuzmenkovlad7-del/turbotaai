@@ -26,7 +26,7 @@ import {
   Platform,
   PermissionsAndroid,
 } from "react-native"
-import { useNavigation, useRoute } from "@react-navigation/native"
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Audio } from "expo-av"
 import { useT } from "@/hooks/useLanguage"
@@ -69,8 +69,21 @@ export default function NativeVoiceCallScreen() {
   const [permGranted, setPermGranted] = useState<boolean | null>(null)
 
   // decrementTrialLeft is now called inside useVoiceSession after each AI reply
-  const { phase, transcript, reply, error, start, stop, retryFromError } =
+  const { phase, transcript, reply, error, diagLog, start, stop, retryFromError } =
     useVoiceSession(gender, locale)
+
+  // Stop session when the screen loses focus (e.g. Android hardware back while
+  // session is active). The hook's unmount cleanup also fires, but this runs
+  // earlier — during the blur animation — ensuring audio is released promptly.
+  useFocusEffect(
+    useCallback(() => {
+      // on focus: nothing extra needed (session starts in the mount useEffect)
+      return () => {
+        // on blur: stop session and release audio resources
+        stop().catch(() => {})
+      }
+    }, [stop]),
+  )
 
   // ── Pulse animation during listening ───────────────────────────────────────
   const pulseAnim = useRef(new Animated.Value(1)).current
@@ -235,13 +248,25 @@ export default function NativeVoiceCallScreen() {
           <Text style={styles.hint}>{t.voiceHint}</Text>
         )}
 
-        {/* ── Debug error box — shows phase + full error string with status code ── */}
-        {phase === "error" && error && !isPaymentError && (
+        {/* ── Debug box — error + live diagnostic log ── */}
+        {(phase === "error" && error && !isPaymentError) || diagLog ? (
           <View style={styles.debugBox}>
-            <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
-            <Text style={styles.debugMsg} selectable>{error}</Text>
+            {phase === "error" && error && !isPaymentError && (
+              <>
+                <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
+                <Text style={styles.debugMsg} selectable>{error}</Text>
+              </>
+            )}
+            {diagLog ? (
+              <>
+                <Text style={[styles.debugTitle, { marginTop: phase === "error" ? 6 : 0 }]}>
+                  📋 Diagnostics
+                </Text>
+                <Text style={styles.debugMsg} selectable>{diagLog}</Text>
+              </>
+            ) : null}
           </View>
-        )}
+        ) : null}
       </ScrollView>
 
       {/* ── Controls ──────────────────────────────────────────────────────── */}
