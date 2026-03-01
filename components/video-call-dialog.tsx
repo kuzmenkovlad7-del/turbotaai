@@ -453,6 +453,7 @@ export default function VideoCallDialog({
   const [activityStatus, setActivityStatus] = useState<
     "listening" | "thinking" | "speaking"
   >("listening")
+  const [thinkingElapsed, setThinkingElapsed] = useState(0)
   const [speechError, setSpeechError] = useState<string | null>(null)
 
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
@@ -464,6 +465,9 @@ export default function VideoCallDialog({
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [interimTranscript, setInterimTranscript] = useState("")
+
+  // Auto-scroll ref: anchors chat panel to the bottom when new messages arrive
+  const chatBottomRef = useRef<HTMLDivElement | null>(null)
 
   const userVideoRef = useRef<HTMLVideoElement | null>(null)
   const idleVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -608,6 +612,21 @@ export default function VideoCallDialog({
   useEffect(() => {
     isAiSpeakingRef.current = isAiSpeaking
   }, [isAiSpeaking])
+
+  // Elapsed-seconds counter while AI is thinking — confirms the app isn't frozen
+  useEffect(() => {
+    if (activityStatus !== "thinking") {
+      setThinkingElapsed(0)
+      return
+    }
+    const id = window.setInterval(() => setThinkingElapsed((s) => s + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [activityStatus])
+
+  // Auto-scroll chat panel to the bottom whenever messages or interim text change
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages, interimTranscript])
 
   useEffect(() => {
     isAvatarSpeakingRef.current = isAvatarSpeaking
@@ -1946,7 +1965,7 @@ if (res.status === 402) {
   const bodyClass = "flex-1 min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col touch-pan-y"
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-3 sm:p-6" style={{ minHeight: "100dvh" }}>
+    <div className="turbota-video-overlay fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-3 sm:p-6" style={{ minHeight: "100dvh" }}>
       <div className="bg-white rounded-3xl shadow-xl w-[calc(100vw-1.5rem)] max-w-[540px] flex flex-col h-[min(600px,calc(100dvh-2rem))] overflow-hidden md:w-[calc(100vw-4rem)] md:max-w-4xl md:h-[min(720px,calc(100dvh-3rem))] relative">
         {sttDebugEnabled && (
           <div style={{ position: "absolute", top: 4, right: 4, zIndex: 9999, background: "rgba(0,0,0,0.8)", color: "#0f0", fontSize: 10, fontFamily: "monospace", padding: "4px 6px", borderRadius: 4, pointerEvents: "none", lineHeight: 1.4 }}>
@@ -2167,7 +2186,7 @@ if (res.status === 402) {
                     ) : activityStatus === "thinking" ? (
                       <>
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                        {t("Thinking...")}
+                        {t("Thinking...")}{thinkingElapsed > 0 ? ` ${thinkingElapsed}с` : ""}
                       </>
                     ) : (
                       <>
@@ -2236,11 +2255,15 @@ if (res.status === 402) {
                     ),
                   )}
 
-                  {interimTranscript && (
-                    <div className="bg-gray-50 rounded-lg p-3 italic text-xs sm:text-sm text-gray-500 break-words">
-                      {interimTranscript}...
-                    </div>
-                  )}
+                  {/* interim transcript: always reserve height to avoid layout jumps */}
+                  <div
+                    className={`rounded-lg p-3 italic text-xs sm:text-sm text-gray-500 break-words transition-opacity duration-200 ${
+                      interimTranscript ? "bg-gray-50 opacity-100" : "opacity-0 select-none pointer-events-none"
+                    }`}
+                    aria-hidden={!interimTranscript}
+                  >
+                    {interimTranscript || "\u00A0"}{interimTranscript ? "..." : ""}
+                  </div>
 
                   {speechError && (
                     <div className="bg-rose-50 rounded-lg p-3 text-xs sm:text-sm text-rose-700 break-words">
@@ -2254,6 +2277,9 @@ if (res.status === 402) {
                       </button>
                     </div>
                   )}
+
+                  {/* Scroll anchor — keeps the latest message in view */}
+                  <div ref={chatBottomRef} />
                 </div>
               </div>
             </div>
