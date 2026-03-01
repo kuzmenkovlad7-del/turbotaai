@@ -190,14 +190,14 @@ export default function NativeVideoCallScreen() {
 
       {/* ── Avatar video: idle + speaking stacked, only one plays ──────────── */}
       <View style={styles.videoContainer}>
-        {/* Idle video — visible when NOT speaking */}
+        {/* Idle video — always loops; speaking video overlays it during speaking */}
         <Video
           ref={idleVideoRef}
           source={{ uri: avatarUri(meta.avatarNum, "idle") }}
           style={StyleSheet.absoluteFillObject}
           resizeMode={ResizeMode.CONTAIN}
           isLooping
-          shouldPlay={!isSpeaking && permGranted}
+          shouldPlay={permGranted === true}
           isMuted
           onLoad={() => setVideoReady(true)}
         />

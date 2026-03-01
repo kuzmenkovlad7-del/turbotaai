@@ -109,30 +109,37 @@ export default function HistoryScreen({ navigation }: Props) {
             tintColor={colors.primary}
           />
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            activeOpacity={0.7}
-            onPress={() =>
-              navigation.navigate("ConversationDetail", {
-                id: item.id,
-                title: item.title,
-              })
-            }
-          >
-            <View style={styles.cardRow}>
-              <View style={styles.cardBody}>
-                <Text style={styles.cardTitle} numberOfLines={2}>
-                  {item.title || t.historyUntitled}
-                </Text>
-                <Text style={styles.cardDate}>
-                  {formatDate(item.updated_at || item.created_at)}
-                </Text>
+        renderItem={({ item }) => {
+          const modeIcon =
+            item.mode === "voice" ? "\uD83C\uDF99\uFE0F" :
+            item.mode === "video" ? "\uD83C\uDFA5" :
+            "\uD83D\uDCAC"
+          return (
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.7}
+              onPress={() =>
+                navigation.navigate("ConversationDetail", {
+                  id: item.id,
+                  title: item.title,
+                })
+              }
+            >
+              <View style={styles.cardRow}>
+                <Text style={styles.modeIcon}>{modeIcon}</Text>
+                <View style={styles.cardBody}>
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {item.title || t.historyUntitled}
+                  </Text>
+                  <Text style={styles.cardDate}>
+                    {formatDate(item.updated_at || item.created_at)}
+                  </Text>
+                </View>
+                <Text style={styles.chevron}>{"\u203A"}</Text>
               </View>
-              <Text style={styles.chevron}>{"\u203A"}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
+            </TouchableOpacity>
+          )
+        }}
         ListEmptyComponent={
           <EmptyState
             icon={"\uD83D\uDCDD"}
@@ -166,6 +173,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   cardRow: { flexDirection: "row", alignItems: "center" },
+  modeIcon: { fontSize: 20, marginRight: spacing.md },
   cardBody: { flex: 1 },
   cardTitle: { fontSize: fontSize.md, fontWeight: "600", color: colors.text },
   cardDate: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 4 },

@@ -347,7 +347,7 @@ export default function AccountScreen() {
           )}
 
           {/* Restore purchases + Refresh access */}
-          <View style={[styles.actionSection, { marginTop: spacing.sm }]}>
+          <View style={[styles.actionSection, { marginTop: spacing.xs }]}>
             {iapEnabled && (
               <Button
                 title={t.accountRestorePurchases}
