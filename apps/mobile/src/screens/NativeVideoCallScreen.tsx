@@ -206,7 +206,7 @@ export default function NativeVideoCallScreen() {
           ref={idleVideoRef}
           source={{ uri: avatarUri(meta.avatarNum, "idle") }}
           style={StyleSheet.absoluteFillObject}
-          resizeMode={ResizeMode.COVER}
+          resizeMode={ResizeMode.CONTAIN}
           isLooping
           shouldPlay={!isSpeaking && permGranted}
           isMuted
@@ -219,7 +219,7 @@ export default function NativeVideoCallScreen() {
           ref={speakingVideoRef}
           source={{ uri: avatarUri(meta.avatarNum, "speaking") }}
           style={[StyleSheet.absoluteFillObject, { opacity: isSpeaking ? 1 : 0 }]}
-          resizeMode={ResizeMode.COVER}
+          resizeMode={ResizeMode.CONTAIN}
           isLooping
           shouldPlay={isSpeaking}
           isMuted
