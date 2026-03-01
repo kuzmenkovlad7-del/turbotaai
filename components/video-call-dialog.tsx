@@ -30,6 +30,7 @@ const VIDEO_ASSISTANT_WEBHOOK_URL =
 
 interface AICharacter {
   id: string
+  slug: string
   name: string
   gender: "male" | "female"
   description: string
@@ -45,6 +46,7 @@ const AVATAR_VER = "v2"
 const AI_CHARACTERS: AICharacter[] = [
   {
     id: "dr-alexander",
+    slug: "leo",
     name: "Leo",
     gender: "male",
     description:
@@ -56,6 +58,7 @@ const AI_CHARACTERS: AICharacter[] = [
   },
   {
     id: "dr-maria",
+    slug: "mia",
     name: "Mia",
     gender: "female",
     description:
@@ -67,6 +70,7 @@ const AI_CHARACTERS: AICharacter[] = [
   },
   {
     id: "dr-sophia",
+    slug: "alex",
     name: "Alex",
     gender: "female",
     description:
@@ -432,10 +436,11 @@ export default function VideoCallDialog({
   const currentLocale = getLocaleForLanguage(activeLanguage.code)
   const nativeVoicePreferences = getNativeVoicePreferences()
 
-  // Pre-select character when launched from mobile (defaultCharacterId prop)
+  // Pre-select character when launched from mobile (defaultCharacterId prop).
+  // Accepts both legacy id ("dr-maria") and new slug ("mia").
   const [selectedCharacter, setSelectedCharacter] = useState<AICharacter>(
     (defaultCharacterId
-      ? AI_CHARACTERS.find((c) => c.id === defaultCharacterId)
+      ? AI_CHARACTERS.find((c) => c.id === defaultCharacterId || c.slug === defaultCharacterId)
       : undefined) ??
     AI_CHARACTERS[1] ??
     AI_CHARACTERS[0],
@@ -455,6 +460,12 @@ export default function VideoCallDialog({
   >("listening")
   const [thinkingElapsed, setThinkingElapsed] = useState(0)
   const [speechError, setSpeechError] = useState<string | null>(null)
+  // Per-turn timing (ms) shown in debug panel (activate with ?debug=1)
+  const [lastTurnMs, setLastTurnMs] = useState<{ stt: number; agent: number; tts: number } | null>(null)
+  const turnSttMsRef = useRef(0)
+  const turnAgentMsRef = useRef(0)
+  // Stable session ID for all turns in one call — enables n8n conversation memory
+  const callSessionIdRef = useRef<string | null>(null)
 
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
   const isAiSpeakingRef = useRef(false)
@@ -594,6 +605,11 @@ export default function VideoCallDialog({
   const sttDebugEnabled = useMemo(() => {
     if (typeof window === "undefined") return false
     return new URLSearchParams(window.location.search).get("sttDebug") === "1"
+  }, [])
+  const debugEnabled = useMemo(() => {
+    if (typeof window === "undefined") return false
+    const qs = new URLSearchParams(window.location.search)
+    return qs.get("debug") === "1" || qs.get("voiceDebug") === "1"
   }, [])
 
   const isMobile = useMemo(() => {
@@ -1233,6 +1249,7 @@ export default function VideoCallDialog({
       sentIdxRef.current = keep ? 1 : 0
 
       const _sttMs = Math.round(performance.now() - _sttStart)
+      turnSttMsRef.current = _sttMs
       const fullText = (data.text || "").toString().trim()
       if (sttDebugEnabled) { sttDebugRef.current.lastLen = fullText.length; sttDebugRef.current.rejectReason = "" }
       if (fullText) console.log(`[perf] STT: ${_sttMs}ms — "${fullText.slice(0, 40)}"`)
@@ -1437,6 +1454,9 @@ export default function VideoCallDialog({
 
     const _ttsMs = Math.round(performance.now() - _ttsStart)
     console.log(`[perf] TTS: ${_ttsMs}ms`)
+    if (debugEnabled) {
+      setLastTurnMs({ stt: turnSttMsRef.current, agent: turnAgentMsRef.current, tts: _ttsMs })
+    }
     const contentType = (json.contentType || "audio/mpeg").toString()
     const audioB64 = String(json.audioContent || "")
 
@@ -1682,8 +1702,10 @@ export default function VideoCallDialog({
           language: langForBackend,
           email: user?.email || "guest@example.com",
           mode: "video",
-          characterId: selectedCharacter.id,
+          characterId: selectedCharacter.slug,
           gender: selectedCharacter.gender,
+          sessionId: callSessionIdRef.current ?? undefined,
+          clientMessageId: crypto.randomUUID(),
         }),
       })
 if (res.status === 402) {
@@ -1705,6 +1727,7 @@ if (res.status === 402) {
       } catch {}
 
       const _agentMs = Math.round(performance.now() - _agentStart)
+      turnAgentMsRef.current = _agentMs
       let aiRaw = extractAnswer(data)
       aiRaw = cleanResponseText(aiRaw)
       aiRaw = sanitizeAssistantText(aiRaw)
@@ -1762,6 +1785,7 @@ if (res.status === 402) {
     try {
       // фиксируем язык сессии ровно на старте
       setSessionLangFromUi()
+      callSessionIdRef.current = crypto.randomUUID()
 
       const stream = await requestMicrophoneStream()
       if (!stream) {
@@ -1850,6 +1874,9 @@ if (res.status === 402) {
     setMessages([])
     setSpeechError(null)
     setIsVideoReady(false)
+
+    callSessionIdRef.current = null
+    setLastTurnMs(null)
 
     if (idleVideoRef.current) {
       try {
@@ -1971,6 +1998,12 @@ if (res.status === 402) {
           <div style={{ position: "absolute", top: 4, right: 4, zIndex: 9999, background: "rgba(0,0,0,0.8)", color: "#0f0", fontSize: 10, fontFamily: "monospace", padding: "4px 6px", borderRadius: 4, pointerEvents: "none", lineHeight: 1.4 }}>
             {sttDebugRef.current.state} | utt:{sttDebugRef.current.uttMs}ms | rms:{sttDebugRef.current.rms} thr:{sttDebugRef.current.thr}<br/>
             last:{sttDebugRef.current.lastLen}ch {sttDebugRef.current.rejectReason && <>| rej:{sttDebugRef.current.rejectReason}</>}
+          </div>
+        )}
+        {debugEnabled && lastTurnMs && (
+          <div style={{ position: "absolute", top: sttDebugEnabled ? 56 : 4, right: 4, zIndex: 9999, background: "rgba(0,0,0,0.85)", color: "#ff0", fontSize: 10, fontFamily: "monospace", padding: "4px 6px", borderRadius: 4, pointerEvents: "none", lineHeight: 1.5 }}>
+            stt:{lastTurnMs.stt}ms | agt:{lastTurnMs.agent}ms | tts:{lastTurnMs.tts}ms<br/>
+            total:{lastTurnMs.stt + lastTurnMs.agent + lastTurnMs.tts}ms
           </div>
         )}
         <div className="p-3 sm:p-4 border-b flex items-center justify-between rounded-t-xl relative bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 text-white">
