@@ -22,6 +22,7 @@ import { buildMessagePayload } from "@/services/messagePayload"
 import { generateUUID } from "@/services/storage"
 import { useAuth } from "@/hooks/useAuth"
 import { lockForUnload, waitForUnlock } from "@/utils/recordingLock"
+import { API_BASE_URL } from "@/constants/config"
 import type { Locale } from "@/constants/i18n"
 
 export type VoicePhase = "idle" | "listening" | "processing" | "speaking" | "error"
@@ -218,7 +219,7 @@ export function useVoiceSession(
 
       try {
         // 1. STT — FormData upload (file:// URI, works on iOS + Android)
-        s.appendDiag("STT → sending")
+        s.appendDiag("STT → /api/stt")
         const formData = new FormData()
         formData.append("audio", { uri, name: "audio.m4a", type: "audio/m4a" } as any)
         const sttRes = await apiFetch("/api/stt", {
@@ -245,7 +246,7 @@ export function useVoiceSession(
         setTranscript(text)
 
         // 2. Agent — use same full payload as Chat (userId, sessionId, deviceId, etc.)
-        s.appendDiag("AGT → sending")
+        s.appendDiag("AGT → /api/turbotaai-agent")
         const payload = await buildMessagePayload({
           query: text,
           language: locale,
@@ -259,6 +260,7 @@ export function useVoiceSession(
         s.appendDiag(`AGT ← ok=${agentData.ok ?? "?"} pay=${!!agentData.paymentRequired}`)
 
         if (agentData.paymentRequired) {
+          s.appendDiag("AGT: ⚠ PAYMENT_REQUIRED → go Account")
           refreshAccess().catch(() => {})
           throw new Error("payment_required")
         }
@@ -301,7 +303,7 @@ export function useVoiceSession(
         refreshAccess().catch(() => {})
 
         // 3. TTS
-        s.appendDiag("TTS → sending")
+        s.appendDiag("TTS → /api/tts")
         const ttsRes = await apiFetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -529,6 +531,7 @@ export function useVoiceSession(
     setTranscript("")
     setReply("")
     setDiagLog("")               // clear diagnostics for fresh session
+    s.appendDiag(`BASE ${API_BASE_URL || "(not set)"}`)
     await s.startListen()
   }, [])
 

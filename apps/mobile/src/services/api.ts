@@ -77,10 +77,17 @@ const EMPTY_BOOTSTRAP: BootstrapData = {
   auto_renew: false,
 }
 
+/** Return shape for bootstrap — includes raw HTTP status for diagnostics */
+export type BootstrapResult = {
+  data: BootstrapData
+  httpStatus: number
+}
+
 /** Single call to get user info + access status (mobile-specific endpoint) */
-export async function bootstrap(): Promise<BootstrapData> {
+export async function bootstrap(): Promise<BootstrapResult> {
   const res = await apiFetch("/api/mobile/bootstrap")
-  return safeJson(res, { ...EMPTY_BOOTSTRAP, error: `HTTP ${res.status}` })
+  const data = await safeJson<BootstrapData>(res, { ...EMPTY_BOOTSTRAP, error: `HTTP ${res.status}` })
+  return { data, httpStatus: res.status }
 }
 
 /* ── History ── */
@@ -267,13 +274,14 @@ export async function validateReceipt(receipt: {
 
 export async function redeemPromo(
   code: string,
-): Promise<{ ok: boolean; promo_until?: string; error?: string }> {
+): Promise<{ ok: boolean; promo_until?: string; error?: string; httpStatus: number }> {
   const res = await apiFetch("/api/billing/promo/redeem", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code }),
   })
-  return safeJson(res, { ok: false, error: `HTTP ${res.status}` })
+  const data = await safeJson(res, { ok: false, error: `HTTP ${res.status}` })
+  return { ...data, httpStatus: res.status }
 }
 
 /* ── Subscription management ── */

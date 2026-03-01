@@ -16,6 +16,24 @@ export type AccessInfo = {
   autoRenew: boolean
 }
 
+/**
+ * Safe snapshot of the last raw server bootstrap response.
+ * Stored in AuthState so debug panels can compare server truth vs local state
+ * without needing adb / Metro console access.
+ */
+export type LastBootstrap = {
+  access: "paid" | "promo" | "trial" | "none"
+  trialLeft: number
+  promoUntil: string | null
+  paidUntil: string | null
+  hasAccess: boolean
+  unlimited: boolean
+  isLoggedIn: boolean
+  httpStatus: number
+  fetchedAt: string   // ISO timestamp of the fetch
+  error?: string
+}
+
 type AuthState = {
   ready: boolean          // bootstrap completed (show splash until true)
   user: { id: string; email: string } | null
@@ -23,6 +41,7 @@ type AuthState = {
   error: string | null
   loading: boolean
   bootstrapFailed: boolean
+  lastBootstrap: LastBootstrap | null
 }
 
 export type AuthContextValue = AuthState & {
@@ -70,6 +89,7 @@ export const AuthContext = createContext<AuthContextValue>({
   error: null,
   loading: false,
   bootstrapFailed: false,
+  lastBootstrap: null,
   login: async () => NOOP_RESULT,
   register: async () => NOOP_RESULT,
   logout: NOOP_ASYNC,
@@ -91,6 +111,7 @@ export function useAuthProvider(): AuthContextValue {
     error: null,
     loading: false,
     bootstrapFailed: false,
+    lastBootstrap: null,
   })
   const mounted = useRef(true)
   const bootstrapping = useRef(false)
@@ -100,14 +121,6 @@ export function useAuthProvider(): AuthContextValue {
    * most recent server state (e.g. after promo apply) is always reflected.
    */
   const pendingRefresh = useRef(false)
-  /**
-   * Incremented every time an optimistic access update is written locally
-   * (setAccessFromPromo, decrementTrialLeft). runBootstrap captures this at
-   * the moment the network request starts; if the value has changed by the
-   * time the response arrives, the server snapshot pre-dates the local change
-   * and must be discarded to avoid overwriting the optimistic state.
-   */
-  const optimisticVersionRef = useRef(0)
   /**
    * Resolve/reject callbacks queued by callers that hit runBootstrap while
    * another bootstrap was already in-flight. Each entry is settled once the
@@ -122,17 +135,11 @@ export function useAuthProvider(): AuthContextValue {
   }, [])
 
   const runBootstrap = useCallback(async () => {
-    // Snapshot the optimistic version before any await so we can detect whether
-    // setAccessFromPromo / decrementTrialLeft ran while the request was in-flight.
-    const snapshotVersion = optimisticVersionRef.current
-
     if (bootstrapping.current) {
       // A bootstrap is already in-flight; queue a follow-up so the latest
       // server state (e.g. after promo apply) is reflected once it finishes.
       pendingRefresh.current = true
       // Return a promise that resolves/rejects when the NEXT bootstrap finishes.
-      // This makes `await refreshAccess()` in UI handlers (e.g. "Refresh Access"
-      // button) wait for genuinely fresh data rather than returning immediately.
       return new Promise<void>((resolve, reject) => {
         bootstrapListenersRef.current.push({ resolve, reject })
       })
@@ -141,7 +148,7 @@ export function useAuthProvider(): AuthContextValue {
     pendingRefresh.current = false
     try {
       await ensureDeviceHash()
-      const data: BootstrapData = await bootstrap()
+      const { data, httpStatus } = await bootstrap()
       if (!mounted.current) return
 
       const user = data.isLoggedIn && data.userId && data.email
@@ -157,22 +164,29 @@ export function useAuthProvider(): AuthContextValue {
         subscriptionStatus: data.subscription_status ?? null,
         autoRenew: data.auto_renew ?? false,
       }
+      const lastBootstrap: LastBootstrap = {
+        access: data.access ?? "none",
+        trialLeft: data.trial_questions_left ?? 0,
+        promoUntil: data.promo_until ?? null,
+        paidUntil: data.paid_until ?? null,
+        hasAccess: data.hasAccess ?? false,
+        unlimited: data.unlimited ?? false,
+        isLoggedIn: data.isLoggedIn ?? false,
+        httpStatus,
+        fetchedAt: new Date().toISOString(),
+        error: data.error,
+      }
 
-      setState(s => {
-        // Guard against stale-bootstrap overwrite: if setAccessFromPromo or
-        // decrementTrialLeft ran after this request was dispatched, our server
-        // snapshot pre-dates the local change.  Discarding it prevents reverting
-        // the optimistic state (e.g. "Promo applied" flash-back to trial UI).
-        if (optimisticVersionRef.current !== snapshotVersion) return s
-        return {
-          ...s,
-          ready: true,
-          user: user ?? s.user,
-          accessInfo,
-          error: null,
-          bootstrapFailed: false,
-        }
-      })
+      // Server truth always wins — no optimistic version guard.
+      setState(s => ({
+        ...s,
+        ready: true,
+        user: user ?? s.user,
+        accessInfo,
+        lastBootstrap,
+        error: null,
+        bootstrapFailed: false,
+      }))
     } catch (e: any) {
       if (!mounted.current) return
       setState(s => ({
@@ -182,17 +196,11 @@ export function useAuthProvider(): AuthContextValue {
         bootstrapFailed: true,
         accessInfo: s.accessInfo ?? EMPTY_ACCESS,
       }))
-      // Notify any waiting callers (e.g. "Refresh Access" button) of the failure
-      // so their awaited promise rejects and they can show an inline error.
       bootstrapListenersRef.current.splice(0).forEach(({ reject }) => reject(e))
       throw e
     } finally {
       bootstrapping.current = false
-      // Resolve any remaining listeners (success path — catch block did not run).
       bootstrapListenersRef.current.splice(0).forEach(({ resolve }) => resolve())
-      // If refreshAccess() was called while we were running, fetch again
-      // immediately so the caller's state change (e.g. promo applied) is
-      // picked up without requiring a manual retry or app restart.
       if (pendingRefresh.current && mounted.current) {
         pendingRefresh.current = false
         runBootstrap()
@@ -318,17 +326,21 @@ export function useAuthProvider(): AuthContextValue {
       // silent
     }
     if (mounted.current) {
-      setState({ ready: true, user: null, accessInfo: EMPTY_ACCESS, error: null, loading: false, bootstrapFailed: false })
+      setState({
+        ready: true,
+        user: null,
+        accessInfo: EMPTY_ACCESS,
+        error: null,
+        loading: false,
+        bootstrapFailed: false,
+        lastBootstrap: null,
+      })
     }
   }, [])
 
   const decrementTrialLeft = useCallback(() => {
     setState((s) => {
       if (!s.accessInfo || s.accessInfo.access !== "trial") return s
-      // Bump version here — only when we are actually changing local state.
-      // For paid/promo users this callback returns early above, so their
-      // in-flight bootstrap refreshes are never blocked by a spurious bump.
-      optimisticVersionRef.current += 1
       const newLeft = Math.max(0, s.accessInfo.trialLeft - 1)
       return {
         ...s,
@@ -344,9 +356,6 @@ export function useAuthProvider(): AuthContextValue {
   }, [])
 
   const setAccessFromPromo = useCallback((promoUntil: string) => {
-    // Bump version so any in-flight bootstrap (started before the promo was applied)
-    // cannot overwrite this optimistic update with stale server data.
-    optimisticVersionRef.current += 1
     setState((s) => {
       if (!s.accessInfo) return s
       return {
