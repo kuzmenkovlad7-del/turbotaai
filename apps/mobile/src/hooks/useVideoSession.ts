@@ -19,6 +19,7 @@ import { sendMessage, extractReplyText, apiFetch } from "@/services/api"
 import { buildMessagePayload } from "@/services/messagePayload"
 import { generateUUID } from "@/services/storage"
 import { useAuth } from "@/hooks/useAuth"
+import { API_BASE_URL } from "@/constants/config"
 import type { Locale } from "@/constants/i18n"
 
 export type VideoPhase = "idle" | "listening" | "processing" | "speaking" | "error"
@@ -181,7 +182,7 @@ export function useVideoSession(
 
       try {
         // 1. STT
-        s.appendDiag("STT → sending")
+        s.appendDiag("STT → /api/stt")
         const formData = new FormData()
         formData.append("audio", { uri, name: "audio.m4a", type: "audio/m4a" } as any)
         const sttRes = await apiFetch("/api/stt", {
@@ -207,7 +208,7 @@ export function useVideoSession(
         setTranscript(text)
 
         // 2. Agent — mode:"video" with character context, full Chat-compatible payload
-        s.appendDiag("AGT → sending")
+        s.appendDiag("AGT → /api/turbotaai-agent")
         const payload = await buildMessagePayload({
           query: text,
           language: locale,
@@ -223,6 +224,7 @@ export function useVideoSession(
         s.appendDiag(`AGT ← ok=${agentData.ok ?? "?"} pay=${!!agentData.paymentRequired}`)
 
         if (agentData.paymentRequired) {
+          s.appendDiag("AGT: ⚠ PAYMENT_REQUIRED → go Account")
           refreshAccess().catch(() => {})
           throw new Error("payment_required")
         }
@@ -252,7 +254,7 @@ export function useVideoSession(
         refreshAccess().catch(() => {})
 
         // 3. TTS
-        s.appendDiag("TTS → sending")
+        s.appendDiag("TTS → /api/tts")
         const ttsRes = await apiFetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -444,6 +446,7 @@ export function useVideoSession(
     setTranscript("")
     setReply("")
     setDiagLog("")               // clear diagnostics for fresh session
+    s.appendDiag(`BASE ${API_BASE_URL || "(not set)"}`)
     await s.startListen()
   }, [])
 

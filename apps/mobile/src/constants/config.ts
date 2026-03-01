@@ -8,8 +8,29 @@ import Constants from "expo-constants"
  */
 const extra = Constants.expoConfig?.extra ?? {}
 
-export const API_BASE_URL: string =
+/**
+ * Normalize apex domain → www to prevent HTTP 301 redirects that strip the
+ * Authorization header — a silent auth failure that makes all API calls return
+ * as unauthenticated without any visible error in the app.
+ *
+ * e.g. https://turbotaai.com → https://www.turbotaai.com
+ */
+function normalizeApiUrl(raw: string): string {
+  if (!raw) return raw
+  if (/^https?:\/\/turbotaai\.com(\/|$)/.test(raw)) {
+    console.warn(
+      "[TurbotaAI] EXPO_PUBLIC_API_URL is apex domain — auto-correcting to www " +
+      "to prevent HTTP 301 redirects from stripping the Authorization header. " +
+      "Update your .env to use https://www.turbotaai.com to suppress this warning."
+    )
+    return raw.replace(/^(https?:\/\/)turbotaai\.com/, "$1www.turbotaai.com")
+  }
+  return raw
+}
+
+export const API_BASE_URL: string = normalizeApiUrl(
   extra.apiUrl || process.env.EXPO_PUBLIC_API_URL || ""
+)
 
 /** Feature flag: set EXPO_PUBLIC_IAP_ENABLED=true to show purchase buttons */
 export const IAP_ENABLED: boolean =
@@ -90,7 +111,7 @@ if (ENV_ISSUES.length > 0) {
 }
 
 if (DEBUG_ENABLED) {
-  console.log("[TurbotaAI:debug] API_BASE_URL =", API_BASE_URL)
+  console.log("[TurbotaAI:debug] API_BASE_URL (effective) =", API_BASE_URL)
   console.log("[TurbotaAI:debug] IAP_ENABLED =", IAP_ENABLED)
   console.log("[TurbotaAI:debug] SUPABASE_URL =", process.env.EXPO_PUBLIC_SUPABASE_URL ? "set" : "MISSING")
 }
