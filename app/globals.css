@@ -436,6 +436,30 @@ video {
 }
 
 
+/* ── Background-scroll stability fixes ──────────────────────────────────────
+   1. When the body is position:fixed (iOS scroll-lock pattern applied by JS),
+      prevent overscroll rubber-band on the fixed element itself.
+   2. Give the fixed video-call overlay a GPU compositing layer so iOS Safari
+      does not repaint the page background behind it during inner scroll.
+   ── */
+body[style*="position: fixed"] {
+  overscroll-behavior: none;
+}
+
+/* Compositing hint for the video-call full-screen overlay */
+.turbota-video-overlay {
+  will-change: transform;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Prevent iOS overscroll from showing the page background inside scrollable
+   dialog panels (e.g. the voice-call/chat message list). */
+.overflow-y-auto,
+.overflow-y-scroll {
+  overscroll-behavior-y: contain;
+}
+
 /* Disable soft grid background pattern (safe override) */
 body::before,
 body::after {

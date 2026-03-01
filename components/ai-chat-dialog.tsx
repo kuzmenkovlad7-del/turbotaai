@@ -77,6 +77,7 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [isSending, setIsSending] = useState(false)
+  const [thinkingElapsed, setThinkingElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [keyboardOffset, setKeyboardOffset] = useState(0)
 
@@ -89,15 +90,28 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
       setInput("")
       setError(null)
       setIsSending(false)
+      setThinkingElapsed(0)
       setKeyboardOffset(0)
     }
   }, [isOpen])
+
+  // Seconds counter during thinking — so users see it's working, not frozen
+  useEffect(() => {
+    if (!isSending) {
+      setThinkingElapsed(0)
+      return
+    }
+    const id = window.setInterval(() => {
+      setThinkingElapsed((s: number) => s + 1)
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [isSending])
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, isSending])
 
   useEffect(() => {
     if (!isOpen) return
@@ -118,6 +132,28 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
     return () => {
       vv.removeEventListener("resize", update)
       vv.removeEventListener("scroll", update)
+    }
+  }, [isOpen])
+
+  // iOS Safari: prevent the page background from shifting while scrolling inside
+  // the dialog (rubber-band / overscroll causes the page below to move).
+  // We use the position:fixed pattern since overflow:hidden alone isn't enough
+  // on iOS — Radix handles the desktop case, this augments for mobile Safari.
+  useEffect(() => {
+    if (!isOpen || typeof window === "undefined") return
+    const scrollY = window.scrollY
+    const body = document.body
+    const prev = { pos: body.style.position, top: body.style.top, width: body.style.width, overscroll: body.style.overscrollBehavior }
+    body.style.position = "fixed"
+    body.style.top = `-${scrollY}px`
+    body.style.width = "100%"
+    body.style.overscrollBehavior = "none"
+    return () => {
+      body.style.position = prev.pos
+      body.style.top = prev.top
+      body.style.width = prev.width
+      body.style.overscrollBehavior = prev.overscroll
+      window.scrollTo(0, scrollY)
     }
   }, [isOpen])
 
@@ -281,6 +317,18 @@ if (res.status === 402) {
                     </div>
                   </div>
                 ))}
+
+                {/* Thinking indicator: shows "Обдумываю... Xs" while waiting for AI reply */}
+                {isSending && (
+                  <div className="flex justify-start">
+                    <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-indigo-50 px-3.5 py-2.5 text-xs text-indigo-700 shadow-sm">
+                      <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                      <span>
+                        {t("Thinking")}{thinkingElapsed > 0 ? ` ${thinkingElapsed}с…` : "…"}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </ScrollArea>
 
