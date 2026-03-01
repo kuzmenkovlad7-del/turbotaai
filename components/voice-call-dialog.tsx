@@ -302,6 +302,10 @@ export default function VoiceCallDialog({
   const voiceGenderRef = useRef<"female" | "male">(defaultGender ?? "female")
   const effectiveEmail = userEmail || user?.email || "guest@example.com"
 
+  // Stable session ID for the duration of one call — ensures n8n sees all
+  // turns as the same conversation, enabling conversation memory.
+  const callSessionIdRef = useRef<string | null>(null)
+
   // фиксируем язык на момент старта звонка (STT/TTS/агент)
   const sessionVoiceLangRef = useRef<string>("uk-UA")
   const sessionAgentLangRef = useRef<"uk" | "ru" | "en">("uk")
@@ -350,8 +354,14 @@ export default function VoiceCallDialog({
   const debugParams = useMemo(() => {
     if (typeof window === "undefined") return { debug: false, sttDebug: false, voiceDebug: false }
     const qs = new URLSearchParams(window.location.search)
-    return { debug: qs.get("debugAudio") === "1", sttDebug: qs.get("sttDebug") === "1", voiceDebug: qs.get("voiceDebug") === "1" }
+    return { debug: qs.get("debugAudio") === "1", sttDebug: qs.get("sttDebug") === "1", voiceDebug: qs.get("voiceDebug") === "1" || qs.get("debug") === "1" }
   }, [])
+
+  // Per-turn timing (ms) shown in the voiceDebug panel (activate with ?voiceDebug=1 or ?debug=1)
+  const [lastTurnMs, setLastTurnMs] = useState<{ stt: number; agent: number; tts: number } | null>(null)
+  // Shared timing accumulators between maybeSendStt → handleUserText → speakText
+  const turnSttMsRef   = useRef(0)
+  const turnAgentMsRef = useRef(0)
 
   const isMobile = useMemo(() => {
     if (typeof navigator === "undefined") return false
@@ -593,7 +603,7 @@ export default function VoiceCallDialog({
 
     try {
       isSttBusyRef.current = true
-      const _sttStart = debugParams.voiceDebug ? performance.now() : 0
+      const _sttStart = performance.now()
 
       const sttLang = getSessionVoiceLang()
 
@@ -649,8 +659,9 @@ export default function VoiceCallDialog({
         text: delta,
       }
 
+      const _asrMs = Math.round(performance.now() - _sttStart)
+      turnSttMsRef.current = _asrMs
       if (debugParams.voiceDebug) {
-        const _asrMs = Math.round(performance.now() - _sttStart)
         console.log(`[VOICE_DEBUG] speech_end→asr_done: ${_asrMs}ms | "${delta.slice(0, 50)}"`)
       }
 
@@ -899,7 +910,7 @@ export default function VoiceCallDialog({
 
     ;(async () => {
       begin()
-      const _ttsStart = debugParams.voiceDebug ? performance.now() : 0
+      const _ttsStart = performance.now()
 
       try {
         const res = await fetch("/api/tts", {
@@ -933,9 +944,10 @@ export default function VoiceCallDialog({
         objectUrl = base64ToObjectUrl(data.audioContent, ct)
         a.src = objectUrl
 
+        const _ttsMs = Math.round(performance.now() - _ttsStart)
         if (debugParams.voiceDebug) {
-          const _ttsMs = Math.round(performance.now() - _ttsStart)
           console.log(`[VOICE_DEBUG] tts_ready: ${_ttsMs}ms`)
+          setLastTurnMs({ stt: turnSttMsRef.current, agent: turnAgentMsRef.current, tts: _ttsMs })
           a.onplay = () => {
             const _playMs = Math.round(performance.now() - _ttsStart)
             console.log(`[VOICE_DEBUG] first_audio_play: ${_playMs}ms from tts_start`)
@@ -990,7 +1002,7 @@ export default function VoiceCallDialog({
       TURBOTA_AGENT_WEBHOOK_URL.trim() ||
       FALLBACK_CHAT_API
 
-    const _agentStart = debugParams.voiceDebug ? performance.now() : 0
+    const _agentStart = performance.now()
 
     try {
       const res = await fetch(resolvedWebhook, {
@@ -1003,6 +1015,8 @@ export default function VoiceCallDialog({
           mode: "voice",
           gender: voiceGenderRef.current,
           voiceLanguage: voiceLangCode,
+          sessionId: callSessionIdRef.current ?? undefined,
+          clientMessageId: crypto.randomUUID(),
         }),
       })
 if (res.status === 402) {
@@ -1041,8 +1055,9 @@ if (res.status === 402) {
         gender: voiceGenderRef.current,
       }
 
+      const _agentMs = Math.round(performance.now() - _agentStart)
+      turnAgentMsRef.current = _agentMs
       if (debugParams.voiceDebug) {
-        const _agentMs = Math.round(performance.now() - _agentStart)
         console.log(`[VOICE_DEBUG] llm_done: ${_agentMs}ms | "${answer.slice(0, 50)}"`)
       }
 
@@ -1073,6 +1088,8 @@ if (res.status === 402) {
 
     // фиксируем язык/агент на момент старта сессии
     setSessionLangFromUi()
+    // Generate a stable sessionId for all turns in this call
+    callSessionIdRef.current = crypto.randomUUID()
 
     try {
       if (!navigator?.mediaDevices?.getUserMedia) {
@@ -1259,6 +1276,9 @@ if (res.status === 402) {
     lastAssistantSentNormRef.current = ""
     lastAssistantSentTsRef.current = 0
     isSttBusyRef.current = false
+
+    callSessionIdRef.current = null
+    setLastTurnMs(null)
   }
 
   function toggleMic() {
@@ -1336,6 +1356,12 @@ if (res.status === 402) {
             <div style={{ position: "absolute", top: 4, right: 4, zIndex: 9999, background: "rgba(0,0,0,0.8)", color: "#0f0", fontSize: 10, fontFamily: "monospace", padding: "4px 6px", borderRadius: 4, pointerEvents: "none", lineHeight: 1.4 }}>
               {sttDebugRef.current.state} | utt:{sttDebugRef.current.uttMs}ms | rms:{sttDebugRef.current.rms} thr:{sttDebugRef.current.thr}<br/>
               last:{sttDebugRef.current.lastLen}ch {sttDebugRef.current.rejectReason && <>| rej:{sttDebugRef.current.rejectReason}</>}
+            </div>
+          )}
+          {debugParams.voiceDebug && lastTurnMs && (
+            <div style={{ position: "absolute", top: debugParams.sttDebug ? 56 : 4, right: 4, zIndex: 9999, background: "rgba(0,0,0,0.85)", color: "#ff0", fontSize: 10, fontFamily: "monospace", padding: "4px 6px", borderRadius: 4, pointerEvents: "none", lineHeight: 1.5 }}>
+              stt:{lastTurnMs.stt}ms | agt:{lastTurnMs.agent}ms | tts:{lastTurnMs.tts}ms<br/>
+              total:{lastTurnMs.stt + lastTurnMs.agent + lastTurnMs.tts}ms
             </div>
           )}
           <DialogHeader className="border-b border-indigo-100 bg-gradient-to-r from-indigo-600 via-violet-600 to-sky-500 px-6 pt-5 pb-4 text-white">
