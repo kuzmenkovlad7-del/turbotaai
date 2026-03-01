@@ -19,14 +19,14 @@ import { useT } from "@/hooks/useLanguage"
 import { useSubscription } from "@/hooks/useSubscription"
 import { redeemPromo, cancelAutoRenew, resumeAutoRenew } from "@/services/api"
 import { logEvent } from "@/services/analytics"
-import { API_BASE_URL, IAP_PRODUCTS } from "@/constants/config"
+import { API_BASE_URL, IAP_PRODUCTS, DEBUG_ENABLED } from "@/constants/config"
 import { LOCALE_LABELS, type Locale } from "@/constants/i18n"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
 const LOCALES: Locale[] = ["en", "uk", "ru"]
 
 export default function AccountScreen() {
-  const { user, accessInfo, logout, refreshAccess, setAccessFromPromo } = useAuth()
+  const { user, accessInfo, lastBootstrap, logout, refreshAccess, setAccessFromPromo } = useAuth()
   const { t, locale, setLocale } = useT()
   const {
     purchasing,
@@ -425,6 +425,102 @@ export default function AccountScreen() {
             )}
           </View>
         </View>
+
+        {/* ── Debug panel — visible only when EXPO_PUBLIC_DEBUG=true ── */}
+        {DEBUG_ENABLED && (
+          <View style={styles.debugCard}>
+            <Text style={styles.debugHeading}>Debug — Access State</Text>
+
+            <Text style={styles.debugSection}>Network</Text>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>api_base</Text>
+              <Text style={styles.debugVal} numberOfLines={1}>{API_BASE_URL || "(not set)"}</Text>
+            </View>
+
+            <Text style={styles.debugSection}>Local (in-memory)</Text>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>access</Text>
+              <Text style={styles.debugVal}>{accessInfo?.access ?? "—"}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>trialLeft</Text>
+              <Text style={styles.debugVal}>{accessInfo?.trialLeft ?? "—"}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>promoUntil</Text>
+              <Text style={styles.debugVal}>{accessInfo?.promoUntil ?? "—"}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>paidUntil</Text>
+              <Text style={styles.debugVal}>{accessInfo?.paidUntil ?? "—"}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>hasAccess</Text>
+              <Text style={styles.debugVal}>{String(accessInfo?.hasAccess ?? "—")}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>unlimited</Text>
+              <Text style={styles.debugVal}>{String(accessInfo?.unlimited ?? "—")}</Text>
+            </View>
+
+            <Text style={styles.debugSection}>Last Server Response</Text>
+            {lastBootstrap ? (
+              <>
+                <View style={[styles.debugRow, lastBootstrap.access !== accessInfo?.access && styles.debugMismatchRow]}>
+                  <Text style={styles.debugLabel}>access</Text>
+                  <Text style={styles.debugVal}>{lastBootstrap.access}</Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>trialLeft</Text>
+                  <Text style={styles.debugVal}>{lastBootstrap.trialLeft}</Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>promoUntil</Text>
+                  <Text style={styles.debugVal}>{lastBootstrap.promoUntil ?? "—"}</Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>paidUntil</Text>
+                  <Text style={styles.debugVal}>{lastBootstrap.paidUntil ?? "—"}</Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>hasAccess</Text>
+                  <Text style={styles.debugVal}>{String(lastBootstrap.hasAccess)}</Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>unlimited</Text>
+                  <Text style={styles.debugVal}>{String(lastBootstrap.unlimited)}</Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>isLoggedIn</Text>
+                  <Text style={styles.debugVal}>{String(lastBootstrap.isLoggedIn)}</Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>httpStatus</Text>
+                  <Text style={[styles.debugVal, lastBootstrap.httpStatus !== 200 && styles.debugError]}>
+                    {lastBootstrap.httpStatus}
+                  </Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>fetchedAt</Text>
+                  <Text style={styles.debugVal}>{lastBootstrap.fetchedAt.replace("T", " ").slice(0, 19)}</Text>
+                </View>
+                {lastBootstrap.error && (
+                  <View style={styles.debugRow}>
+                    <Text style={styles.debugLabel}>error</Text>
+                    <Text style={[styles.debugVal, styles.debugError]}>{lastBootstrap.error}</Text>
+                  </View>
+                )}
+                {lastBootstrap.access !== accessInfo?.access && (
+                  <Text style={styles.debugMismatchNote}>
+                    ⚠ server.access "{lastBootstrap.access}" ≠ local.access "{accessInfo?.access}"
+                  </Text>
+                )}
+              </>
+            ) : (
+              <Text style={styles.debugVal}>No bootstrap data yet</Text>
+            )}
+          </View>
+        )}
       </ScrollView>
     </ScreenWrapper>
   )
@@ -577,5 +673,63 @@ const styles = StyleSheet.create({
   promoFeedback: {
     fontSize: fontSize.sm,
     marginTop: spacing.sm,
+  },
+
+  // Debug panel
+  debugCard: {
+    backgroundColor: "#1a1a2e",
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.xxxl,
+    borderWidth: 1,
+    borderColor: "#e74c3c",
+  },
+  debugHeading: {
+    fontSize: fontSize.sm,
+    fontWeight: "700",
+    color: "#e74c3c",
+    marginBottom: spacing.sm,
+    letterSpacing: 0.5,
+  },
+  debugSection: {
+    fontSize: fontSize.xs,
+    fontWeight: "700",
+    color: "#aaaacc",
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  debugRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 2,
+  },
+  debugMismatchRow: {
+    backgroundColor: "#7c3a0044",
+    borderRadius: 4,
+    paddingHorizontal: 4,
+  },
+  debugLabel: {
+    fontSize: fontSize.xs,
+    color: "#8888aa",
+    fontFamily: "monospace",
+    flex: 1,
+  },
+  debugVal: {
+    fontSize: fontSize.xs,
+    color: "#e0e0ff",
+    fontFamily: "monospace",
+    flex: 2,
+    textAlign: "right",
+  },
+  debugError: {
+    color: "#e74c3c",
+  },
+  debugMismatchNote: {
+    fontSize: fontSize.xs,
+    color: "#f39c12",
+    marginTop: spacing.sm,
+    fontWeight: "600",
   },
 })

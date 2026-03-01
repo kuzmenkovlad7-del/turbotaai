@@ -77,10 +77,17 @@ const EMPTY_BOOTSTRAP: BootstrapData = {
   auto_renew: false,
 }
 
+/** Return shape for bootstrap — includes raw HTTP status for diagnostics */
+export type BootstrapResult = {
+  data: BootstrapData
+  httpStatus: number
+}
+
 /** Single call to get user info + access status (mobile-specific endpoint) */
-export async function bootstrap(): Promise<BootstrapData> {
+export async function bootstrap(): Promise<BootstrapResult> {
   const res = await apiFetch("/api/mobile/bootstrap")
-  return safeJson(res, { ...EMPTY_BOOTSTRAP, error: `HTTP ${res.status}` })
+  const data = await safeJson<BootstrapData>(res, { ...EMPTY_BOOTSTRAP, error: `HTTP ${res.status}` })
+  return { data, httpStatus: res.status }
 }
 
 /* ── History ── */
