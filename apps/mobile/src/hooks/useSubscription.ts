@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react"
 import { Platform, Alert, Linking } from "react-native"
-import { IAP_ENABLED, STORE_SAFE } from "@/constants/config"
+import { IAP_ENABLED, STORE_BUILD } from "@/constants/config"
 import { useAuth } from "@/hooks/useAuth"
 
 type SubState = {
@@ -99,10 +99,12 @@ export function useSubscription() {
     manageSubscription,
     iapEnabled: IAP_ENABLED,
     /**
-     * true when EXPO_PUBLIC_STORE_SAFE=true.
+     * true when EXPO_PUBLIC_STORE_BUILD=true (or legacy EXPO_PUBLIC_STORE_SAFE).
      * AccountScreen uses this to hide the external "Subscribe on web" CTA,
      * which is not permitted by App Store / Google Play guidelines.
+     * AccountScreen also applies an iOS Platform.OS guard as a belt-and-suspenders
+     * safety net so the CTA can never appear on iOS regardless of this flag.
      */
-    storeSafe: STORE_SAFE,
+    storeBuild: STORE_BUILD,
   }
 }
