@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Linking,
+  Platform,
 } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 import ScreenWrapper from "@/components/ScreenWrapper"
@@ -34,9 +35,15 @@ export default function AccountScreen() {
     restorePurchases,
     manageSubscription,
     iapEnabled,
-    storeSafe,
+    storeBuild,
     error: iapError,
   } = useSubscription()
+
+  // iOS App Store policy: external purchase CTAs are never permitted on iOS,
+  // regardless of the EXPO_PUBLIC_STORE_BUILD flag.  Apply as a belt-and-
+  // suspenders guard so the wrong flag cannot accidentally surface a
+  // non-compliant UI during App Store review.
+  const hideExternalCTA = storeBuild || Platform.OS === "ios"
 
   // Promo code state
   const [promoCode, setPromoCode] = useState("")
@@ -307,10 +314,12 @@ export default function AccountScreen() {
           )}
 
           {/* Subscribe CTAs for non-unlimited users.
-              Three modes, controlled by env flags:
-              1. iapEnabled=true  → native IAP buttons (Monthly / Yearly)
-              2. storeSafe=true   → store-safe info message, no external link
-              3. default (preview)→ "Subscribe on turbotaai.com" (QA only) */}
+              Three modes, controlled by env + platform:
+              1. iapEnabled=true     → native IAP buttons (Monthly / Yearly)
+              2. hideExternalCTA     → store-safe info notice, no external link
+                 (true when EXPO_PUBLIC_STORE_BUILD=true OR Platform.OS==="ios")
+              3. default (preview)   → "Subscribe on turbotaai.com" (QA only,
+                 Android non-store builds only) */}
           {showSubscribeCTA && (
             <View style={styles.actionSection}>
               {iapEnabled ? (
@@ -329,13 +338,13 @@ export default function AccountScreen() {
                     loading={purchasing}
                   />
                 </>
-              ) : storeSafe ? (
-                // Store-safe: no external purchase CTA (not permitted by store guidelines)
+              ) : hideExternalCTA ? (
+                // Store-build or iOS: no external purchase CTA (store guidelines)
                 <View style={styles.iapComingSoon}>
                   <Text style={styles.iapComingSoonText}>{t.accountIapSoon}</Text>
                 </View>
               ) : (
-                // Preview / QA mode only — opens external browser, not store-compliant
+                // Android preview / QA only — opens external browser
                 <Button
                   title={t.accountSubscribeWeb}
                   onPress={handleSubscribeWeb}
@@ -347,7 +356,7 @@ export default function AccountScreen() {
           )}
 
           {/* Restore purchases + Refresh access */}
-          <View style={[styles.actionSection, { marginTop: spacing.sm }]}>
+          <View style={[styles.actionSection, { marginTop: spacing.xs }]}>
             {iapEnabled && (
               <Button
                 title={t.accountRestorePurchases}

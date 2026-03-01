@@ -16,23 +16,35 @@ export const IAP_ENABLED: boolean =
   (extra.iapEnabled || process.env.EXPO_PUBLIC_IAP_ENABLED || "false") === "true"
 
 /**
- * Store-safe submission mode — set EXPO_PUBLIC_STORE_SAFE=true before submitting
- * to the App Store or Google Play.
+ * Store-build mode — set EXPO_PUBLIC_STORE_BUILD=true in any build that will
+ * be submitted to the App Store or Google Play.
  *
- * false (default / preview):
+ * false (default / dev / preview):
  *   Shows "Subscribe on turbotaai.com" button that opens an external browser.
- *   Convenient for QA and pre-launch testing but NOT allowed by store guidelines
- *   for digital-content purchases.
+ *   Convenient for QA and pre-launch testing but NOT compliant with store
+ *   guidelines for digital-content purchases.
  *
  * true (store submission):
- *   Hides the external-checkout CTA entirely.
- *   Shows a neutral "coming soon" info message instead.
- *   Promo code apply and Refresh Access continue to work in both modes.
- *   Full native IAP integration is still needed for production purchases
+ *   Hides the external-checkout CTA entirely and shows a neutral "coming soon"
+ *   notice instead.  Promo code apply and Refresh Access continue to work.
+ *   Full native IAP integration is still required for production purchases
  *   (see useSubscription TODO comments).
+ *
+ * Legacy alias EXPO_PUBLIC_STORE_SAFE is also accepted — either flag activates
+ * store-build behaviour.
+ *
+ * Note: AccountScreen applies an additional iOS safeguard via Platform.OS so
+ * the external CTA is never shown on iOS regardless of this flag.
  */
-export const STORE_SAFE: boolean =
-  (extra.storeSafe || process.env.EXPO_PUBLIC_STORE_SAFE || "false") === "true"
+export const STORE_BUILD: boolean =
+  (
+    extra.storeBuild || process.env.EXPO_PUBLIC_STORE_BUILD ||
+    extra.storeSafe  || process.env.EXPO_PUBLIC_STORE_SAFE  ||
+    "false"
+  ) === "true"
+
+/** @deprecated — use STORE_BUILD; kept so existing imports compile unchanged */
+export const STORE_SAFE = STORE_BUILD
 
 /** Debug mode: set EXPO_PUBLIC_DEBUG=true to show diagnostic overlays */
 export const DEBUG_ENABLED: boolean =

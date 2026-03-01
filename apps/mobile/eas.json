@@ -12,9 +12,23 @@
       },
       "env": {
         "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_STORE_BUILD": "false",
         "EXPO_PUBLIC_DEBUG": "false"
       }
     },
+
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_STORE_BUILD": "false",
+        "EXPO_PUBLIC_DEBUG": "false"
+      }
+    },
+
     "android-apk": {
       "android": {
         "buildType": "apk",
@@ -23,22 +37,54 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_STORE_BUILD": "false",
         "EXPO_PUBLIC_DEBUG": "false"
       }
     },
-    "preview": {
-      "distribution": "internal",
-      "ios": {
-        "simulator": false
+
+    "android-store-apk": {
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       },
+      "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_STORE_BUILD": "true",
         "EXPO_PUBLIC_DEBUG": "false"
       }
     },
-    "production": {
+
+    "production-ios": {
+      "ios": {
+        "buildConfiguration": "Release"
+      },
+      "distribution": "store",
       "env": {
         "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_STORE_BUILD": "true",
+        "EXPO_PUBLIC_DEBUG": "false"
+      }
+    },
+
+    "production-android": {
+      "android": {
+        "buildType": "app-bundle",
+        "gradleCommand": ":app:bundleRelease"
+      },
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_STORE_BUILD": "true",
+        "EXPO_PUBLIC_DEBUG": "false"
+      }
+    },
+
+    "production": {
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_STORE_BUILD": "true",
         "EXPO_PUBLIC_DEBUG": "false"
       }
     }
