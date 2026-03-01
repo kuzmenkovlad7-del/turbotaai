@@ -19,7 +19,7 @@ import { useT } from "@/hooks/useLanguage"
 import { useSubscription } from "@/hooks/useSubscription"
 import { redeemPromo, cancelAutoRenew, resumeAutoRenew } from "@/services/api"
 import { logEvent } from "@/services/analytics"
-import { API_BASE_URL, IAP_PRODUCTS } from "@/constants/config"
+import { API_BASE_URL, IAP_PRODUCTS, DEBUG_ENABLED } from "@/constants/config"
 import { LOCALE_LABELS, type Locale } from "@/constants/i18n"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
@@ -49,6 +49,13 @@ export default function AccountScreen() {
   const [promoCode, setPromoCode] = useState("")
   const [promoLoading, setPromoLoading] = useState(false)
   const [promoMsg, setPromoMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  // Debug diagnostics for EXPO_PUBLIC_DEBUG panel
+  const [lastPromoRedeem, setLastPromoRedeem] = useState<{
+    httpStatus: number
+    ok: boolean
+    error?: string
+    fetchedAt: string
+  } | null>(null)
 
   // Subscription action state
   const [actionLoading, setActionLoading] = useState(false)
@@ -98,6 +105,13 @@ export default function AccountScreen() {
     setPromoMsg(null)
     try {
       const result = await redeemPromo(code)
+      // Record diagnostics for the EXPO_PUBLIC_DEBUG panel regardless of outcome
+      setLastPromoRedeem({
+        httpStatus: result.httpStatus,
+        ok: result.ok,
+        error: result.ok ? undefined : (result.error || "unknown"),
+        fetchedAt: new Date().toISOString(),
+      })
       if (result.ok) {
         logEvent("subscription_started", { method: "promo" })
         setPromoMsg({ text: t.accountPromoSuccess, ok: true })
@@ -108,8 +122,11 @@ export default function AccountScreen() {
         if (result.promo_until) {
           setAccessFromPromo(result.promo_until)
         }
-        // Await server confirmation — spinner stays until the round-trip
-        // completes so the subscription box reflects the confirmed state.
+        // Force server confirmation — no debounce, no version guard bypass
+        // needed: the version is already at N+1 from setAccessFromPromo above,
+        // and runBootstrap snapshots that same value, so the guard will not
+        // discard this refresh unless a concurrent trial decrement fires
+        // (impossible since the user is now in promo mode).
         try { await refreshAccess() } catch {}
       } else {
         setPromoMsg({ text: result.error || "Invalid code", ok: false })
@@ -424,6 +441,31 @@ export default function AccountScreen() {
               </Text>
             )}
           </View>
+
+          {/* EXPO_PUBLIC_DEBUG diagnostics — only visible when DEBUG_ENABLED=true */}
+          {DEBUG_ENABLED && (
+            <View style={styles.debugBox}>
+              <Text style={styles.debugTitle}>🛠 Debug · Access state</Text>
+              <Text style={styles.debugRow} selectable>
+                {`access:    ${accessInfo?.access ?? "—"}\n`}
+                {`unlimited: ${accessInfo?.unlimited ?? false}\n`}
+                {`trialLeft: ${accessInfo?.trialLeft ?? "—"}\n`}
+                {`paidUntil: ${accessInfo?.paidUntil ?? "null"}\n`}
+                {`promoUntil:${accessInfo?.promoUntil ?? "null"}`}
+              </Text>
+              {lastPromoRedeem && (
+                <>
+                  <Text style={[styles.debugTitle, { marginTop: 8 }]}>📋 lastPromoRedeem</Text>
+                  <Text style={styles.debugRow} selectable>
+                    {`httpStatus: ${lastPromoRedeem.httpStatus}\n`}
+                    {`ok:         ${lastPromoRedeem.ok}\n`}
+                    {lastPromoRedeem.error ? `error:      ${lastPromoRedeem.error}\n` : ""}
+                    {`fetchedAt:  ${lastPromoRedeem.fetchedAt}`}
+                  </Text>
+                </>
+              )}
+            </View>
+          )}
         </View>
       </ScrollView>
     </ScreenWrapper>
@@ -577,5 +619,29 @@ const styles = StyleSheet.create({
   promoFeedback: {
     fontSize: fontSize.sm,
     marginTop: spacing.sm,
+  },
+
+  // EXPO_PUBLIC_DEBUG diagnostics panel
+  debugBox: {
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: "rgba(0,0,0,0.06)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  debugTitle: {
+    fontSize: fontSize.xs,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  debugRow: {
+    fontSize: fontSize.xs,
+    fontFamily: "monospace",
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
 })
