@@ -28,7 +28,11 @@ export type VideoPhase = "idle" | "listening" | "processing" | "speaking" | "err
 const SPEECH_DB = -35
 const SILENCE_DB = -45
 const SILENCE_AFTER_MS = 1500
-const MAX_REC_MS = 60_000
+// Hard fallback: force-submit the recording after this many ms regardless of
+// whether silence-detection (metering) fired. Android metering can silently
+// return -100 dBFS on some devices, making speechDetected always false and
+// leaving the session stuck in "listening" forever.
+const MAX_REC_MS = 9_000
 const POLL_MS = 150
 // Max wait for Audio.Recording.createAsync before releasing lock and retrying.
 // Android can hang here after an audio-session mode transition (record→play→record).
@@ -403,14 +407,13 @@ export function useVideoSession(
           } catch {}
         }, POLL_MS)
 
+        // Always submit the recording to STT when the hard timeout fires —
+        // even if metering never detected speech. STT will return an empty
+        // transcript in that case and the loop restarts. This prevents the
+        // session from freezing when Android metering is broken.
         s.maxTimer = setTimeout(() => {
-          if (s.speechDetected) {
-            s.runTurn()
-          } else {
-            grabRecording().then(() => {
-              if (s.mounted && s.active) s.startListen()
-            })
-          }
+          s.appendDiag("WARN: max record timeout — force stop")
+          s.runTurn()
         }, MAX_REC_MS)
       } catch (err: any) {
         if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
@@ -476,6 +479,8 @@ export function useVideoSession(
     if (!s.active) return
     s.processing = false
     s.preparing = false           // reset lock in case it was stuck
+    if (s.pollTimer)    { clearInterval(s.pollTimer); s.pollTimer = null }
+    if (s.maxTimer)     { clearTimeout(s.maxTimer);   s.maxTimer = null  }
     if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
     // Stop any stale recording left over from the failed turn.
     const rec = s.recording

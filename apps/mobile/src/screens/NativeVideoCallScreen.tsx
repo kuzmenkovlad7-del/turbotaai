@@ -206,7 +206,7 @@ export default function NativeVideoCallScreen() {
           ref={idleVideoRef}
           source={{ uri: avatarUri(meta.avatarNum, "idle") }}
           style={StyleSheet.absoluteFillObject}
-          resizeMode={ResizeMode.CONTAIN}
+          resizeMode={ResizeMode.COVER}
           isLooping
           shouldPlay={!isSpeaking && permGranted}
           isMuted
@@ -219,7 +219,7 @@ export default function NativeVideoCallScreen() {
           ref={speakingVideoRef}
           source={{ uri: avatarUri(meta.avatarNum, "speaking") }}
           style={[StyleSheet.absoluteFillObject, { opacity: isSpeaking ? 1 : 0 }]}
-          resizeMode={ResizeMode.CONTAIN}
+          resizeMode={ResizeMode.COVER}
           isLooping
           shouldPlay={isSpeaking}
           isMuted
@@ -348,7 +348,7 @@ const OVERLAY_HEIGHT = 280
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: colors.background,
   },
   centered: {
     alignItems: "center",
@@ -360,17 +360,17 @@ const styles = StyleSheet.create({
   // Video layer
   videoContainer: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: colors.background,
   },
   videoLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#000",
+    backgroundColor: colors.background,
     gap: spacing.md,
   },
   videoLoadingText: {
-    color: "rgba(255,255,255,0.7)",
+    color: colors.textSecondary,
     fontSize: fontSize.sm,
   },
   // Semi-transparent dark gradient at the bottom so text is legible over the avatar
