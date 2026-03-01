@@ -189,9 +189,25 @@ export async function POST(req: NextRequest) {
     }
 
     const { data: userData } = await sessionSb.auth.getUser()
-    const userId = userData?.user?.id ?? null
+    let userId = userData?.user?.id ?? null
 
     const admin = getSupabaseAdmin()
+
+    // Mobile clients send Authorization: Bearer <token> instead of Supabase
+    // session cookies.  If cookie-based auth returned no user, try the Bearer
+    // token so the account grant ("account:<userId>") is also updated — without
+    // this the promo only lands on the device grant and is invisible on web or
+    // other devices of the same user.
+    if (!userId) {
+      const authHeader = req.headers.get("authorization") || ""
+      const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim()
+      if (bearerToken) {
+        try {
+          const { data: bearerData } = await admin.auth.getUser(bearerToken)
+          userId = bearerData?.user?.id ?? null
+        } catch {}
+      }
+    }
 
     const guestHash = deviceUuid
     const accountHash = userId ? `${ACCOUNT_PREFIX}${userId}` : null

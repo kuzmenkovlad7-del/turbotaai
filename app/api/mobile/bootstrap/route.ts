@@ -12,14 +12,19 @@ export const dynamic = "force-dynamic"
  *   X-Device-Hash: <device_hash>
  *
  * Returns user info + access/subscription summary in one call.
- * This avoids the cookie-based auth that web uses.
+ * Uses the same dual-grant logic as the web (lib/server/access-summary.ts):
+ *   - device grant  → access_grants WHERE device_hash = <X-Device-Hash>
+ *   - account grant → access_grants WHERE device_hash = "account:<userId>"
+ * Both grants are looked up independently and their paid_until / promo_until
+ * are MERGED (later date wins) so any access granted on any device/platform
+ * is reflected immediately.  Trial counter comes from the device grant.
  */
 
 function env(n: string) {
   return (process.env[n] || "").trim()
 }
 
-function admin() {
+function makeAdmin() {
   const url = env("NEXT_PUBLIC_SUPABASE_URL") || env("SUPABASE_URL")
   const key = env("SUPABASE_SERVICE_ROLE_KEY") || env("SUPABASE_SERVICE_KEY")
   if (!url || !key) throw new Error("Missing Supabase config")
@@ -28,20 +33,46 @@ function admin() {
   })
 }
 
-function isFuture(v: any): boolean {
-  if (!v) return false
+function toDateOrNull(v: any): Date | null {
+  if (!v) return null
   const d = new Date(String(v))
-  return !isNaN(d.getTime()) && d.getTime() > Date.now()
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function isFuture(v: any): boolean {
+  const d = toDateOrNull(v)
+  return !!d && d.getTime() > Date.now()
+}
+
+/** Return the ISO string for whichever date is later (null if both null). */
+function laterIso(a: any, b: any): string | null {
+  const da = toDateOrNull(a)
+  const db = toDateOrNull(b)
+  if (!da && !db) return null
+  if (da && !db) return da.toISOString()
+  if (!da && db) return db.toISOString()
+  return (da!.getTime() >= db!.getTime() ? da! : db!).toISOString()
+}
+
+/** Find the most-recently-updated grant by the `device_hash` column key. */
+async function findGrantByKey(sb: any, key: string): Promise<any | null> {
+  const { data } = await sb
+    .from("access_grants")
+    .select("*")
+    .eq("device_hash", key)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+  return data?.[0] ?? null
 }
 
 export async function GET(req: NextRequest) {
   const noCache = { "cache-control": "no-store, max-age=0" }
 
-  // 1. Extract auth token
+  // 1. Extract Bearer token
   const authHeader = req.headers.get("authorization") || ""
   const token = authHeader.replace(/^Bearer\s+/i, "").trim()
 
-  // 2. Extract device hash
+  // 2. Extract device hash (required)
   const deviceHash = req.headers.get("x-device-hash") || ""
   if (!deviceHash) {
     return NextResponse.json(
@@ -50,57 +81,43 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  const sb = admin()
+  const sb = makeAdmin()
   let userId: string | null = null
   let email: string | null = null
 
-  // 3. Resolve user from token (optional — guest access works too)
+  // 3. Resolve user from Bearer token (optional — guest access works too)
   if (token) {
     try {
       const { data } = await sb.auth.getUser(token)
       userId = data?.user?.id ?? null
       email = (data?.user?.email as string) ?? null
     } catch {
-      // Invalid token — treat as guest
+      // Invalid / expired token — treat as guest
     }
   }
 
-  // 4. Find access grant
-  let grant: any = null
+  const TRIAL_DEFAULT = Math.max(1, Math.floor(Number(process.env.TRIAL_QUESTIONS_LIMIT || "5") || 5))
+  const now = new Date().toISOString()
+  // Account key mirrors the web's convention (lib/server/access-summary.ts)
+  const accountKey = userId ? `account:${userId}` : null
 
-  if (userId) {
-    // Try by user_id first
-    const { data } = await sb
-      .from("access_grants")
-      .select("*")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-    grant = data?.[0] ?? null
-  }
+  // 4. Fetch both grants in parallel
+  const [deviceGrant, accountGrant] = await Promise.all([
+    findGrantByKey(sb, deviceHash),
+    accountKey ? findGrantByKey(sb, accountKey) : Promise.resolve(null),
+  ])
 
-  if (!grant) {
-    // Fall back to device_hash
-    const { data } = await sb
-      .from("access_grants")
-      .select("*")
-      .eq("device_hash", deviceHash)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-    grant = data?.[0] ?? null
-  }
-
-  // 5. If logged in but no grant exists, create one
-  if (!grant && userId) {
-    const trialLimit = Number(process.env.TRIAL_QUESTIONS_LIMIT ?? "5")
-    const now = new Date().toISOString()
+  // 5. Lazily create missing grants
+  //    Device grant: full trial for brand-new device
+  let dg = deviceGrant
+  if (!dg) {
     const { data } = await sb
       .from("access_grants")
       .insert({
         id: crypto.randomUUID(),
         user_id: userId,
         device_hash: deviceHash,
-        trial_questions_left: trialLimit,
+        trial_questions_left: TRIAL_DEFAULT,
         paid_until: null,
         promo_until: null,
         created_at: now,
@@ -108,16 +125,49 @@ export async function GET(req: NextRequest) {
       })
       .select("*")
       .single()
-    grant = data
+    dg = data ?? await findGrantByKey(sb, deviceHash)
   }
 
-  // 6. Build response
-  const hasPaid = isFuture(grant?.paid_until)
-  const hasPromo = isFuture(grant?.promo_until)
-  const trialLeft = Number(grant?.trial_questions_left ?? 0)
-  const hasAccess = hasPaid || hasPromo || trialLeft > 0
+  //    Account grant: copy trial count from device grant so used questions carry over
+  let ag = accountGrant
+  if (!ag && accountKey && userId) {
+    const trialForAccount = Number(dg?.trial_questions_left ?? TRIAL_DEFAULT)
+    const { data } = await sb
+      .from("access_grants")
+      .insert({
+        id: crypto.randomUUID(),
+        user_id: userId,
+        device_hash: accountKey,
+        trial_questions_left: trialForAccount,
+        paid_until: dg?.paid_until ?? null,
+        promo_until: dg?.promo_until ?? null,
+        created_at: now,
+        updated_at: now,
+      })
+      .select("*")
+      .single()
+    ag = data ?? await findGrantByKey(sb, accountKey)
+  }
+
+  // 6. Merge: take the best (later) paid/promo date from both grants.
+  //    This ensures any access applied via web (account grant) or on this
+  //    device (device grant) is immediately visible on mobile.
+  const mergedPaid  = laterIso(dg?.paid_until  ?? null, ag?.paid_until  ?? null)
+  const mergedPromo = laterIso(dg?.promo_until ?? null, ag?.promo_until ?? null)
+
+  // Trial counter lives on the device grant (same convention as web).
+  const trialLeft = Math.max(0, Number(dg?.trial_questions_left ?? TRIAL_DEFAULT))
+
+  const hasPaid   = isFuture(mergedPaid)
+  const hasPromo  = isFuture(mergedPromo)
+  const unlimited = hasPaid || hasPromo
+  const hasAccess = unlimited || trialLeft > 0
 
   const access = hasPaid ? "paid" : hasPromo ? "promo" : trialLeft > 0 ? "trial" : "none"
+
+  // subscription_status / auto_renew: prefer account grant if present
+  const subscription_status = (ag ?? dg)?.status ?? null
+  const auto_renew = !!((ag ?? dg)?.auto_renew ?? false)
 
   return NextResponse.json(
     {
@@ -126,14 +176,25 @@ export async function GET(req: NextRequest) {
       userId,
       email,
       deviceHash,
+
       access,
       hasAccess,
-      unlimited: hasPaid || hasPromo,
+      unlimited,
+
+      // camelCase aliases used by useAuth.ts / AccountScreen
+      hasPaid,
+      hasPromo,
+
       trial_questions_left: trialLeft,
-      paid_until: grant?.paid_until ?? null,
-      promo_until: grant?.promo_until ?? null,
-      subscription_status: grant?.status ?? null,
-      auto_renew: !!grant?.auto_renew,
+      questionsLeft: trialLeft,
+
+      paid_until:  mergedPaid,
+      paidUntil:   mergedPaid,
+      promo_until: mergedPromo,
+      promoUntil:  mergedPromo,
+
+      subscription_status,
+      auto_renew,
     },
     { status: 200, headers: noCache },
   )

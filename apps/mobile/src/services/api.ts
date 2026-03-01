@@ -274,13 +274,14 @@ export async function validateReceipt(receipt: {
 
 export async function redeemPromo(
   code: string,
-): Promise<{ ok: boolean; promo_until?: string; error?: string }> {
+): Promise<{ ok: boolean; promo_until?: string; error?: string; httpStatus: number }> {
   const res = await apiFetch("/api/billing/promo/redeem", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code }),
   })
-  return safeJson(res, { ok: false, error: `HTTP ${res.status}` })
+  const data = await safeJson(res, { ok: false, error: `HTTP ${res.status}` })
+  return { ...data, httpStatus: res.status }
 }
 
 /* ── Subscription management ── */

@@ -26,7 +26,7 @@ import { colors, fontSize, spacing, radii } from "@/constants/theme"
 const LOCALES: Locale[] = ["en", "uk", "ru"]
 
 export default function AccountScreen() {
-  const { user, accessInfo, lastBootstrap, logout, refreshAccess, setAccessFromPromo } = useAuth()
+  const { user, accessInfo, logout, refreshAccess, setAccessFromPromo } = useAuth()
   const { t, locale, setLocale } = useT()
   const {
     purchasing,
@@ -49,6 +49,13 @@ export default function AccountScreen() {
   const [promoCode, setPromoCode] = useState("")
   const [promoLoading, setPromoLoading] = useState(false)
   const [promoMsg, setPromoMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  // Debug diagnostics for EXPO_PUBLIC_DEBUG panel
+  const [lastPromoRedeem, setLastPromoRedeem] = useState<{
+    httpStatus: number
+    ok: boolean
+    error?: string
+    fetchedAt: string
+  } | null>(null)
 
   // Subscription action state
   const [actionLoading, setActionLoading] = useState(false)
@@ -98,6 +105,13 @@ export default function AccountScreen() {
     setPromoMsg(null)
     try {
       const result = await redeemPromo(code)
+      // Record diagnostics for the EXPO_PUBLIC_DEBUG panel regardless of outcome
+      setLastPromoRedeem({
+        httpStatus: result.httpStatus,
+        ok: result.ok,
+        error: result.ok ? undefined : (result.error || "unknown"),
+        fetchedAt: new Date().toISOString(),
+      })
       if (result.ok) {
         logEvent("subscription_started", { method: "promo" })
         setPromoMsg({ text: t.accountPromoSuccess, ok: true })
@@ -108,8 +122,11 @@ export default function AccountScreen() {
         if (result.promo_until) {
           setAccessFromPromo(result.promo_until)
         }
-        // Await server confirmation — spinner stays until the round-trip
-        // completes so the subscription box reflects the confirmed state.
+        // Force server confirmation — no debounce, no version guard bypass
+        // needed: the version is already at N+1 from setAccessFromPromo above,
+        // and runBootstrap snapshots that same value, so the guard will not
+        // discard this refresh unless a concurrent trial decrement fires
+        // (impossible since the user is now in promo mode).
         try { await refreshAccess() } catch {}
       } else {
         setPromoMsg({ text: result.error || "Invalid code", ok: false })
@@ -424,103 +441,32 @@ export default function AccountScreen() {
               </Text>
             )}
           </View>
+
+          {/* EXPO_PUBLIC_DEBUG diagnostics — only visible when DEBUG_ENABLED=true */}
+          {DEBUG_ENABLED && (
+            <View style={styles.debugBox}>
+              <Text style={styles.debugTitle}>🛠 Debug · Access state</Text>
+              <Text style={styles.debugRow} selectable>
+                {`access:    ${accessInfo?.access ?? "—"}\n`}
+                {`unlimited: ${accessInfo?.unlimited ?? false}\n`}
+                {`trialLeft: ${accessInfo?.trialLeft ?? "—"}\n`}
+                {`paidUntil: ${accessInfo?.paidUntil ?? "null"}\n`}
+                {`promoUntil:${accessInfo?.promoUntil ?? "null"}`}
+              </Text>
+              {lastPromoRedeem && (
+                <>
+                  <Text style={[styles.debugTitle, { marginTop: 8 }]}>📋 lastPromoRedeem</Text>
+                  <Text style={styles.debugRow} selectable>
+                    {`httpStatus: ${lastPromoRedeem.httpStatus}\n`}
+                    {`ok:         ${lastPromoRedeem.ok}\n`}
+                    {lastPromoRedeem.error ? `error:      ${lastPromoRedeem.error}\n` : ""}
+                    {`fetchedAt:  ${lastPromoRedeem.fetchedAt}`}
+                  </Text>
+                </>
+              )}
+            </View>
+          )}
         </View>
-
-        {/* ── Debug panel — visible only when EXPO_PUBLIC_DEBUG=true ── */}
-        {DEBUG_ENABLED && (
-          <View style={styles.debugCard}>
-            <Text style={styles.debugHeading}>Debug — Access State</Text>
-
-            <Text style={styles.debugSection}>Network</Text>
-            <View style={styles.debugRow}>
-              <Text style={styles.debugLabel}>api_base</Text>
-              <Text style={styles.debugVal} numberOfLines={1}>{API_BASE_URL || "(not set)"}</Text>
-            </View>
-
-            <Text style={styles.debugSection}>Local (in-memory)</Text>
-            <View style={styles.debugRow}>
-              <Text style={styles.debugLabel}>access</Text>
-              <Text style={styles.debugVal}>{accessInfo?.access ?? "—"}</Text>
-            </View>
-            <View style={styles.debugRow}>
-              <Text style={styles.debugLabel}>trialLeft</Text>
-              <Text style={styles.debugVal}>{accessInfo?.trialLeft ?? "—"}</Text>
-            </View>
-            <View style={styles.debugRow}>
-              <Text style={styles.debugLabel}>promoUntil</Text>
-              <Text style={styles.debugVal}>{accessInfo?.promoUntil ?? "—"}</Text>
-            </View>
-            <View style={styles.debugRow}>
-              <Text style={styles.debugLabel}>paidUntil</Text>
-              <Text style={styles.debugVal}>{accessInfo?.paidUntil ?? "—"}</Text>
-            </View>
-            <View style={styles.debugRow}>
-              <Text style={styles.debugLabel}>hasAccess</Text>
-              <Text style={styles.debugVal}>{String(accessInfo?.hasAccess ?? "—")}</Text>
-            </View>
-            <View style={styles.debugRow}>
-              <Text style={styles.debugLabel}>unlimited</Text>
-              <Text style={styles.debugVal}>{String(accessInfo?.unlimited ?? "—")}</Text>
-            </View>
-
-            <Text style={styles.debugSection}>Last Server Response</Text>
-            {lastBootstrap ? (
-              <>
-                <View style={[styles.debugRow, lastBootstrap.access !== accessInfo?.access && styles.debugMismatchRow]}>
-                  <Text style={styles.debugLabel}>access</Text>
-                  <Text style={styles.debugVal}>{lastBootstrap.access}</Text>
-                </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>trialLeft</Text>
-                  <Text style={styles.debugVal}>{lastBootstrap.trialLeft}</Text>
-                </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>promoUntil</Text>
-                  <Text style={styles.debugVal}>{lastBootstrap.promoUntil ?? "—"}</Text>
-                </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>paidUntil</Text>
-                  <Text style={styles.debugVal}>{lastBootstrap.paidUntil ?? "—"}</Text>
-                </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>hasAccess</Text>
-                  <Text style={styles.debugVal}>{String(lastBootstrap.hasAccess)}</Text>
-                </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>unlimited</Text>
-                  <Text style={styles.debugVal}>{String(lastBootstrap.unlimited)}</Text>
-                </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>isLoggedIn</Text>
-                  <Text style={styles.debugVal}>{String(lastBootstrap.isLoggedIn)}</Text>
-                </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>httpStatus</Text>
-                  <Text style={[styles.debugVal, lastBootstrap.httpStatus !== 200 && styles.debugError]}>
-                    {lastBootstrap.httpStatus}
-                  </Text>
-                </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>fetchedAt</Text>
-                  <Text style={styles.debugVal}>{lastBootstrap.fetchedAt.replace("T", " ").slice(0, 19)}</Text>
-                </View>
-                {lastBootstrap.error && (
-                  <View style={styles.debugRow}>
-                    <Text style={styles.debugLabel}>error</Text>
-                    <Text style={[styles.debugVal, styles.debugError]}>{lastBootstrap.error}</Text>
-                  </View>
-                )}
-                {lastBootstrap.access !== accessInfo?.access && (
-                  <Text style={styles.debugMismatchNote}>
-                    ⚠ server.access "{lastBootstrap.access}" ≠ local.access "{accessInfo?.access}"
-                  </Text>
-                )}
-              </>
-            ) : (
-              <Text style={styles.debugVal}>No bootstrap data yet</Text>
-            )}
-          </View>
-        )}
       </ScrollView>
     </ScreenWrapper>
   )
@@ -675,61 +621,27 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
 
-  // Debug panel
-  debugCard: {
-    backgroundColor: "#1a1a2e",
+  // EXPO_PUBLIC_DEBUG diagnostics panel
+  debugBox: {
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: "rgba(0,0,0,0.06)",
     borderRadius: radii.md,
-    padding: spacing.lg,
-    marginBottom: spacing.xxxl,
     borderWidth: 1,
-    borderColor: "#e74c3c",
+    borderColor: colors.border,
   },
-  debugHeading: {
-    fontSize: fontSize.sm,
-    fontWeight: "700",
-    color: "#e74c3c",
-    marginBottom: spacing.sm,
-    letterSpacing: 0.5,
-  },
-  debugSection: {
+  debugTitle: {
     fontSize: fontSize.xs,
     fontWeight: "700",
-    color: "#aaaacc",
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
+    color: colors.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   debugRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 2,
-  },
-  debugMismatchRow: {
-    backgroundColor: "#7c3a0044",
-    borderRadius: 4,
-    paddingHorizontal: 4,
-  },
-  debugLabel: {
     fontSize: fontSize.xs,
-    color: "#8888aa",
     fontFamily: "monospace",
-    flex: 1,
-  },
-  debugVal: {
-    fontSize: fontSize.xs,
-    color: "#e0e0ff",
-    fontFamily: "monospace",
-    flex: 2,
-    textAlign: "right",
-  },
-  debugError: {
-    color: "#e74c3c",
-  },
-  debugMismatchNote: {
-    fontSize: fontSize.xs,
-    color: "#f39c12",
-    marginTop: spacing.sm,
-    fontWeight: "600",
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
 })
