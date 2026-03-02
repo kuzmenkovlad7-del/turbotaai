@@ -77,7 +77,6 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [isSending, setIsSending] = useState(false)
-  const [thinkingElapsed, setThinkingElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [keyboardOffset, setKeyboardOffset] = useState(0)
 
@@ -90,22 +89,9 @@ export default function AIChatDialog({ isOpen, onClose, webhookUrl }: Props) {
       setInput("")
       setError(null)
       setIsSending(false)
-      setThinkingElapsed(0)
       setKeyboardOffset(0)
     }
   }, [isOpen])
-
-  // Seconds counter during thinking — so users see it's working, not frozen
-  useEffect(() => {
-    if (!isSending) {
-      setThinkingElapsed(0)
-      return
-    }
-    const id = window.setInterval(() => {
-      setThinkingElapsed((s: number) => s + 1)
-    }, 1000)
-    return () => window.clearInterval(id)
-  }, [isSending])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -318,7 +304,6 @@ if (res.status === 402) {
                   </div>
                 ))}
 
-                {/* Thinking indicator: shows "Обдумываю... Xs" while waiting for AI reply */}
                 {isSending && (
                   <div className="flex justify-start">
                     <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-indigo-50 px-3.5 py-2.5 text-xs text-indigo-700 shadow-sm">
