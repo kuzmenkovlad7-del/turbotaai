@@ -75,18 +75,17 @@ export async function POST(request: NextRequest) {
     const user = userId ?? `guest:${sessionId}`
 
     // Gender normalization: resolve from any frontend field, never "unknown"
-    const genderNorm = normalizeGender(body?.gender ?? body?.roleGender ?? body?.assistantGender)
-    const characterId = (typeof body?.characterId === "string" && body.characterId.trim()) ? body.characterId.trim() : null
+    const characterId = (typeof body?.characterId === "string" && body.characterId.trim())
+      ? body.characterId.trim()
+      : "mia"
+    const rawGender = normalizeGender(body?.gender ?? body?.roleGender ?? body?.assistantGender)
+    const genderNorm: "male" | "female" = rawGender ?? (characterId === "leo" || characterId === "alex" ? "male" : "female")
     const voiceId = (typeof body?.voiceId === "string" && body.voiceId.trim()) ? body.voiceId.trim() : null
     const voiceLanguage = (typeof body?.voiceLanguage === "string" && body.voiceLanguage.trim())
       ? body.voiceLanguage.trim()
       : (typeof body?.language === "string" && body.language.trim()) ? body.language.trim() : null
 
-    // Diagnostics (warn-only)
     if (mode === "voice" || mode === "video") {
-      if (genderNorm === null) {
-        console.warn(`[turbotaai-agent] mode=${mode} but gender resolved to null. raw: gender=${body?.gender}, roleGender=${body?.roleGender}, assistantGender=${body?.assistantGender}`)
-      }
       console.debug(`[turbotaai-agent] mode=${mode} gender=${genderNorm} characterId=${characterId} voiceId=${voiceId}`)
     }
 

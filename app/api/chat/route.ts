@@ -101,18 +101,17 @@ export async function POST(request: NextRequest) {
     const mode = String(requestData?.mode ?? "chat")
 
     // Gender normalization: resolve from any frontend field, never "unknown"
-    const genderNorm = normalizeGender(requestData?.gender ?? requestData?.roleGender ?? requestData?.assistantGender)
-    const characterId = (typeof requestData?.characterId === "string" && requestData.characterId.trim()) ? requestData.characterId.trim() : null
+    const characterId = (typeof requestData?.characterId === "string" && requestData.characterId.trim())
+      ? requestData.characterId.trim()
+      : "mia"
+    const rawGender = normalizeGender(requestData?.gender ?? requestData?.roleGender ?? requestData?.assistantGender)
+    const genderNorm: "male" | "female" = rawGender ?? (characterId === "leo" || characterId === "alex" ? "male" : "female")
     const voiceId = (typeof requestData?.voiceId === "string" && requestData.voiceId.trim()) ? requestData.voiceId.trim() : null
     const voiceLanguage = (typeof requestData?.voiceLanguage === "string" && requestData.voiceLanguage.trim())
       ? requestData.voiceLanguage.trim()
       : (typeof requestData?.language === "string" && requestData.language.trim()) ? requestData.language.trim() : null
 
-    // Diagnostics (warn-only)
     if (mode === "voice" || mode === "video") {
-      if (genderNorm === null) {
-        console.warn(`[chat] mode=${mode} but gender resolved to null. raw: gender=${requestData?.gender}, roleGender=${requestData?.roleGender}, assistantGender=${requestData?.assistantGender}`)
-      }
       console.debug(`[chat] mode=${mode} gender=${genderNorm} characterId=${characterId} voiceId=${voiceId}`)
     }
 
