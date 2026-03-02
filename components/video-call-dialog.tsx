@@ -458,7 +458,6 @@ export default function VideoCallDialog({
   const [activityStatus, setActivityStatus] = useState<
     "listening" | "thinking" | "speaking"
   >("listening")
-  const [thinkingElapsed, setThinkingElapsed] = useState(0)
   const [speechError, setSpeechError] = useState<string | null>(null)
   // Per-turn timing (ms) shown in debug panel (activate with ?debug=1)
   const [lastTurnMs, setLastTurnMs] = useState<{ stt: number; agent: number; tts: number } | null>(null)
@@ -628,16 +627,6 @@ export default function VideoCallDialog({
   useEffect(() => {
     isAiSpeakingRef.current = isAiSpeaking
   }, [isAiSpeaking])
-
-  // Elapsed-seconds counter while AI is thinking — confirms the app isn't frozen
-  useEffect(() => {
-    if (activityStatus !== "thinking") {
-      setThinkingElapsed(0)
-      return
-    }
-    const id = window.setInterval(() => setThinkingElapsed((s) => s + 1), 1000)
-    return () => window.clearInterval(id)
-  }, [activityStatus])
 
   // Auto-scroll chat panel to the bottom whenever messages or interim text change
   useEffect(() => {
