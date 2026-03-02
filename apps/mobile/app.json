@@ -17,6 +17,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.turbotaai.app",
       "buildNumber": "1",
+      "usesNonExemptEncryption": false,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "TurbotaAI uses your microphone for real-time voice and video calls with your AI assistant.",
         "NSCameraUsageDescription": "TurbotaAI uses your camera for video calls with your AI assistant."
@@ -35,8 +36,7 @@
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.CAMERA"
+        "com.android.vending.BILLING"
       ],
       "runtimeVersion": "1.0.0"
     },
@@ -48,6 +48,12 @@
         "expo-av",
         {
           "microphonePermission": "TurbotaAI uses your microphone for real-time voice calls with your AI assistant."
+        }
+      ],
+      [
+        "react-native-iap",
+        {
+          "paymentProvider": "both"
         }
       ]
     ],

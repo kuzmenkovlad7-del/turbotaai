@@ -157,6 +157,7 @@ export default function ChatScreen() {
         userId: user?.id || null,
         sessionId: sessionIdRef.current,
         email: user?.email,
+        characterId: "mia",
       })
       const data = await api.sendMessage(payload)
 

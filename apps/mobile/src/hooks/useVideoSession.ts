@@ -212,6 +212,7 @@ export function useVideoSession(
         setTranscript(text)
 
         // 2. Agent — mode:"video" with character context, full Chat-compatible payload
+        // Use avatarSlug as characterId (slug form: "mia"/"alex"/"leo") — matches WEB
         s.appendDiag("AGT → /api/turbotaai-agent")
         const payload = await buildMessagePayload({
           query: text,
@@ -221,7 +222,7 @@ export function useVideoSession(
           sessionId: s.sessionId,
           email: user?.email,
           gender,
-          characterId,
+          characterId: avatarSlug,
           avatarSlug,
         })
         const agentData = await sendMessage(payload)
