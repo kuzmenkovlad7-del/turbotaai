@@ -165,10 +165,12 @@ export type AgentResponse = {
   paymentRequired?: boolean
 }
 
-/** Payload contract for every webhook message */
+/** Payload contract for every webhook message — must match WEB /api/turbotaai-agent */
 export type MessagePayload = {
   query: string
   language: string
+  /** Mirror of language for voice/TTS routing (same value on mobile — no separate picker) */
+  voiceLanguage?: string
   mode: "chat" | "voice" | "video"
   userId: string | null
   sessionId: string
@@ -177,7 +179,13 @@ export type MessagePayload = {
   timestamp: string
   user?: string
   email?: string
-  gender?: string
+  /** Resolved gender — "female" | "male", never undefined/unknown */
+  gender?: "female" | "male"
+  /** Alias for gender forwarded to n8n role-selector node */
+  roleGender?: "female" | "male"
+  /** Alias for gender forwarded to n8n assistant-selector node */
+  assistantGender?: "female" | "male"
+  /** Slug-form character ID matching WEB: "mia" | "leo" | "alex" (default "mia") */
   characterId?: string
   avatarSlug?: string
 }
@@ -217,8 +225,11 @@ export async function sendMessage(payload: MessagePayload): Promise<AgentRespons
       user: payload.user || undefined,
       email: payload.email || undefined,
       gender: payload.gender || undefined,
+      roleGender: payload.roleGender || undefined,
+      assistantGender: payload.assistantGender || undefined,
       characterId: payload.characterId || undefined,
       avatarSlug: payload.avatarSlug || undefined,
+      voiceLanguage: payload.voiceLanguage || undefined,
     }),
   })
   const data = await safeJson(res, { ok: false, error: `HTTP ${res.status}` } as AgentResponse)

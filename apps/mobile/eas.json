@@ -61,7 +61,7 @@
       },
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_IAP_ENABLED": "true",
         "EXPO_PUBLIC_STORE_BUILD": "true",
         "EXPO_PUBLIC_DEBUG": "false"
       }
@@ -74,7 +74,7 @@
       },
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_IAP_ENABLED": "true",
         "EXPO_PUBLIC_STORE_BUILD": "true",
         "EXPO_PUBLIC_DEBUG": "false"
       }
@@ -83,7 +83,7 @@
     "production": {
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_IAP_ENABLED": "false",
+        "EXPO_PUBLIC_IAP_ENABLED": "true",
         "EXPO_PUBLIC_STORE_BUILD": "true",
         "EXPO_PUBLIC_DEBUG": "false"
       }

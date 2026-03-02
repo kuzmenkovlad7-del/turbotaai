@@ -246,6 +246,7 @@ export function useVoiceSession(
         setTranscript(text)
 
         // 2. Agent — use same full payload as Chat (userId, sessionId, deviceId, etc.)
+        // characterId defaults to "mia" for voice (no character selector in voice mode)
         s.appendDiag("AGT → /api/turbotaai-agent")
         const payload = await buildMessagePayload({
           query: text,
@@ -255,6 +256,7 @@ export function useVoiceSession(
           sessionId: s.sessionId,
           email: s.user?.email,
           gender,
+          characterId: "mia",
         })
         const agentData = await sendMessage(payload)
         s.appendDiag(`AGT ← ok=${agentData.ok ?? "?"} pay=${!!agentData.paymentRequired}`)
