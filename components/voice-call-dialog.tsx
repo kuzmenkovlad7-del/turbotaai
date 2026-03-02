@@ -1013,6 +1013,10 @@ export default function VoiceCallDialog({
           language: agentLang,
           email: effectiveEmail,
           mode: "voice",
+          // Voice has no character-selection UI; default to "mia" (female).
+          characterId: "mia",
+          assistantGender: voiceGenderRef.current,
+          roleGender: voiceGenderRef.current,
           gender: voiceGenderRef.current,
           voiceLanguage: voiceLangCode,
           sessionId: callSessionIdRef.current ?? undefined,
