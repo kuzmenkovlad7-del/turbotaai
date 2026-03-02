@@ -41,7 +41,7 @@ interface AICharacter {
 }
 
 /** Bump this when avatar videos are replaced to bust Vercel CDN cache */
-const AVATAR_VER = "v2"
+const AVATAR_VER = "v4"
 
 const AI_CHARACTERS: AICharacter[] = [
   {
