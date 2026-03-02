@@ -324,7 +324,7 @@ if (res.status === 402) {
                     <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-indigo-50 px-3.5 py-2.5 text-xs text-indigo-700 shadow-sm">
                       <Loader2 className="h-3 w-3 animate-spin shrink-0" />
                       <span>
-                        {t("Thinking")}{thinkingElapsed > 0 ? ` ${thinkingElapsed}с…` : "…"}
+                        {t("Thinking")}…
                       </span>
                     </div>
                   </div>

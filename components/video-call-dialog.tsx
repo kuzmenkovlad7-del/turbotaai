@@ -2219,7 +2219,7 @@ if (res.status === 402) {
                     ) : activityStatus === "thinking" ? (
                       <>
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                        {t("Thinking...")}{thinkingElapsed > 0 ? ` ${thinkingElapsed}с` : ""}
+                        {t("Thinking...")}
                       </>
                     ) : (
                       <>
