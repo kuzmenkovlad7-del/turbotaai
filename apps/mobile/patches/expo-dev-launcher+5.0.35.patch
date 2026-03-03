@@ -1,6 +1,6 @@
 diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/settings.gradle.kts b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/settings.gradle.kts
 new file mode 100644
-index 0000000..1a2b3c4 100644
+index 0000000..1111111
 --- /dev/null
 +++ b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/settings.gradle.kts
 @@ -0,0 +1,9 @@
@@ -8,9 +8,7 @@ index 0000000..1a2b3c4 100644
 +// plugins-artifacts.gradle.org (CDN that backs plugins.gradle.org/m2)
 +// which may be blocked in restricted CI/build environments.
 +pluginManagement {
-+    repositories {
-+        mavenCentral()
-+        google()
-+        gradlePluginPortal()
-+    }
++  repositories {
++    mavenCentral()
++  }
 +}
