@@ -117,7 +117,7 @@ export function useSubscription() {
       const purchases = await RNIap.getAvailablePurchases()
 
       // Validate the most recent purchase for this app
-      const latest = purchases.find(p =>
+      const latest = purchases.find((p: any) =>
         p.productId === "com.turbotaai.monthly" ||
         p.productId === "com.turbotaai.yearly"
       )
