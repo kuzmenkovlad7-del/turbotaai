@@ -272,7 +272,8 @@ export async function validateReceipt(receipt: {
   platform: "ios" | "android"
   productId: string
   transactionReceipt: string
-}): Promise<{ ok: boolean; message?: string; error?: string }> {
+  transactionId?: string
+}): Promise<{ ok: boolean; paid_until?: string; platform?: string; productId?: string; error?: string }> {
   const res = await apiFetch("/api/billing/iap/validate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

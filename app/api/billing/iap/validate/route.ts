@@ -23,29 +23,26 @@ function sbAdmin() {
 
 // ── Date helper ────────────────────────────────────────────────────────────
 
-function toDateOrNull(v: any): Date | null {
+function toDateOrNull(v: unknown): Date | null {
   if (!v) return null
   const d = new Date(String(v))
   return Number.isNaN(d.getTime()) ? null : d
 }
 
-// ── Plan duration ──────────────────────────────────────────────────────────
+// ── Access grant — mirrors wayforpay webhook logic ─────────────────────────
 
-function planDays(productId: string): number {
-  return productId.includes("yearly") ? 365 : 31
-}
-
-// ── Access grant (mirrors orders/status logic) ─────────────────────────────
-
-async function extendGrantForDevice(
+/**
+ * Extend (or create) an access_grants row using the exact store-reported expiry.
+ * Idempotent: skips the write if paid_until already covers expiresMs.
+ */
+async function extendPaidUntil(
   admin: ReturnType<typeof sbAdmin>,
   deviceHash: string,
-  productId: string,
+  expiresMs: number,
   userId: string | null,
-) {
-  const now = new Date()
-  const nowIso = now.toISOString()
-  const days = planDays(productId)
+): Promise<string> {
+  const nowIso = new Date().toISOString()
+  const paidUntil = new Date(expiresMs).toISOString()
 
   const { data: rows } = await admin
     .from("access_grants")
@@ -55,17 +52,16 @@ async function extendGrantForDevice(
     .limit(1)
 
   const existing = Array.isArray(rows) ? rows[0] : null
-  const curPaid = toDateOrNull(existing?.paid_until)
-  const target = new Date(now)
-  target.setUTCDate(target.getUTCDate() + days)
-  const nextIso =
-    curPaid && curPaid.getTime() >= target.getTime()
-      ? curPaid.toISOString()
-      : target.toISOString()
+  const cur = toDateOrNull(existing?.paid_until)
+
+  // Skip write if existing grant already covers the new expiry
+  if (cur && cur.getTime() >= expiresMs && existing?.id) {
+    return paidUntil
+  }
 
   if (existing?.id) {
-    const patch: Record<string, any> = {
-      paid_until: nextIso,
+    const patch: Record<string, unknown> = {
+      paid_until: paidUntil,
       trial_questions_left: 0,
       subscription_status: "active",
       updated_at: nowIso,
@@ -77,7 +73,7 @@ async function extendGrantForDevice(
       id: randomUUID(),
       device_hash: deviceHash,
       user_id: userId,
-      paid_until: nextIso,
+      paid_until: paidUntil,
       promo_until: null,
       trial_questions_left: 0,
       subscription_status: "active",
@@ -86,14 +82,14 @@ async function extendGrantForDevice(
     } as any)
   }
 
-  return nextIso
+  return paidUntil
 }
 
 // ── iOS — Apple receipt verification ──────────────────────────────────────
 
 async function verifyAppleReceipt(
   receipt: string,
-): Promise<{ ok: boolean; resolvedProductId?: string }> {
+): Promise<{ ok: boolean; expiresMs?: number }> {
   const sharedSecret = process.env.APPLE_IAP_SHARED_SECRET || ""
   const body = JSON.stringify({
     "receipt-data": receipt,
@@ -140,7 +136,7 @@ async function verifyAppleReceipt(
       return { ok: false }
     }
 
-    return { ok: true, resolvedProductId: active[0].product_id }
+    return { ok: true, expiresMs: Number(active[0].expires_date_ms) }
   }
 
   return { ok: false }
@@ -187,7 +183,7 @@ async function verifyAndroidPurchase(
   packageName: string,
   productId: string,
   purchaseToken: string,
-): Promise<{ ok: boolean; resolvedProductId?: string }> {
+): Promise<{ ok: boolean; expiresMs?: number }> {
   const keyJson = process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON || ""
   if (!keyJson) {
     console.warn("[IAP/Android] GOOGLE_PLAY_SERVICE_ACCOUNT_JSON not set")
@@ -228,7 +224,7 @@ async function verifyAndroidPurchase(
   if (expiryMs < Date.now()) return { ok: false }    // subscription expired
   if (paymentState !== 1 && paymentState !== 2) return { ok: false } // not paid / free trial
 
-  return { ok: true, resolvedProductId: productId }
+  return { ok: true, expiresMs: expiryMs }
 }
 
 // ── Route handler ──────────────────────────────────────────────────────────
@@ -239,8 +235,12 @@ async function verifyAndroidPurchase(
  * Validates an iOS or Android in-app purchase receipt.
  * On success, grants paid_until access to the device.
  *
- * Body:   { platform: "ios"|"android", productId: string, transactionReceipt: string }
+ * Body:   { platform: "ios"|"android", productId: string, transactionReceipt: string,
+ *           transactionId?: string }
  * Header: X-Device-Hash (set automatically by mobile apiFetch)
+ *         Authorization? Bearer <JWT> — links grant to user account
+ *
+ * Response (success): { ok: true, paid_until: ISO, platform, productId }
  *
  * Required env:
  *   APPLE_IAP_SHARED_SECRET            — App Store Connect subscription shared secret
@@ -249,7 +249,7 @@ async function verifyAndroidPurchase(
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({} as any))
-    const { platform, productId, transactionReceipt } = body || {}
+    const { platform, productId, transactionReceipt, transactionId } = body || {}
 
     if (!platform || !productId || !transactionReceipt) {
       return NextResponse.json(
@@ -291,48 +291,33 @@ export async function POST(req: NextRequest) {
     )
 
     // ── Verify receipt with Apple / Google ─────────────────────────────────
-    let verification: { ok: boolean; resolvedProductId?: string }
+    const verified =
+      platform === "ios"
+        ? await verifyAppleReceipt(transactionReceipt)
+        : await verifyAndroidPurchase("com.turbotaai.app", productId, transactionReceipt)
 
-    if (platform === "ios") {
-      verification = await verifyAppleReceipt(transactionReceipt)
-    } else {
-      // Android purchaseToken is the transactionReceipt field
-      verification = await verifyAndroidPurchase(
-        "com.turbotaai.app",
-        productId,
-        transactionReceipt,
-      )
-    }
-
-    if (!verification.ok) {
-      console.warn(`[IAP] Receipt invalid: platform=${platform} product=${productId}`)
-      return NextResponse.json(
-        { ok: false, error: "receipt_invalid" },
-        { status: 402, headers: { "cache-control": "no-store" } },
-      )
-    }
-
-    // ── Grant access ───────────────────────────────────────────────────────
-    const effectiveProduct = verification.resolvedProductId || productId
     const admin = sbAdmin()
+    const planId = productId.includes("yearly") ? "yearly" : "monthly"
+    const status = verified.ok ? "iap_valid" : "iap_invalid"
 
-    const paidUntil = await extendGrantForDevice(admin, deviceHash, effectiveProduct, userId)
-
-    // Log the validated IAP transaction for auditing
+    // ── Log to billing_orders regardless of outcome ─────────────────────────
     await admin
       .from("billing_orders")
       .insert({
-        order_reference: `IAP-${platform}-${Date.now()}`,
-        status: "iap_validated",
-        plan_id: effectiveProduct.includes("yearly") ? "yearly" : "monthly",
+        order_reference: `IAP-${platform}-${transactionId ?? Date.now()}`,
+        status,
+        plan_id: planId,
         amount: 0,
         currency: "IAP",
         device_hash: deviceHash,
         raw: {
-          __event: "iap_validated",
+          __event: "iap_validate",
           platform,
           productId,
-          effectiveProduct,
+          transactionId: transactionId ?? null,
+          validated: verified.ok,
+          expiresMs: verified.expiresMs ?? null,
+          receiptLength: transactionReceipt.length,
         },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -340,10 +325,21 @@ export async function POST(req: NextRequest) {
         ({ error: e }: any) => { if (e) console.warn("[IAP] billing_orders insert warn:", e?.message) },
       )
 
-    console.log(`[IAP] Access granted: device=${deviceHash} paid_until=${paidUntil}`)
+    if (!verified.ok) {
+      console.warn(`[IAP] Receipt invalid: platform=${platform} product=${productId}`)
+      return NextResponse.json(
+        { ok: false, error: "receipt_invalid" },
+        { status: 402, headers: { "cache-control": "no-store" } },
+      )
+    }
+
+    // ── Grant access — use exact store-reported expiry ──────────────────────
+    const paid_until = await extendPaidUntil(admin, deviceHash, verified.expiresMs!, userId)
+
+    console.log(`[IAP] Access granted: device=${deviceHash} plan=${planId} until=${paid_until}`)
 
     return NextResponse.json(
-      { ok: true, paid_until: paidUntil },
+      { ok: true, paid_until, platform, productId },
       { status: 200, headers: { "cache-control": "no-store" } },
     )
   } catch (e: any) {
