@@ -234,7 +234,7 @@ export default function NativeVideoCallScreen() {
         )}
 
         {/* Gradient overlay at bottom for readability */}
-        <View style={styles.gradient} pointerEvents="none" />
+        <View style={styles.gradient} />
       </View>
 
       {/* ── Bottom overlay: status + conversation + controls ──────────────── */}
@@ -243,7 +243,7 @@ export default function NativeVideoCallScreen() {
         pointerEvents="box-none"
       >
         {/* Character name + phase status */}
-        <View style={styles.statusRow} pointerEvents="none">
+        <View style={styles.statusRow}>
           <View style={[styles.namePill, { backgroundColor: accentColor }]}>
             <Text style={styles.namePillText}>{t[meta.nameKey]}</Text>
           </View>
@@ -260,7 +260,7 @@ export default function NativeVideoCallScreen() {
             style={styles.convoScroll}
             contentContainerStyle={styles.convoContent}
             showsVerticalScrollIndicator={false}
-            pointerEvents="none"
+
           >
             {transcript ? (
               <View style={styles.userBubble}>
@@ -277,7 +277,7 @@ export default function NativeVideoCallScreen() {
           </ScrollView>
         ) : (
           phase === "listening" && (
-            <Text style={styles.hint} pointerEvents="none">
+            <Text style={styles.hint}>
               {t.videoSpeakHint}
             </Text>
           )
