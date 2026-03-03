@@ -336,8 +336,9 @@ export async function POST(req: NextRequest) {
         },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      } as any)
-      .catch((e: any) => console.warn("[IAP] billing_orders insert warn:", e?.message))
+      } as any).then(
+        ({ error: e }: any) => { if (e) console.warn("[IAP] billing_orders insert warn:", e?.message) },
+      )
 
     console.log(`[IAP] Access granted: device=${deviceHash} paid_until=${paidUntil}`)
 
