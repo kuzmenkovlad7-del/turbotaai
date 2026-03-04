@@ -27,6 +27,7 @@ import type { Locale } from "@/constants/i18n"
 
 export type VoicePhase = "idle" | "listening" | "processing" | "speaking" | "error"
 export type VoiceGender = "female" | "male"
+export type VoiceTurn = { role: "user" | "assistant"; text: string; ts: number }
 
 // ── Silence-detection tuning ──────────────────────────────────────────────────
 const SPEECH_DB = -35         // dBFS — above this counts as speech
@@ -67,8 +68,12 @@ function sttLang(locale: Locale): string {
 
 export type UseVoiceSessionReturn = {
   phase: VoicePhase
-  transcript: string  // last user speech
-  reply: string       // last AI reply text
+  /** Full conversation history as ordered turns — use this to render the transcript. */
+  turns: VoiceTurn[]
+  /** Last user speech text (kept for backwards compat). */
+  transcript: string
+  /** Last AI reply text (kept for backwards compat). */
+  reply: string
   error: string | null
   /** Running diagnostic log — shown in the red debug box in the UI. */
   diagLog: string
@@ -84,6 +89,7 @@ export function useVoiceSession(
   const [phase, setPhase] = useState<VoicePhase>("idle")
   const [transcript, setTranscript] = useState("")
   const [reply, setReply] = useState("")
+  const [turns, setTurns] = useState<VoiceTurn[]>([])
   const [error, setError] = useState<string | null>(null)
   const [diagLog, setDiagLog] = useState("")
 
@@ -244,8 +250,7 @@ export function useVoiceSession(
         }
         s.appendDiag(`STT: "${text.slice(0, 30)}"`)
         setTranscript(text)
-
-        // 2. Agent — use same full payload as Chat (userId, sessionId, deviceId, etc.)
+        setTurns(prev => [...prev, { role: "user" as const, text, ts: Date.now() }])
         // characterId defaults to "mia" for voice (no character selector in voice mode)
         s.appendDiag("AGT → /api/turbotaai-agent")
         const payload = await buildMessagePayload({
@@ -286,6 +291,7 @@ export function useVoiceSession(
         }
         s.appendDiag(`AGT: "${replyText.slice(0, 30)}"`)
         setReply(replyText)
+        setTurns(prev => [...prev, { role: "assistant" as const, text: replyText, ts: Date.now() }])
 
         // Save turn to conversation history — fire-and-forget, same pattern as Chat.
         const isFirstTurn = s.sessionFirstTurn
@@ -532,6 +538,7 @@ export function useVoiceSession(
     setError(null)
     setTranscript("")
     setReply("")
+    setTurns([])
     setDiagLog("")               // clear diagnostics for fresh session
     s.appendDiag(`BASE ${API_BASE_URL || "(not set)"}`)
     await s.startListen()
@@ -573,5 +580,5 @@ export function useVoiceSession(
     await s.startListen()
   }, [])
 
-  return { phase, transcript, reply, error, diagLog, start, stop, retryFromError }
+  return { phase, turns, transcript, reply, error, diagLog, start, stop, retryFromError }
 }

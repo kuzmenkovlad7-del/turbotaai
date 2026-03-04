@@ -124,11 +124,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Attach remainingQuestions so mobile can update the trial counter without
+    // a separate bootstrap round-trip. Only relevant for trial users (no paid/promo).
+    const grant = access.grant
+    const isTrialUser = grant && !grant.paid_until && !grant.promo_until
+    const remainingQuestions: number | null = isTrialUser
+      ? (typeof grant.trial_questions_left === "number" ? grant.trial_questions_left : null)
+      : null
+
     try {
       const json = JSON.parse(raw)
-      return NextResponse.json(json, { status: 200, headers: { "cache-control": "no-store" } })
+      const extra = remainingQuestions !== null ? { remainingQuestions } : {}
+      return NextResponse.json({ ...json, ...extra }, { status: 200, headers: { "cache-control": "no-store" } })
     } catch {
-      return NextResponse.json({ ok: true, response: raw }, { status: 200, headers: { "cache-control": "no-store" } })
+      const extra = remainingQuestions !== null ? { remainingQuestions } : {}
+      return NextResponse.json({ ok: true, response: raw, ...extra }, { status: 200, headers: { "cache-control": "no-store" } })
     }
   } catch (e: any) {
     return NextResponse.json(

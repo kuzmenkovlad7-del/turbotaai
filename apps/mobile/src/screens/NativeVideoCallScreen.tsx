@@ -34,7 +34,7 @@ import { Audio, Video, ResizeMode } from "expo-av"
 import { useT } from "@/hooks/useLanguage"
 import { useVideoSession, type VideoPhase } from "@/hooks/useVideoSession"
 import { logEvent } from "@/services/analytics"
-import { API_BASE_URL } from "@/constants/config"
+import { API_BASE_URL, DEBUG_ENABLED } from "@/constants/config"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import type { Locale } from "@/constants/i18n"
 
@@ -95,7 +95,7 @@ export default function NativeVideoCallScreen() {
   const [videoReady, setVideoReady] = useState(false)
 
   // decrementTrialLeft is now called inside useVideoSession after each AI reply
-  const { phase, transcript, reply, error, diagLog, start, stop, retryFromError } =
+  const { phase, turns, error, diagLog, manualStop, start, stop, retryFromError } =
     useVideoSession(characterId, avatarSlug, gender, locale)
 
   // Stop session when the screen loses focus (e.g. Android hardware back while
@@ -254,52 +254,46 @@ export default function NativeVideoCallScreen() {
           </View>
         </View>
 
-        {/* Conversation bubbles */}
-        {(transcript || reply) ? (
+        {/* Conversation bubbles — turn-based */}
+        {turns.length > 0 ? (
           <ScrollView
             style={styles.convoScroll}
             contentContainerStyle={styles.convoContent}
             showsVerticalScrollIndicator={false}
-
           >
-            {transcript ? (
-              <View style={styles.userBubble}>
-                <Text style={styles.bubbleLabel}>{t.voiceYou}</Text>
-                <Text style={styles.userBubbleText}>{transcript}</Text>
-              </View>
-            ) : null}
-            {reply ? (
-              <View style={styles.aiBubble}>
-                <Text style={styles.bubbleLabel}>{t.voiceAI}</Text>
-                <Text style={styles.aiBubbleText}>{reply}</Text>
-              </View>
-            ) : null}
+            {turns.map((turn, i) =>
+              turn.role === "user" ? (
+                <View key={i} style={styles.userBubble}>
+                  <Text style={styles.bubbleLabel}>{t.voiceYou}</Text>
+                  <Text style={styles.userBubbleText}>{turn.text}</Text>
+                </View>
+              ) : (
+                <View key={i} style={styles.aiBubble}>
+                  <Text style={styles.bubbleLabel}>{t.voiceAI}</Text>
+                  <Text style={styles.aiBubbleText}>{turn.text}</Text>
+                </View>
+              )
+            )}
           </ScrollView>
         ) : (
           phase === "listening" && (
-            <Text style={styles.hint}>
-              {t.videoSpeakHint}
-            </Text>
+            <Text style={styles.hint}>{t.videoSpeakHint}</Text>
           )
         )}
 
-        {/* ── Debug box — error + live diagnostic log ── */}
-        {(phase === "error" && error && !isPaymentError) || diagLog ? (
+        {/* ── Error box — always visible when phase=error ── */}
+        {phase === "error" && error && !isPaymentError && (
           <View style={styles.debugBox}>
-            {phase === "error" && error && !isPaymentError && (
-              <>
-                <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
-                <Text style={styles.debugMsg} selectable>{error}</Text>
-              </>
-            )}
-            {diagLog ? (
-              <>
-                <Text style={[styles.debugTitle, { marginTop: phase === "error" ? 6 : 0 }]}>
-                  📋 Diagnostics
-                </Text>
-                <Text style={styles.debugMsg} selectable>{diagLog}</Text>
-              </>
-            ) : null}
+            <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
+            <Text style={styles.debugMsg} selectable>{error}</Text>
+          </View>
+        )}
+
+        {/* ── Diagnostic log — only in DEBUG builds ── */}
+        {DEBUG_ENABLED && diagLog ? (
+          <View style={styles.debugBox}>
+            <Text style={styles.debugTitle}>📋 Diagnostics</Text>
+            <Text style={styles.debugMsg} selectable>{diagLog}</Text>
           </View>
         ) : null}
 
@@ -327,6 +321,18 @@ export default function NativeVideoCallScreen() {
               </TouchableOpacity>
             )
           ) : null}
+
+          {/* Android manual stop button — tap to force-send when silence detection
+              is unreliable (metering can return -100 dBFS on some Android devices). */}
+          {Platform.OS === "android" && phase === "listening" && (
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: accentColor }]}
+              onPress={manualStop}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.actionBtnText}>{t.voiceSendNow}</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={styles.endBtn}

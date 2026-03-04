@@ -163,6 +163,12 @@ export type AgentResponse = {
    * rather than rendering the raw `error` string.
    */
   paymentRequired?: boolean
+  /**
+   * Server-side remaining trial questions after this request.
+   * Only present for trial users (not paid/promo). Use this to update the
+   * local trial counter without a separate bootstrap round-trip.
+   */
+  remainingQuestions?: number | null
 }
 
 /** Payload contract for every webhook message — must match WEB /api/turbotaai-agent */

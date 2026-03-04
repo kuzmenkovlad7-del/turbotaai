@@ -60,6 +60,12 @@ export type AuthContextValue = AuthState & {
    */
   decrementTrialLeft: () => void
   /**
+   * Sync trial_questions_left from the exact server value returned in the agent
+   * response. More accurate than decrementTrialLeft() when the backend includes
+   * remainingQuestions in the response body.
+   */
+  syncTrialLeft: (n: number) => void
+  /**
    * Optimistically apply promo access using the `promo_until` value returned
    * by `redeemPromo()`. Updates local state immediately so every screen
    * (Home badge, Chat, Voice, Video) reflects the new access without waiting
@@ -96,6 +102,7 @@ export const AuthContext = createContext<AuthContextValue>({
   refreshAccess: NOOP_ASYNC,
   retryBootstrap: NOOP_ASYNC,
   decrementTrialLeft: () => {},
+  syncTrialLeft: () => {},
   setAccessFromPromo: () => {},
 })
 
@@ -355,6 +362,22 @@ export function useAuthProvider(): AuthContextValue {
     })
   }, [])
 
+  const syncTrialLeft = useCallback((n: number) => {
+    setState((s) => {
+      if (!s.accessInfo || s.accessInfo.access !== "trial") return s
+      const newLeft = Math.max(0, n)
+      return {
+        ...s,
+        accessInfo: {
+          ...s.accessInfo,
+          trialLeft: newLeft,
+          access: newLeft > 0 ? "trial" : "none",
+          hasAccess: newLeft > 0,
+        },
+      }
+    })
+  }, [])
+
   const setAccessFromPromo = useCallback((promoUntil: string) => {
     setState((s) => {
       if (!s.accessInfo) return s
@@ -379,6 +402,7 @@ export function useAuthProvider(): AuthContextValue {
     refreshAccess: runBootstrap,
     retryBootstrap,
     decrementTrialLeft,
+    syncTrialLeft,
     setAccessFromPromo,
   }
 }
