@@ -7,7 +7,7 @@ index 6669e9e..9d8f81a 100644
  java { targetCompatibility = JavaVersion.VERSION_11 }
  
 -kotlin { jvmToolchain(17) }
-+kotlin { jvmToolchain(21) }
++kotlin { jvmToolchain(17) }
  
  tasks.withType<KotlinCompile>().configureEach {
    kotlinOptions {
@@ -20,7 +20,7 @@ index 40e094e..0cee776 100644
  java { targetCompatibility = JavaVersion.VERSION_11 }
  
 -kotlin { jvmToolchain(17) }
-+kotlin { jvmToolchain(21) }
++kotlin { jvmToolchain(17) }
  
  tasks.withType<KotlinCompile>().configureEach {
    kotlinOptions {
@@ -48,7 +48,7 @@ index 30a1124..85ecd7b 100644
  java { targetCompatibility = JavaVersion.VERSION_11 }
  
 -kotlin { jvmToolchain(17) }
-+kotlin { jvmToolchain(21) }
++kotlin { jvmToolchain(17) }
  
  tasks.withType<KotlinCompile>().configureEach {
    kotlinOptions {
@@ -61,7 +61,7 @@ index f7f55f5..244180c 100644
  java { targetCompatibility = JavaVersion.VERSION_11 }
  
 -kotlin { jvmToolchain(17) }
-+kotlin { jvmToolchain(21) }
++kotlin { jvmToolchain(17) }
  
  tasks.withType<KotlinCompile>().configureEach {
    kotlinOptions {
