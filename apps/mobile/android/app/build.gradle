@@ -88,6 +88,7 @@ android {
 
     namespace 'com.turbotaai.app'
     defaultConfig {
+        missingDimensionStrategy "store", "play"
         applicationId 'com.turbotaai.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
