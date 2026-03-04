@@ -61,12 +61,15 @@ export function useSubscription() {
         (purchase as any)?.transactionReceipt ||
         (purchase as any)?.purchaseToken ||
         ""
+      const transactionId: string | undefined =
+        (purchase as any)?.transactionId || (purchase as any)?.orderId || undefined
 
       if (transactionReceipt) {
         const validated = await validateReceipt({
           platform: Platform.OS as "ios" | "android",
           productId,
           transactionReceipt,
+          transactionId,
         })
         if (!validated.ok) {
           throw new Error(validated.error || "Receipt validation failed")

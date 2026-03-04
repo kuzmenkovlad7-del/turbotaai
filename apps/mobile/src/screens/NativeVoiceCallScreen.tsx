@@ -34,6 +34,7 @@ import { useVoiceSession, type VoicePhase, type VoiceGender } from "@/hooks/useV
 import { StatusBar } from "expo-status-bar"
 import { logEvent } from "@/services/analytics"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
+import { DEBUG_ENABLED } from "@/constants/config"
 import type { Locale } from "@/constants/i18n"
 
 export type NativeVoiceCallParams = {
@@ -69,7 +70,7 @@ export default function NativeVoiceCallScreen() {
   const [permGranted, setPermGranted] = useState<boolean | null>(null)
 
   // decrementTrialLeft is now called inside useVoiceSession after each AI reply
-  const { phase, transcript, reply, error, diagLog, start, stop, retryFromError } =
+  const { phase, turns, transcript, reply, error, diagLog, start, stop, retryFromError } =
     useVoiceSession(gender, locale)
 
   // Stop session when the screen loses focus (e.g. Android hardware back while
@@ -224,47 +225,43 @@ export default function NativeVoiceCallScreen() {
         </Text>
       </View>
 
-      {/* ── Conversation transcript ──────────────────────────────────────── */}
+      {/* ── Conversation transcript — turn-based ────────────────────────── */}
       <ScrollView
         style={styles.conversation}
         contentContainerStyle={styles.conversationContent}
         showsVerticalScrollIndicator={false}
       >
-        {transcript ? (
-          <View style={styles.userBubble}>
-            <Text style={styles.bubbleLabel}>{t.voiceYou}</Text>
-            <Text style={styles.userBubbleText}>{transcript}</Text>
-          </View>
-        ) : null}
-
-        {reply ? (
-          <View style={styles.aiBubble}>
-            <Text style={styles.bubbleLabel}>{t.voiceAI}</Text>
-            <Text style={styles.aiBubbleText}>{reply}</Text>
-          </View>
-        ) : null}
-
-        {phase === "listening" && !transcript && !reply && (
+        {turns.length === 0 && phase === "listening" && (
           <Text style={styles.hint}>{t.voiceHint}</Text>
         )}
 
-        {/* ── Debug box — error + live diagnostic log ── */}
-        {(phase === "error" && error && !isPaymentError) || diagLog ? (
+        {turns.map((turn, i) =>
+          turn.role === "user" ? (
+            <View key={i} style={styles.userBubble}>
+              <Text style={styles.bubbleLabel}>{t.voiceYou}</Text>
+              <Text style={styles.userBubbleText}>{turn.text}</Text>
+            </View>
+          ) : (
+            <View key={i} style={styles.aiBubble}>
+              <Text style={styles.bubbleLabel}>{t.voiceAI}</Text>
+              <Text style={styles.aiBubbleText}>{turn.text}</Text>
+            </View>
+          )
+        )}
+
+        {/* ── Error box — always visible when phase=error ── */}
+        {phase === "error" && error && !isPaymentError && (
           <View style={styles.debugBox}>
-            {phase === "error" && error && !isPaymentError && (
-              <>
-                <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
-                <Text style={styles.debugMsg} selectable>{error}</Text>
-              </>
-            )}
-            {diagLog ? (
-              <>
-                <Text style={[styles.debugTitle, { marginTop: phase === "error" ? 6 : 0 }]}>
-                  📋 Diagnostics
-                </Text>
-                <Text style={styles.debugMsg} selectable>{diagLog}</Text>
-              </>
-            ) : null}
+            <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
+            <Text style={styles.debugMsg} selectable>{error}</Text>
+          </View>
+        )}
+
+        {/* ── Diagnostic log — only in DEBUG builds ── */}
+        {DEBUG_ENABLED && diagLog ? (
+          <View style={styles.debugBox}>
+            <Text style={styles.debugTitle}>📋 Diagnostics</Text>
+            <Text style={styles.debugMsg} selectable>{diagLog}</Text>
           </View>
         ) : null}
       </ScrollView>

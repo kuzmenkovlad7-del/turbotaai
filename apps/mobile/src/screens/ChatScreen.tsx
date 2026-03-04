@@ -79,7 +79,7 @@ function TypingIndicator() {
 export default function ChatScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
-  const { user, accessInfo, decrementTrialLeft, refreshAccess } = useAuth()
+  const { user, accessInfo, decrementTrialLeft, syncTrialLeft, refreshAccess } = useAuth()
   const { t, locale } = useT()
   const accessState = getAccessState(accessInfo)
   const [messages, setMessages] = useState<Message[]>([])
@@ -191,11 +191,14 @@ export default function ChatScreen() {
       // Trigger typewriter animation for non-error responses
       if (!isError) {
         setStreamingMsgId(aiMsg.id)
-        // Optimistically decrement trial count — keeps badge/account screen in sync
-        // without waiting for the next bootstrap refresh
-        decrementTrialLeft()
-        // Sync server access state so promo/paid transitions are picked up
-        // immediately and the local counter never drifts from reality.
+        // Prefer exact server count (remainingQuestions injected by backend into
+        // every trial-user response). Fall back to local optimistic decrement.
+        if (typeof data.remainingQuestions === "number") {
+          syncTrialLeft(data.remainingQuestions)
+        } else {
+          decrementTrialLeft()
+        }
+        // Sync server access state so promo/paid transitions are picked up immediately.
         refreshAccess().catch(() => {})
       }
 
@@ -235,7 +238,7 @@ export default function ChatScreen() {
       sendingRef.current = false
       setSending(false)
     }
-  }, [input, user, t, locale, decrementTrialLeft, refreshAccess])
+  }, [input, user, t, locale, decrementTrialLeft, syncTrialLeft, refreshAccess])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => {

@@ -19,10 +19,12 @@ import { sendMessage, extractReplyText, apiFetch } from "@/services/api"
 import { buildMessagePayload } from "@/services/messagePayload"
 import { generateUUID } from "@/services/storage"
 import { useAuth } from "@/hooks/useAuth"
+import { lockForUnload, waitForUnlock } from "@/utils/recordingLock"
 import { API_BASE_URL } from "@/constants/config"
 import type { Locale } from "@/constants/i18n"
 
 export type VideoPhase = "idle" | "listening" | "processing" | "speaking" | "error"
+export type VideoTurn = { role: "user" | "assistant"; text: string; ts: number }
 
 // ── Silence-detection tuning (same as voice) ─────────────────────────────────
 const SPEECH_DB = -35
@@ -66,11 +68,20 @@ function sttLang(locale: Locale): string {
 
 export type UseVideoSessionReturn = {
   phase: VideoPhase
+  /** Full conversation history as ordered turns — use this to render the transcript. */
+  turns: VideoTurn[]
+  /** Last user speech text (kept for backwards compat). */
   transcript: string
+  /** Last AI reply text (kept for backwards compat). */
   reply: string
   error: string | null
   /** Running diagnostic log — shown in the UI debug box. */
   diagLog: string
+  /**
+   * Manually trigger stop-and-send (for toggle-button UX on Android where
+   * silence detection / metering can be unreliable).
+   */
+  manualStop: () => void
   start: () => Promise<void>
   stop: () => Promise<void>
   retryFromError: () => Promise<void>
@@ -85,10 +96,15 @@ export function useVideoSession(
   const [phase, setPhase] = useState<VideoPhase>("idle")
   const [transcript, setTranscript] = useState("")
   const [reply, setReply] = useState("")
+  const [turns, setTurns] = useState<VideoTurn[]>([])
   const [error, setError] = useState<string | null>(null)
   const [diagLog, setDiagLog] = useState("")
 
   const { user, refreshAccess, decrementTrialLeft } = useAuth()
+  // Keep user in a ref so the effect closure always reads the latest value
+  // without needing to re-run the effect (which would interrupt recordings).
+  const userRef = useRef(user)
+  userRef.current = user
 
   /**
    * appendDiag closes over the stable setDiagLog setter (React guarantees
@@ -121,6 +137,8 @@ export function useVideoSession(
     },
   })
 
+  // Keep S.current.user-equivalent via userRef — effect closure reads userRef.current
+
   useEffect(() => {
     S.current.mounted = true
     return () => {
@@ -135,7 +153,7 @@ export function useVideoSession(
       if (s.preparingTimer) { clearTimeout(s.preparingTimer); s.preparingTimer = null }
       const rec = s.recording
       s.recording = null
-      if (rec) rec.stopAndUnloadAsync().catch(() => {})
+      if (rec) lockForUnload(() => rec.stopAndUnloadAsync().catch(() => {}))
       if (s.sound) {
         s.sound.stopAsync().catch(() => {})
         s.sound.unloadAsync().catch(() => {})
@@ -210,17 +228,19 @@ export function useVideoSession(
         }
         s.appendDiag(`STT: "${text.slice(0, 30)}"`)
         setTranscript(text)
+        setTurns(prev => [...prev, { role: "user" as const, text, ts: Date.now() }])
 
         // 2. Agent — mode:"video" with character context, full Chat-compatible payload
         // Use avatarSlug as characterId (slug form: "mia"/"alex"/"leo") — matches WEB
         s.appendDiag("AGT → /api/turbotaai-agent")
+        const u = userRef.current
         const payload = await buildMessagePayload({
           query: text,
           language: locale,
           mode: "video",
-          userId: user?.id || null,
+          userId: u?.id || null,
           sessionId: s.sessionId,
-          email: user?.email,
+          email: u?.email,
           gender,
           characterId: avatarSlug,
           avatarSlug,
@@ -253,6 +273,7 @@ export function useVideoSession(
         }
         s.appendDiag(`AGT: "${replyText.slice(0, 30)}"`)
         setReply(replyText)
+        setTurns(prev => [...prev, { role: "assistant" as const, text: replyText, ts: Date.now() }])
         // Decrement trial counter — consistent with Chat flow
         decrementTrialLeft()
         // Sync server access state after every turn. Fire-and-forget.
@@ -373,6 +394,10 @@ export function useVideoSession(
       }, PREPARE_TIMEOUT_MS)
 
       try {
+        // Wait for any previous recording to finish unloading before calling
+        // createAsync — prevents "Only one Recording" across voice/video screens.
+        await waitForUnlock()
+        if (!s.mounted || !s.active) { s.preparing = false; return }
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: true,
           playsInSilentModeIOS: true,
@@ -435,7 +460,7 @@ export function useVideoSession(
       if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
       if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
     }
-  }, [characterId, avatarSlug, gender, locale, user, refreshAccess, decrementTrialLeft])
+  }, [characterId, avatarSlug, gender, locale, refreshAccess, decrementTrialLeft])
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -449,6 +474,7 @@ export function useVideoSession(
     setError(null)
     setTranscript("")
     setReply("")
+    setTurns([])
     setDiagLog("")               // clear diagnostics for fresh session
     s.appendDiag(`BASE ${API_BASE_URL || "(not set)"}`)
     await s.startListen()
@@ -491,5 +517,18 @@ export function useVideoSession(
     await s.startListen()
   }, [])
 
-  return { phase, transcript, reply, error, diagLog, start, stop, retryFromError }
+  /**
+   * Manually trigger a stop-and-send. Use for a toggle-button UX on Android
+   * where silence detection may not fire reliably.
+   */
+  const manualStop = useCallback(() => {
+    const s = S.current
+    if (!s.active || s.processing || !s.recording) return
+    s.appendDiag("MANUAL stop → runTurn")
+    if (s.pollTimer) { clearInterval(s.pollTimer); s.pollTimer = null }
+    if (s.maxTimer)  { clearTimeout(s.maxTimer);   s.maxTimer = null  }
+    s.runTurn()
+  }, [])
+
+  return { phase, turns, transcript, reply, error, diagLog, manualStop, start, stop, retryFromError }
 }

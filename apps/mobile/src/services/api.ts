@@ -163,6 +163,12 @@ export type AgentResponse = {
    * rather than rendering the raw `error` string.
    */
   paymentRequired?: boolean
+  /**
+   * Server-side remaining trial questions after this request.
+   * Only present for trial users (not paid/promo). Use this to update the
+   * local trial counter without a separate bootstrap round-trip.
+   */
+  remainingQuestions?: number | null
 }
 
 /** Payload contract for every webhook message — must match WEB /api/turbotaai-agent */
@@ -272,7 +278,8 @@ export async function validateReceipt(receipt: {
   platform: "ios" | "android"
   productId: string
   transactionReceipt: string
-}): Promise<{ ok: boolean; message?: string; error?: string }> {
+  transactionId?: string
+}): Promise<{ ok: boolean; paid_until?: string; platform?: string; productId?: string; error?: string }> {
   const res = await apiFetch("/api/billing/iap/validate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
