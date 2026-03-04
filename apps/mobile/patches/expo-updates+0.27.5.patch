@@ -1,11 +1,13 @@
 diff --git a/node_modules/expo-updates/expo-updates-gradle-plugin/settings.gradle.kts b/node_modules/expo-updates/expo-updates-gradle-plugin/settings.gradle.kts
 new file mode 100644
-index 0000000..cd613b6
+index 0000000..ef7c37d
 --- /dev/null
 +++ b/node_modules/expo-updates/expo-updates-gradle-plugin/settings.gradle.kts
-@@ -0,0 +1,5 @@
+@@ -0,0 +1,7 @@
 +pluginManagement {
 +  repositories {
++    gradlePluginPortal()
++    google()
 +    mavenCentral()
 +  }
 +}

@@ -13,7 +13,7 @@
     "build:android": "eas build --platform android --profile production",
     "submit:ios": "eas submit --platform ios",
     "submit:android": "eas submit --platform android",
-    "postinstall": "patch-package || true"
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^7.0.0",
