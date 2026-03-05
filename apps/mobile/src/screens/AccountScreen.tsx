@@ -122,17 +122,23 @@ export default function AccountScreen() {
         if (result.promo_until) {
           setAccessFromPromo(result.promo_until)
         }
-        // Force server confirmation — no debounce, no version guard bypass
-        // needed: the version is already at N+1 from setAccessFromPromo above,
-        // and runBootstrap snapshots that same value, so the guard will not
-        // discard this refresh unless a concurrent trial decrement fires
-        // (impossible since the user is now in promo mode).
         try { await refreshAccess() } catch {}
       } else {
-        setPromoMsg({ text: result.error || "Invalid code", ok: false })
+        // Map by HTTP status so the user sees a meaningful localised message
+        // rather than a raw error string or the generic "Invalid code" fallback.
+        let msg: string
+        if (result.httpStatus === 401) {
+          msg = t.accountPromoErrorLogin
+        } else if (result.httpStatus >= 500) {
+          msg = t.accountPromoErrorServer
+        } else {
+          // 400 or any unexpected code → treat as invalid
+          msg = t.accountPromoErrorInvalid
+        }
+        setPromoMsg({ text: msg, ok: false })
       }
     } catch (e: any) {
-      setPromoMsg({ text: e?.message || "Failed", ok: false })
+      setPromoMsg({ text: t.accountPromoErrorServer, ok: false })
     } finally {
       setPromoLoading(false)
     }

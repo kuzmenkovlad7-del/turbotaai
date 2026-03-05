@@ -185,6 +185,9 @@ const en = {
   accountRestoreNone: "No purchases to restore.",
   accountRefreshError: "Could not refresh access. Check your connection.",
   accountRefreshDone: "Access refreshed!",
+  accountPromoErrorInvalid: "Invalid promo code. Please check and try again.",
+  accountPromoErrorLogin: "Please sign in to apply a promo code.",
+  accountPromoErrorServer: "Server error. Please try again later.",
 
   // Bootstrap
   bootstrapErrorTitle: "Connection Error",
@@ -362,6 +365,9 @@ const uk: Translations = {
   accountRestoreNone: "Немає покупок для відновлення.",
   accountRefreshError: "Не вдалося оновити доступ. Перевірте з'єднання.",
   accountRefreshDone: "Доступ оновлено!",
+  accountPromoErrorInvalid: "Недійсний промокод. Перевірте та спробуйте ще раз.",
+  accountPromoErrorLogin: "Будь ласка, увійдіть, щоб застосувати промокод.",
+  accountPromoErrorServer: "Помилка сервера. Спробуйте пізніше.",
 
   bootstrapErrorTitle: "Помилка з'єднання",
   bootstrapErrorDesc: "Не вдалося підключитися до TurbotaAI. Перевірте інтернет та спробуйте ще раз.",
@@ -533,6 +539,9 @@ const ru: Translations = {
   accountRestoreNone: "Нет покупок для восстановления.",
   accountRefreshError: "Не удалось обновить доступ. Проверьте соединение.",
   accountRefreshDone: "Доступ обновлён!",
+  accountPromoErrorInvalid: "Неверный промокод. Проверьте и попробуйте ещё раз.",
+  accountPromoErrorLogin: "Пожалуйста, войдите, чтобы применить промокод.",
+  accountPromoErrorServer: "Ошибка сервера. Попробуйте позже.",
 
   bootstrapErrorTitle: "Ошибка соединения",
   bootstrapErrorDesc: "Не удалось подключиться к TurbotaAI. Проверьте интернет и попробуйте снова.",
