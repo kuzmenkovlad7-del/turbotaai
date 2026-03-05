@@ -61,9 +61,11 @@ export const STORE_BUILD: boolean =
 /** @deprecated — use STORE_BUILD; kept so existing imports compile unchanged */
 export const STORE_SAFE = STORE_BUILD
 
-/** Debug mode: set EXPO_PUBLIC_DEBUG=true to show diagnostic overlays */
+/** Debug mode: set EXPO_PUBLIC_DEBUG=true to show diagnostic overlays.
+ *  Always false in release builds — __DEV__ is false in any production bundle
+ *  regardless of env vars, so debug panels never leak into release APKs. */
 export const DEBUG_ENABLED: boolean =
-  (extra.debug || process.env.EXPO_PUBLIC_DEBUG || "false") === "true"
+  __DEV__ && (extra.debug || process.env.EXPO_PUBLIC_DEBUG || "false") === "true"
 
 /** IAP product identifiers — must match App Store Connect / Google Play Console */
 export const IAP_PRODUCTS = {

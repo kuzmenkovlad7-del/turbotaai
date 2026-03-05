@@ -149,13 +149,29 @@ export async function GET(req: NextRequest) {
     ag = data ?? await findGrantByKey(sb, accountKey)
   }
 
-  // 6. Merge: take the best (later) paid/promo date from both grants.
-  //    This ensures any access applied via web (account grant) or on this
-  //    device (device grant) is immediately visible on mobile.
-  const mergedPaid  = laterIso(dg?.paid_until  ?? null, ag?.paid_until  ?? null)
-  const mergedPromo = laterIso(dg?.promo_until ?? null, ag?.promo_until ?? null)
+  // 6. Also read profiles table for promo_until / paid_until so that access
+  //    set by older web code (which only wrote to profiles, not access_grants)
+  //    or by an admin is still reflected immediately after login.
+  let profPaidUntil: string | null = null
+  let profPromoUntil: string | null = null
+  if (userId) {
+    try {
+      const { data: prof } = await sb
+        .from("profiles")
+        .select("paid_until,promo_until")
+        .eq("id", userId)
+        .maybeSingle()
+      profPaidUntil  = (prof as any)?.paid_until  ?? null
+      profPromoUntil = (prof as any)?.promo_until ?? null
+    } catch {}
+  }
 
-  // Trial counter lives on the device grant (same convention as web).
+  // 7. Merge: take the best (later) paid/promo date from device grant, account
+  //    grant, and profiles so any access path on any platform is visible.
+  const mergedPaid  = laterIso(laterIso(dg?.paid_until  ?? null, ag?.paid_until  ?? null), profPaidUntil)
+  const mergedPromo = laterIso(laterIso(dg?.promo_until ?? null, ag?.promo_until ?? null), profPromoUntil)
+
+  // 8. Trial counter lives on the device grant (same convention as web).
   const trialLeft = Math.max(0, Number(dg?.trial_questions_left ?? TRIAL_DEFAULT))
 
   const hasPaid   = isFuture(mergedPaid)
