@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { randomUUID } from "crypto"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
@@ -76,30 +75,29 @@ function getPromoMap() {
   return base
 }
 
-function routeSessionSupabase() {
+/**
+ * Build a Supabase SSR client that reads session cookies from the incoming
+ * NextRequest rather than from next/headers cookies().
+ *
+ * Reason: cookies() from "next/headers" relies on Next.js async local storage
+ * and can throw or behave unpredictably in Vercel serverless functions after
+ * multiple awaits.  NextRequest.cookies is always available — it's just a
+ * parsed view of the Cookie header — and never fails.
+ */
+function makeSessionClient(req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anon) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY")
-
-  const cookieStore = cookies()
-  const pendingCookies: any[] = []
-
-  const sb = createServerClient(url, anon, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll()
+  if (!url || !anon) return null
+  try {
+    return createServerClient(url, anon, {
+      cookies: {
+        getAll() { return req.cookies.getAll() },
+        setAll() {},  // promo route never writes session cookies
       },
-      setAll(cookiesToSet) {
-        pendingCookies.push(...cookiesToSet)
-      },
-    },
-  })
-
-  const applyPendingCookies = (res: NextResponse) => {
-    for (const c of pendingCookies) res.cookies.set(c.name, c.value, c.options)
+    })
+  } catch {
+    return null
   }
-
-  return { sb, cookieStore, applyPendingCookies }
 }
 
 async function findGrantByDevice(admin: any, deviceHash: string): Promise<GrantRow | null> {
@@ -213,9 +211,11 @@ export async function POST(req: NextRequest) {
     }
     if (!userId) {
       try {
-        const { sb: sessionSb } = routeSessionSupabase()
-        const { data: userData } = await sessionSb.auth.getUser()
-        userId = userData?.user?.id ?? null
+        const sb = makeSessionClient(req)
+        if (sb) {
+          const { data: userData } = await sb.auth.getUser()
+          userId = userData?.user?.id ?? null
+        }
       } catch {}
     }
 
@@ -230,22 +230,15 @@ export async function POST(req: NextRequest) {
     const promoUntil = addDaysIso(days)
 
     // Resolve device hash: mobile sends X-Device-Hash header; web uses cookie.
+    // Both are read directly from the request — no next/headers needed.
     const xDeviceHash = req.headers.get("x-device-hash") || ""
     let deviceUuid: string
     let needSetDeviceCookie = false
-    let applyPendingCookies: ((res: NextResponse) => void) = () => {}
 
     if (xDeviceHash) {
-      // Mobile client — use the header value directly.
       deviceUuid = xDeviceHash
     } else {
-      // Web client — read from ta_device_hash cookie.
-      let cookieDeviceHash: string | null = null
-      try {
-        const session = routeSessionSupabase()
-        applyPendingCookies = session.applyPendingCookies
-        cookieDeviceHash = session.cookieStore.get(DEVICE_COOKIE)?.value ?? null
-      } catch {}
+      const cookieDeviceHash = req.cookies.get(DEVICE_COOKIE)?.value ?? null
       if (cookieDeviceHash) {
         deviceUuid = cookieDeviceHash
       } else {
@@ -310,7 +303,6 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    applyPendingCookies(res)
     res.headers.set("cache-control", "no-store, max-age=0")
     return res
   } catch (_e: any) {

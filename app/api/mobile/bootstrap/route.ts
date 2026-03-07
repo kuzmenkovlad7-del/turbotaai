@@ -107,46 +107,48 @@ export async function GET(req: NextRequest) {
     accountKey ? findGrantByKey(sb, accountKey) : Promise.resolve(null),
   ])
 
-  // 5. Lazily create missing grants
+  // 5. Lazily create missing grants via upsert (no explicit id — DB auto-generates).
+  //    ignoreDuplicates: true means an existing row is left untouched so we
+  //    never accidentally overwrite promo/paid dates on concurrent requests.
   //    Device grant: full trial for brand-new device
   let dg = deviceGrant
   if (!dg) {
-    const { data } = await sb
+    await sb
       .from("access_grants")
-      .insert({
-        id: crypto.randomUUID(),
-        user_id: userId,
-        device_hash: deviceHash,
-        trial_questions_left: TRIAL_DEFAULT,
-        paid_until: null,
-        promo_until: null,
-        created_at: now,
-        updated_at: now,
-      })
-      .select("*")
-      .single()
-    dg = data ?? await findGrantByKey(sb, deviceHash)
+      .upsert(
+        {
+          user_id: userId,
+          device_hash: deviceHash,
+          trial_questions_left: TRIAL_DEFAULT,
+          paid_until: null,
+          promo_until: null,
+          created_at: now,
+          updated_at: now,
+        },
+        { onConflict: "device_hash", ignoreDuplicates: true },
+      )
+    dg = await findGrantByKey(sb, deviceHash)
   }
 
   //    Account grant: copy trial count from device grant so used questions carry over
   let ag = accountGrant
   if (!ag && accountKey && userId) {
     const trialForAccount = Number(dg?.trial_questions_left ?? TRIAL_DEFAULT)
-    const { data } = await sb
+    await sb
       .from("access_grants")
-      .insert({
-        id: crypto.randomUUID(),
-        user_id: userId,
-        device_hash: accountKey,
-        trial_questions_left: trialForAccount,
-        paid_until: dg?.paid_until ?? null,
-        promo_until: dg?.promo_until ?? null,
-        created_at: now,
-        updated_at: now,
-      })
-      .select("*")
-      .single()
-    ag = data ?? await findGrantByKey(sb, accountKey)
+      .upsert(
+        {
+          user_id: userId,
+          device_hash: accountKey,
+          trial_questions_left: trialForAccount,
+          paid_until: dg?.paid_until ?? null,
+          promo_until: dg?.promo_until ?? null,
+          created_at: now,
+          updated_at: now,
+        },
+        { onConflict: "device_hash", ignoreDuplicates: true },
+      )
+    ag = await findGrantByKey(sb, accountKey)
   }
 
   // 6. Also read profiles table for promo_until / paid_until so that access
