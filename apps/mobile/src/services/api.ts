@@ -1,5 +1,27 @@
 import { API_BASE_URL } from "@/constants/config"
 import { getAuthToken, getDeviceHash } from "./storage"
+import { getSupabase, isSupabaseConfigured } from "./supabase"
+
+/* ── Auth token resolution ── */
+
+/**
+ * Return the best available Supabase access_token:
+ *   1. In-memory session on the Supabase client (set after signIn / refreshSession —
+ *      always the freshest token for the current app session).
+ *   2. Stored token from SecureStore (survives app restarts; may be stale if
+ *      refresh failed, but still worth sending so the server can decide).
+ *
+ * Falls back gracefully when Supabase is not configured or getSession() errors.
+ */
+async function getAccessToken(): Promise<string | null> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { data } = await getSupabase().auth.getSession()
+      if (data?.session?.access_token) return data.session.access_token
+    } catch {}
+  }
+  return getAuthToken()
+}
 
 /* ── Authenticated fetch wrapper ── */
 
@@ -10,7 +32,7 @@ export async function apiFetch(path: string, opts: FetchOpts = {}): Promise<Resp
   const headers = new Headers(init.headers)
 
   if (!skipAuth) {
-    const token = await getAuthToken()
+    const token = await getAccessToken()
     if (token) headers.set("Authorization", `Bearer ${token}`)
   }
 
