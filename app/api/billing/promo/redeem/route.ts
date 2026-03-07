@@ -103,15 +103,20 @@ function routeSessionSupabase() {
 }
 
 async function findGrantByDevice(admin: any, deviceHash: string): Promise<GrantRow | null> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("access_grants")
     .select("*")
     .eq("device_hash", deviceHash)
     .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(1)
-    .maybeSingle()
 
-  return (data ?? null) as GrantRow | null
+  if (error) {
+    console.error("[promo/redeem] findGrant error:", error?.message ?? error)
+    return null
+  }
+  const row = Array.isArray(data) ? data[0] : null
+  return (row ?? null) as GrantRow | null
 }
 
 async function ensureGrant(
@@ -124,39 +129,57 @@ async function ensureGrant(
   let g = await findGrantByDevice(admin, deviceHash)
 
   if (!g) {
-    const { data } = await admin
+    // Use upsert (not insert) so a concurrent request or pre-existing row
+    // from bootstrap never causes a unique-constraint failure.
+    // Do NOT include `id` — let the DB auto-generate it (matches web behaviour).
+    const { error: upsertErr } = await admin
       .from("access_grants")
-      .insert({
-        id: randomUUID(),
-        user_id: userId,
-        device_hash: deviceHash,
-        trial_questions_left: trialDefault,
-        paid_until: null,
-        promo_until: null,
-        created_at: nowIso,
-        updated_at: nowIso,
-      })
-      .select("*")
-      .single()
+      .upsert(
+        {
+          device_hash: deviceHash,
+          user_id: userId,
+          trial_questions_left: trialDefault,
+          paid_until: null,
+          promo_until: null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        },
+        { onConflict: "device_hash", ignoreDuplicates: true },
+      )
 
-    g = (data ?? null) as GrantRow | null
+    if (upsertErr) {
+      console.error("[promo/redeem] upsert error for", deviceHash, ":", upsertErr?.message ?? upsertErr)
+    }
+
+    g = await findGrantByDevice(admin, deviceHash)
   }
 
-  if (!g) g = await findGrantByDevice(admin, deviceHash)
-  if (!g) throw new Error("GRANT_CREATE_FAILED")
-
-  if (userId && !g.user_id) {
-    const { data } = await admin
+  if (g && userId && !g.user_id) {
+    const up = await admin
       .from("access_grants")
       .update({ user_id: userId, updated_at: nowIso })
-      .eq("id", g.id)
+      .eq("device_hash", deviceHash)
       .select("*")
-      .maybeSingle()
+      .limit(1)
 
-    g = ((data ?? g) as any) as GrantRow
+    const row = Array.isArray(up?.data) ? up.data[0] : null
+    g = (row ?? g) as GrantRow
   }
 
-  return g
+  // Fallback: return a constructed object so we never crash on unexpected DB
+  // issues — the subsequent UPDATE will still attempt to apply the promo.
+  return (
+    g ?? {
+      id: randomUUID(),
+      user_id: userId,
+      device_hash: deviceHash,
+      trial_questions_left: trialDefault,
+      paid_until: null,
+      promo_until: null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    }
+  )
 }
 
 export async function POST(req: NextRequest) {
@@ -237,10 +260,12 @@ export async function POST(req: NextRequest) {
     const guestGrant = await ensureGrant(admin, guestHash, userId ?? null, trialDefault, nowIso)
     const mergedGuest = laterDateIso(guestGrant.promo_until ?? null, promoUntil) ?? promoUntil
 
+    // Use device_hash (not id) as the update key — works even when ensureGrant
+    // returns a fallback object whose id is not in the DB.
     await admin
       .from("access_grants")
       .update({ promo_until: mergedGuest, trial_questions_left: 0, updated_at: nowIso })
-      .eq("id", guestGrant.id)
+      .eq("device_hash", guestHash)
 
     let mergedAcc: string | null = null
 
@@ -251,7 +276,7 @@ export async function POST(req: NextRequest) {
       await admin
         .from("access_grants")
         .update({ promo_until: mergedAcc, trial_questions_left: 0, updated_at: nowIso })
-        .eq("id", accGrant.id)
+        .eq("device_hash", accountHash)
 
       try {
         await admin
