@@ -166,46 +166,68 @@ export async function POST(req: NextRequest) {
     const code = raw.toUpperCase()
 
     if (!code) {
-      return NextResponse.json({ ok: false, errorCode: "EMPTY_CODE" }, { status: 400 })
+      return NextResponse.json({ ok: false, error: "invalid_promo" }, { status: 400 })
     }
 
     const PROMO_MAP = getPromoMap()
     const days = PROMO_MAP[code]
     if (!days) {
-      return NextResponse.json({ ok: false, errorCode: "INVALID_PROMO" }, { status: 400 })
+      return NextResponse.json({ ok: false, error: "invalid_promo" }, { status: 400 })
+    }
+
+    const admin = getSupabaseAdmin()
+
+    // Resolve user: try Bearer token first (mobile clients send this instead of
+    // session cookies), then fall back to cookie-based session (web browsers).
+    let userId: string | null = null
+    const authHeader = req.headers.get("authorization") || ""
+    const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim()
+    if (bearerToken) {
+      try {
+        const { data: bearerData } = await admin.auth.getUser(bearerToken)
+        userId = bearerData?.user?.id ?? null
+      } catch {}
+    }
+    if (!userId) {
+      try {
+        const { sb: sessionSb } = routeSessionSupabase()
+        const { data: userData } = await sessionSb.auth.getUser()
+        userId = userData?.user?.id ?? null
+      } catch {}
+    }
+
+    // Promo codes require an authenticated user so the account grant is updated
+    // and the access is tied to the account across all devices/platforms.
+    if (!userId) {
+      return NextResponse.json({ ok: false, error: "login_required" }, { status: 401 })
     }
 
     const trialDefault = getTrialLimit()
     const nowIso = new Date().toISOString()
     const promoUntil = addDaysIso(days)
 
-    const { sb: sessionSb, cookieStore, applyPendingCookies } = routeSessionSupabase()
-
-    let deviceUuid = cookieStore.get(DEVICE_COOKIE)?.value ?? null
+    // Resolve device hash: mobile sends X-Device-Hash header; web uses cookie.
+    const xDeviceHash = req.headers.get("x-device-hash") || ""
+    let deviceUuid: string
     let needSetDeviceCookie = false
-    if (!deviceUuid) {
-      deviceUuid = randomUUID()
-      needSetDeviceCookie = true
-    }
+    let applyPendingCookies: ((res: NextResponse) => void) = () => {}
 
-    const { data: userData } = await sessionSb.auth.getUser()
-    let userId = userData?.user?.id ?? null
-
-    const admin = getSupabaseAdmin()
-
-    // Mobile clients send Authorization: Bearer <token> instead of Supabase
-    // session cookies.  If cookie-based auth returned no user, try the Bearer
-    // token so the account grant ("account:<userId>") is also updated — without
-    // this the promo only lands on the device grant and is invisible on web or
-    // other devices of the same user.
-    if (!userId) {
-      const authHeader = req.headers.get("authorization") || ""
-      const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim()
-      if (bearerToken) {
-        try {
-          const { data: bearerData } = await admin.auth.getUser(bearerToken)
-          userId = bearerData?.user?.id ?? null
-        } catch {}
+    if (xDeviceHash) {
+      // Mobile client — use the header value directly.
+      deviceUuid = xDeviceHash
+    } else {
+      // Web client — read from ta_device_hash cookie.
+      let cookieDeviceHash: string | null = null
+      try {
+        const session = routeSessionSupabase()
+        applyPendingCookies = session.applyPendingCookies
+        cookieDeviceHash = session.cookieStore.get(DEVICE_COOKIE)?.value ?? null
+      } catch {}
+      if (cookieDeviceHash) {
+        deviceUuid = cookieDeviceHash
+      } else {
+        deviceUuid = randomUUID()
+        needSetDeviceCookie = true
       }
     }
 
@@ -267,6 +289,11 @@ export async function POST(req: NextRequest) {
     res.headers.set("cache-control", "no-store, max-age=0")
     return res
   } catch (_e: any) {
-    return NextResponse.json({ ok: false, errorCode: "REDEEM_FAILED" }, { status: 500 })
+    console.error("[promo/redeem] Unexpected error:", _e)
+    const body: Record<string, any> = { ok: false, error: "server_error" }
+    if (process.env.NODE_ENV !== "production") {
+      body.errorMessage = String(_e?.message || _e)
+    }
+    return NextResponse.json(body, { status: 500 })
   }
 }

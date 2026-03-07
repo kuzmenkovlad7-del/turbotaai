@@ -60,6 +60,12 @@ export type AuthContextValue = AuthState & {
    */
   decrementTrialLeft: () => void
   /**
+   * Sync trial_questions_left from the exact server value returned in the agent
+   * response. More accurate than decrementTrialLeft() when the backend includes
+   * remainingQuestions in the response body.
+   */
+  syncTrialLeft: (n: number) => void
+  /**
    * Optimistically apply promo access using the `promo_until` value returned
    * by `redeemPromo()`. Updates local state immediately so every screen
    * (Home badge, Chat, Voice, Video) reflects the new access without waiting
@@ -96,6 +102,7 @@ export const AuthContext = createContext<AuthContextValue>({
   refreshAccess: NOOP_ASYNC,
   retryBootstrap: NOOP_ASYNC,
   decrementTrialLeft: () => {},
+  syncTrialLeft: () => {},
   setAccessFromPromo: () => {},
 })
 
@@ -154,11 +161,20 @@ export function useAuthProvider(): AuthContextValue {
       const user = data.isLoggedIn && data.userId && data.email
         ? { id: data.userId, email: data.email }
         : null
+
+      const serverTrialLeft = data.trial_questions_left ?? 0
+
+      // Guard: prevent bootstrap from silently resetting a locally-decremented
+      // trial counter.  When the user is already on trial and the server also
+      // says trial, never let the incoming count exceed the local count — the
+      // server may still be lagging a decrement that was applied moments ago.
+      // Use Math.min so the server can still drive the count down (e.g. another
+      // device spent a question), but not back up.
       const accessInfo: AccessInfo = {
         access: data.access ?? "none",
         hasAccess: data.hasAccess ?? false,
         unlimited: data.unlimited ?? false,
-        trialLeft: data.trial_questions_left ?? 0,
+        trialLeft: serverTrialLeft, // will be overwritten below after s is known
         paidUntil: data.paid_until ?? null,
         promoUntil: data.promo_until ?? null,
         subscriptionStatus: data.subscription_status ?? null,
@@ -166,7 +182,7 @@ export function useAuthProvider(): AuthContextValue {
       }
       const lastBootstrap: LastBootstrap = {
         access: data.access ?? "none",
-        trialLeft: data.trial_questions_left ?? 0,
+        trialLeft: serverTrialLeft,
         promoUntil: data.promo_until ?? null,
         paidUntil: data.paid_until ?? null,
         hasAccess: data.hasAccess ?? false,
@@ -177,16 +193,26 @@ export function useAuthProvider(): AuthContextValue {
         error: data.error,
       }
 
-      // Server truth always wins — no optimistic version guard.
-      setState(s => ({
-        ...s,
-        ready: true,
-        user: user ?? s.user,
-        accessInfo,
-        lastBootstrap,
-        error: null,
-        bootstrapFailed: false,
-      }))
+      // Server truth wins — with one guard: don't allow bootstrap to raise
+      // trial_questions_left when both prev and next states are "trial".
+      setState(s => {
+        const prevAccess = s.accessInfo?.access
+        const prevTrialLeft = s.accessInfo?.trialLeft ?? 0
+        const serverAccess = data.access ?? "none"
+        const guardedTrialLeft =
+          prevAccess === "trial" && serverAccess === "trial" && prevTrialLeft > 0
+            ? Math.min(prevTrialLeft, serverTrialLeft)
+            : serverTrialLeft
+        return {
+          ...s,
+          ready: true,
+          user: user ?? s.user,
+          accessInfo: { ...accessInfo, trialLeft: guardedTrialLeft },
+          lastBootstrap,
+          error: null,
+          bootstrapFailed: false,
+        }
+      })
     } catch (e: any) {
       if (!mounted.current) return
       setState(s => ({
@@ -355,6 +381,22 @@ export function useAuthProvider(): AuthContextValue {
     })
   }, [])
 
+  const syncTrialLeft = useCallback((n: number) => {
+    setState((s) => {
+      if (!s.accessInfo || s.accessInfo.access !== "trial") return s
+      const newLeft = Math.max(0, n)
+      return {
+        ...s,
+        accessInfo: {
+          ...s.accessInfo,
+          trialLeft: newLeft,
+          access: newLeft > 0 ? "trial" : "none",
+          hasAccess: newLeft > 0,
+        },
+      }
+    })
+  }, [])
+
   const setAccessFromPromo = useCallback((promoUntil: string) => {
     setState((s) => {
       if (!s.accessInfo) return s
@@ -379,6 +421,7 @@ export function useAuthProvider(): AuthContextValue {
     refreshAccess: runBootstrap,
     retryBootstrap,
     decrementTrialLeft,
+    syncTrialLeft,
     setAccessFromPromo,
   }
 }

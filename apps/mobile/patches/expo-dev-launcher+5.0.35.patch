@@ -1,16 +1,13 @@
 diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/settings.gradle.kts b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/settings.gradle.kts
 new file mode 100644
-index 0000000..1a2b3c4
+index 0000000..ef7c37d
 --- /dev/null
 +++ b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/settings.gradle.kts
-@@ -0,0 +1,9 @@
-+// Redirect Kotlin plugin resolution to Maven Central to avoid
-+// plugins-artifacts.gradle.org (CDN that backs plugins.gradle.org/m2)
-+// which may be blocked in restricted CI/build environments.
+@@ -0,0 +1,7 @@
 +pluginManagement {
-+    repositories {
-+        mavenCentral()
-+        google()
-+        gradlePluginPortal()
-+    }
++  repositories {
++    gradlePluginPortal()
++    google()
++    mavenCentral()
++  }
 +}

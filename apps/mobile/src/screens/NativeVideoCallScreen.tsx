@@ -34,7 +34,7 @@ import { Audio, Video, ResizeMode } from "expo-av"
 import { useT } from "@/hooks/useLanguage"
 import { useVideoSession, type VideoPhase } from "@/hooks/useVideoSession"
 import { logEvent } from "@/services/analytics"
-import { API_BASE_URL } from "@/constants/config"
+import { API_BASE_URL, DEBUG_ENABLED } from "@/constants/config"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import type { Locale } from "@/constants/i18n"
 
@@ -95,7 +95,7 @@ export default function NativeVideoCallScreen() {
   const [videoReady, setVideoReady] = useState(false)
 
   // decrementTrialLeft is now called inside useVideoSession after each AI reply
-  const { phase, transcript, reply, error, diagLog, start, stop, retryFromError } =
+  const { phase, turns, error, diagLog, manualStop, start, stop, retryFromError } =
     useVideoSession(characterId, avatarSlug, gender, locale)
 
   // Stop session when the screen loses focus (e.g. Android hardware back while
@@ -199,7 +199,7 @@ export default function NativeVideoCallScreen() {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" />
 
-      {/* ── Avatar video: idle + speaking stacked, only one plays ──────────── */}
+      {/* ── Avatar video — always fully visible above the bottom panel ──────── */}
       <View style={styles.videoContainer}>
         {/* Idle video — visible when NOT speaking */}
         <Video
@@ -213,8 +213,7 @@ export default function NativeVideoCallScreen() {
           onLoad={() => setVideoReady(true)}
         />
 
-        {/* Speaking video — rendered on top; transparent when not speaking so the
-            idle loop below shows through instead of a frozen last frame. */}
+        {/* Speaking video — on top; transparent when not speaking */}
         <Video
           ref={speakingVideoRef}
           source={{ uri: avatarUri(meta.avatarNum, "speaking") }}
@@ -232,17 +231,12 @@ export default function NativeVideoCallScreen() {
             <Text style={styles.videoLoadingText}>{t.loading}</Text>
           </View>
         )}
-
-        {/* Gradient overlay at bottom for readability */}
-        <View style={styles.gradient} />
       </View>
 
-      {/* ── Bottom overlay: status + conversation + controls ──────────────── */}
-      <View
-        style={[styles.overlay, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}
-        pointerEvents="box-none"
-      >
-        {/* Character name + phase status */}
+      {/* ── Bottom panel — opaque, below video, never overlaps avatar ─────── */}
+      <View style={[styles.bottomPanel, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+
+        {/* Character name + phase status row */}
         <View style={styles.statusRow}>
           <View style={[styles.namePill, { backgroundColor: accentColor }]}>
             <Text style={styles.namePillText}>{t[meta.nameKey]}</Text>
@@ -254,52 +248,45 @@ export default function NativeVideoCallScreen() {
           </View>
         </View>
 
-        {/* Conversation bubbles */}
-        {(transcript || reply) ? (
+        {/* Conversation bubbles — scrollable, does not cover video */}
+        {turns.length > 0 ? (
           <ScrollView
             style={styles.convoScroll}
             contentContainerStyle={styles.convoContent}
             showsVerticalScrollIndicator={false}
-
           >
-            {transcript ? (
-              <View style={styles.userBubble}>
-                <Text style={styles.bubbleLabel}>{t.voiceYou}</Text>
-                <Text style={styles.userBubbleText}>{transcript}</Text>
-              </View>
-            ) : null}
-            {reply ? (
-              <View style={styles.aiBubble}>
-                <Text style={styles.bubbleLabel}>{t.voiceAI}</Text>
-                <Text style={styles.aiBubbleText}>{reply}</Text>
-              </View>
-            ) : null}
+            {turns.map((turn, i) =>
+              turn.role === "user" ? (
+                <View key={i} style={styles.userBubble}>
+                  <Text style={styles.bubbleLabel}>{t.voiceYou}</Text>
+                  <Text style={styles.userBubbleText}>{turn.text}</Text>
+                </View>
+              ) : (
+                <View key={i} style={styles.aiBubble}>
+                  <Text style={styles.bubbleLabel}>{t.voiceAI}</Text>
+                  <Text style={styles.aiBubbleText}>{turn.text}</Text>
+                </View>
+              )
+            )}
           </ScrollView>
         ) : (
           phase === "listening" && (
-            <Text style={styles.hint}>
-              {t.videoSpeakHint}
-            </Text>
+            <Text style={styles.hint}>{t.videoSpeakHint}</Text>
           )
         )}
 
-        {/* ── Debug box — error + live diagnostic log ── */}
-        {(phase === "error" && error && !isPaymentError) || diagLog ? (
+        {/* Error box — always visible when phase=error */}
+        {phase === "error" && error && !isPaymentError && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorBoxTitle}>⚠ {error}</Text>
+          </View>
+        )}
+
+        {/* Diagnostic log — DEBUG builds only */}
+        {DEBUG_ENABLED && diagLog ? (
           <View style={styles.debugBox}>
-            {phase === "error" && error && !isPaymentError && (
-              <>
-                <Text style={styles.debugTitle}>⚠ API error · phase: {phase}</Text>
-                <Text style={styles.debugMsg} selectable>{error}</Text>
-              </>
-            )}
-            {diagLog ? (
-              <>
-                <Text style={[styles.debugTitle, { marginTop: phase === "error" ? 6 : 0 }]}>
-                  📋 Diagnostics
-                </Text>
-                <Text style={styles.debugMsg} selectable>{diagLog}</Text>
-              </>
-            ) : null}
+            <Text style={styles.debugTitle}>📋 Diagnostics</Text>
+            <Text style={styles.debugMsg} selectable>{diagLog}</Text>
           </View>
         ) : null}
 
@@ -328,6 +315,18 @@ export default function NativeVideoCallScreen() {
             )
           ) : null}
 
+          {/* Manual send button — shown during listening on all platforms.
+              Silence detection still auto-sends; this is a visible shortcut. */}
+          {phase === "listening" && (
+            <TouchableOpacity
+              style={[styles.sendBtn, { borderColor: accentColor }]}
+              onPress={manualStop}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.sendBtnText, { color: accentColor }]}>{t.voiceSendNow}</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.endBtn}
             onPress={handleEnd}
@@ -342,8 +341,6 @@ export default function NativeVideoCallScreen() {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-
-const OVERLAY_HEIGHT = 280
 
 const styles = StyleSheet.create({
   root: {
@@ -373,30 +370,11 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: fontSize.sm,
   },
-  // Semi-transparent dark gradient at the bottom so text is legible over the avatar
-  gradient: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: OVERLAY_HEIGHT + 40,
-    // Simulated gradient via background (no expo-linear-gradient dependency)
-    backgroundColor: "transparent",
-    // On Android a simple semi-transparent bar works well enough:
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-  },
-
-  // Bottom overlay — positioned absolutely over the video
-  overlay: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
+  // Bottom panel — below video, opaque, never overlaps avatar
+  bottomPanel: {
+    backgroundColor: "rgba(0,0,0,0.85)",
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
-    // Dark frosted-glass effect
-    backgroundColor: "rgba(0,0,0,0.55)",
   },
 
   // Status row
@@ -490,6 +468,17 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     fontWeight: "700",
   },
+  sendBtn: {
+    paddingVertical: spacing.md,
+    borderRadius: radii.xl,
+    alignItems: "center",
+    borderWidth: 2,
+    backgroundColor: "transparent",
+  },
+  sendBtnText: {
+    fontSize: fontSize.md,
+    fontWeight: "700",
+  },
   endBtn: {
     paddingVertical: spacing.md,
     borderRadius: radii.xl,
@@ -502,6 +491,21 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: fontSize.md,
     fontWeight: "700",
+  },
+
+  // Error box (inline, inside bottom panel)
+  errorBox: {
+    backgroundColor: "rgba(220,38,38,0.2)",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: "rgba(220,38,38,0.5)",
+    padding: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  errorBoxTitle: {
+    fontSize: fontSize.sm,
+    color: colors.error,
+    lineHeight: 18,
   },
 
   // Debug error box
