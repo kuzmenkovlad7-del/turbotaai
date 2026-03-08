@@ -135,7 +135,11 @@ export async function POST(request: NextRequest) {
     try {
       const json = JSON.parse(raw)
       const extra = remainingQuestions !== null ? { remainingQuestions } : {}
-      return NextResponse.json({ ...json, ...extra }, { status: 200, headers: { "cache-control": "no-store" } })
+      // n8n sometimes returns an array of objects — normalize to the first element
+      // so extractReplyText (which checks data.output / data.text / data.response)
+      // can always find the text regardless of whether n8n used array or object form.
+      const body = Array.isArray(json) ? (json[0] ?? {}) : json
+      return NextResponse.json({ ...body, ...extra }, { status: 200, headers: { "cache-control": "no-store" } })
     } catch {
       const extra = remainingQuestions !== null ? { remainingQuestions } : {}
       return NextResponse.json({ ok: true, response: raw, ...extra }, { status: 200, headers: { "cache-control": "no-store" } })
