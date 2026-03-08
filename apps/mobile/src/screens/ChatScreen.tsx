@@ -178,12 +178,16 @@ export default function ChatScreen() {
       }
 
       const reply = api.extractReplyText(data)
-      const isError = data?.ok === false
+      // "..." is extractReplyText's fallback when the backend returned no usable
+      // text (e.g. n8n returned an empty body or unrecognized shape). Treat it as
+      // an error so the user sees a meaningful message rather than literal "...".
+      const isError = data?.ok === false || reply === "..."
+      const displayReply = isError && reply === "..." ? t.chatError : reply
 
       const aiMsg: Message = {
         id: `a-${Date.now()}`,
         role: "assistant",
-        text: reply,
+        text: displayReply,
         isError,
       }
       setMessages((prev) => [...prev, aiMsg])
