@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { getSupabaseServerClient, isSupabaseServerConfigured } from "@/lib/supabase-server"
+import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
 export type AccessGrant = {
   id: string
@@ -43,6 +44,19 @@ function hasUnlimited(grant: AccessGrant | null) {
 }
 
 async function getUserIdFromReq(req: NextRequest): Promise<string | null> {
+  // Mobile clients send a Bearer token instead of session cookies.
+  // Try it first so the account grant is always checked for mobile requests.
+  const authHeader = req.headers.get("authorization") || ""
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim()
+  if (bearerToken) {
+    try {
+      const admin = getSupabaseAdmin()
+      const { data } = await admin.auth.getUser(bearerToken)
+      if (data?.user?.id) return data.user.id
+    } catch {}
+  }
+
+  // Fall back to cookie-based session (web browsers).
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !anon) return null
