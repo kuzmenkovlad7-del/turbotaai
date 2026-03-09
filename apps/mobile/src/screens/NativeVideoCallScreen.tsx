@@ -95,7 +95,7 @@ export default function NativeVideoCallScreen() {
   const [videoReady, setVideoReady] = useState(false)
 
   // decrementTrialLeft is now called inside useVideoSession after each AI reply
-  const { phase, turns, error, diagLog, manualStop, start, stop, retryFromError } =
+  const { phase, turns, error, diagLog, start, stop, retryFromError } =
     useVideoSession(characterId, avatarSlug, gender, locale)
 
   // Stop session when the screen loses focus (e.g. Android hardware back while
@@ -314,18 +314,6 @@ export default function NativeVideoCallScreen() {
               </TouchableOpacity>
             )
           ) : null}
-
-          {/* Manual send button — shown during listening on all platforms.
-              Silence detection still auto-sends; this is a visible shortcut. */}
-          {phase === "listening" && (
-            <TouchableOpacity
-              style={[styles.sendBtn, { borderColor: accentColor }]}
-              onPress={manualStop}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.sendBtnText, { color: accentColor }]}>{t.voiceSendNow}</Text>
-            </TouchableOpacity>
-          )}
 
           <TouchableOpacity
             style={styles.endBtn}

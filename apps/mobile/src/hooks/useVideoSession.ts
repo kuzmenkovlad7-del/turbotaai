@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Audio } from "expo-av"
 import * as FileSystem from "expo-file-system"
-import { sendMessage, extractReplyText, apiFetch } from "@/services/api"
+import { sendMessage, extractReplyText, apiFetch, saveConversation } from "@/services/api"
 import { buildMessagePayload } from "@/services/messagePayload"
 import { generateUUID } from "@/services/storage"
 import { useAuth } from "@/hooks/useAuth"
@@ -116,6 +116,7 @@ export function useVideoSession(
     processing: false,
     preparing: false,    // lock: prevent parallel Audio.Recording.createAsync calls
     sessionId: "",       // UUID for this call session — set on start()
+    sessionFirstTurn: true, // true until first successful turn is saved to history
     recording: null as Audio.Recording | null,
     sound: null as Audio.Sound | null,
     pollTimer: null as ReturnType<typeof setInterval> | null,
@@ -263,17 +264,40 @@ export function useVideoSession(
         }
 
         const replyText = extractReplyText(agentData)
-        // Guard against the extractReplyText fallback "..." so we don't TTS a literal
-        // "dot dot dot" when the backend returns an empty/malformed success body.
-        if (!replyText || replyText === "..." || !s.mounted || !s.active) {
-          s.appendDiag("AGT: empty reply — loop")
+        // Guard: empty or "..." fallback means the backend returned no usable text.
+        // Surface as an error (so the user sees a retry button) rather than silently
+        // looping back to listening — a silent loop causes the session to stay stuck
+        // in "listening" forever and can produce phantom transcripts when TTS audio
+        // from a previous turn is re-captured by the microphone.
+        if (!replyText || replyText === "...") {
+          s.appendDiag("AGT: empty reply — error")
           s.processing = false
-          if (s.mounted && s.active) s.startListen()
+          if (s.mounted) {
+            setError("empty_reply")
+            setPhase("error")
+          }
+          return
+        }
+        if (!s.mounted || !s.active) {
+          s.processing = false
           return
         }
         s.appendDiag(`AGT: "${replyText.slice(0, 30)}"`)
         setReply(replyText)
         setTurns(prev => [...prev, { role: "assistant" as const, text: replyText, ts: Date.now() }])
+
+        // Save turn to conversation history — fire-and-forget, same pattern as voice/chat.
+        const isFirstTurn = s.sessionFirstTurn
+        s.sessionFirstTurn = false
+        saveConversation({
+          conversationId: s.sessionId,
+          messages: [
+            { role: "user", content: text },
+            { role: "assistant", content: replyText },
+          ],
+          mode: "video",
+          title: isFirstTurn ? text.slice(0, 64) : undefined,
+        }).catch(() => {})
         // Decrement trial counter — consistent with Chat flow
         decrementTrialLeft()
         // Sync server access state after every turn. Fire-and-forget.
@@ -471,6 +495,7 @@ export function useVideoSession(
     s.processing = false
     s.preparing = false          // reset lock for fresh session
     s.sessionId = generateUUID() // fresh session ID per call
+    s.sessionFirstTurn = true     // reset history title flag for each new call
     setError(null)
     setTranscript("")
     setReply("")

@@ -276,12 +276,15 @@ export async function sendMessage(payload: MessagePayload): Promise<AgentRespons
 /** Extract displayable text from the variable agent response shape */
 export function extractReplyText(data: AgentResponse): string {
   if (data?.error && data?.ok === false) return data.error
-  // N8N webhook returns various shapes
+  // N8N webhook returns various shapes; `message` is a common additional field
   const raw =
     data?.output ||
     data?.text ||
     data?.response ||
-    (Array.isArray(data) ? (data as any)[0]?.output || (data as any)[0]?.text : null)
+    (data as any)?.message ||
+    (Array.isArray(data)
+      ? (data as any)[0]?.output || (data as any)[0]?.text || (data as any)[0]?.message
+      : null)
   if (typeof raw === "string" && raw.trim()) return raw.trim()
   // Fallback: try any string value
   if (data && typeof data === "object" && !Array.isArray(data)) {

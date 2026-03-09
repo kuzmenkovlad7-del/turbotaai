@@ -281,12 +281,22 @@ export function useVoiceSession(
         }
 
         const replyText = extractReplyText(agentData)
-        // Guard against the extractReplyText fallback "..." so we don't TTS a literal
-        // "dot dot dot" when the backend returns an empty/malformed success body.
-        if (!replyText || replyText === "..." || !s.mounted || !s.active) {
-          s.appendDiag("AGT: empty reply — loop")
+        // Guard: empty or "..." fallback means the backend returned no usable text.
+        // Surface as an error (so the user sees a retry button) rather than silently
+        // looping back to listening — a silent loop causes the session to stay stuck
+        // in "listening" forever and can produce phantom transcripts when TTS audio
+        // from a previous turn is re-captured by the microphone.
+        if (!replyText || replyText === "...") {
+          s.appendDiag("AGT: empty reply — error")
           s.processing = false
-          if (s.mounted && s.active) s.startListen()
+          if (s.mounted) {
+            setError("empty_reply")
+            setPhase("error")
+          }
+          return
+        }
+        if (!s.mounted || !s.active) {
+          s.processing = false
           return
         }
         s.appendDiag(`AGT: "${replyText.slice(0, 30)}"`)
