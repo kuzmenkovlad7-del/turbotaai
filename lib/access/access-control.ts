@@ -43,6 +43,26 @@ function hasUnlimited(grant: AccessGrant | null) {
   return isFuture(grant.paid_until ?? null) || isFuture(grant.promo_until ?? null)
 }
 
+/**
+ * Read paid_until / promo_until from the profiles table.
+ * Bootstrap uses this as a third fallback after device + account grants.
+ * We must do the same so requireAccess reflects the same truth as bootstrap.
+ */
+async function getProfileAccess(userId: string): Promise<{ paid_until: string | null; promo_until: string | null } | null> {
+  try {
+    const supabase = getSupabaseServerClient()
+    const { data } = await supabase
+      .from("profiles")
+      .select("paid_until,promo_until")
+      .eq("id", userId)
+      .maybeSingle()
+    if (!data) return null
+    return { paid_until: (data as any).paid_until ?? null, promo_until: (data as any).promo_until ?? null }
+  } catch {
+    return null
+  }
+}
+
 async function getUserIdFromReq(req: NextRequest): Promise<string | null> {
   // Mobile clients send a Bearer token instead of session cookies.
   // Try it first so the account grant is always checked for mobile requests.
@@ -148,12 +168,22 @@ export async function requireAccessByDeviceHash(args: {
 
   if (hasUnlimited(grant)) return { ok: true, status: 200, grant }
 
-  // если пользователь вошёл, проверяем также account:<userId>
+  // If the user is logged in, check the account-level grant then profiles.
+  // This mirrors the three-source merge that bootstrap uses:
+  //   device grant  → account grant  → profiles.paid_until / profiles.promo_until
+  // All three must be checked so that access granted on web (which may only write
+  // to profiles) is visible here too — not just in bootstrap.
   if (req) {
     const userId = await getUserIdFromReq(req)
     if (userId) {
       const acc = await getOrCreateGrant(`account:${userId}`, 0)
       if (hasUnlimited(acc)) return { ok: true, status: 200, grant: acc }
+
+      // profiles fallback — same check bootstrap performs
+      const prof = await getProfileAccess(userId)
+      if (prof && (isFuture(prof.paid_until) || isFuture(prof.promo_until))) {
+        return { ok: true, status: 200, grant: acc ?? grant }
+      }
     }
   }
 
