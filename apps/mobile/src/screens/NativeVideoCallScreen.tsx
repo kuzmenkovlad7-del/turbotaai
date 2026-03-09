@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
   bottomPanel: {
     backgroundColor: "rgba(0,0,0,0.85)",
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingTop: spacing.lg,
   },
 
   // Status row
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
 
   // Conversation area
   convoScroll: {
-    maxHeight: 120,
+    maxHeight: 180,
     marginBottom: spacing.sm,
   },
   convoContent: {
@@ -453,17 +453,6 @@ const styles = StyleSheet.create({
   },
   actionBtnText: {
     color: "#fff",
-    fontSize: fontSize.md,
-    fontWeight: "700",
-  },
-  sendBtn: {
-    paddingVertical: spacing.md,
-    borderRadius: radii.xl,
-    alignItems: "center",
-    borderWidth: 2,
-    backgroundColor: "transparent",
-  },
-  sendBtnText: {
     fontSize: fontSize.md,
     fontWeight: "700",
   },
