@@ -188,6 +188,8 @@ const en = {
   accountPromoErrorInvalid: "Invalid promo code. Please check and try again.",
   accountPromoErrorLogin: "Please sign in to apply a promo code.",
   accountPromoErrorServer: "Server error. Please try again later.",
+  accountCancelPromo: "Cancel promo",
+  accountCancelPromoConfirm: "Your promo access will be cancelled immediately.",
 
   // Bootstrap
   bootstrapErrorTitle: "Connection Error",
@@ -368,6 +370,8 @@ const uk: Translations = {
   accountPromoErrorInvalid: "Недійсний промокод. Перевірте та спробуйте ще раз.",
   accountPromoErrorLogin: "Будь ласка, увійдіть, щоб застосувати промокод.",
   accountPromoErrorServer: "Помилка сервера. Спробуйте пізніше.",
+  accountCancelPromo: "Скасувати промо",
+  accountCancelPromoConfirm: "Ваш промодоступ буде негайно скасовано.",
 
   bootstrapErrorTitle: "Помилка з'єднання",
   bootstrapErrorDesc: "Не вдалося підключитися до TurbotaAI. Перевірте інтернет та спробуйте ще раз.",
@@ -542,6 +546,8 @@ const ru: Translations = {
   accountPromoErrorInvalid: "Неверный промокод. Проверьте и попробуйте ещё раз.",
   accountPromoErrorLogin: "Пожалуйста, войдите, чтобы применить промокод.",
   accountPromoErrorServer: "Ошибка сервера. Попробуйте позже.",
+  accountCancelPromo: "Отменить промо",
+  accountCancelPromoConfirm: "Ваш промодоступ будет немедленно отменён.",
 
   bootstrapErrorTitle: "Ошибка соединения",
   bootstrapErrorDesc: "Не удалось подключиться к TurbotaAI. Проверьте интернет и попробуйте снова.",
