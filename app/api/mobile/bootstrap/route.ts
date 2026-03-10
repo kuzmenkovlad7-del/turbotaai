@@ -151,27 +151,32 @@ export async function GET(req: NextRequest) {
     ag = await findGrantByKey(sb, accountKey)
   }
 
-  // 6. Also read profiles table for promo_until / paid_until so that access
-  //    set by older web code (which only wrote to profiles, not access_grants)
-  //    or by an admin is still reflected immediately after login.
-  let profPaidUntil: string | null = null
-  let profPromoUntil: string | null = null
+  // 6. Read profiles for metadata only (auto_renew, subscription_status).
+  //    profiles.paid_until / promo_until are NOT included in the access merge —
+  //    this matches web buildAccessSummary which merges only device + account
+  //    grants.  Including profiles in the merge caused a divergence: after
+  //    promo/cancel cleared grants but profiles update failed silently, web
+  //    (grants-only merge) showed no promo while mobile (3-source merge) still
+  //    showed promo.  Grants are the authoritative source; profiles is a
+  //    denormalised copy kept for legacy web code and metadata display only.
+  let profAutoRenew = false
+  let profSubscriptionStatus: string | null = null
   if (userId) {
     try {
       const { data: prof } = await sb
         .from("profiles")
-        .select("paid_until,promo_until")
+        .select("auto_renew,subscription_status")
         .eq("id", userId)
         .maybeSingle()
-      profPaidUntil  = (prof as any)?.paid_until  ?? null
-      profPromoUntil = (prof as any)?.promo_until ?? null
+      profAutoRenew          = Boolean((prof as any)?.auto_renew ?? false)
+      profSubscriptionStatus = (prof as any)?.subscription_status ?? null
     } catch {}
   }
 
-  // 7. Merge: take the best (later) paid/promo date from device grant, account
-  //    grant, and profiles so any access path on any platform is visible.
-  const mergedPaid  = laterIso(laterIso(dg?.paid_until  ?? null, ag?.paid_until  ?? null), profPaidUntil)
-  const mergedPromo = laterIso(laterIso(dg?.promo_until ?? null, ag?.promo_until ?? null), profPromoUntil)
+  // 7. Merge: take the best (later) paid/promo date from device grant and
+  //    account grant only — matching web buildAccessSummary behaviour.
+  const mergedPaid  = laterIso(dg?.paid_until  ?? null, ag?.paid_until  ?? null)
+  const mergedPromo = laterIso(dg?.promo_until ?? null, ag?.promo_until ?? null)
 
   // 8. Trial counter lives on the device grant (same convention as web).
   const trialLeft = Math.max(0, Number(dg?.trial_questions_left ?? TRIAL_DEFAULT))
@@ -183,9 +188,8 @@ export async function GET(req: NextRequest) {
 
   const access = hasPaid ? "paid" : hasPromo ? "promo" : trialLeft > 0 ? "trial" : "none"
 
-  // subscription_status / auto_renew: prefer account grant if present
-  const subscription_status = (ag ?? dg)?.status ?? null
-  const auto_renew = !!((ag ?? dg)?.auto_renew ?? false)
+  const subscription_status = profSubscriptionStatus ?? ((hasPaid || hasPromo) ? "active" : "inactive")
+  const auto_renew = profAutoRenew
 
   return NextResponse.json(
     {
