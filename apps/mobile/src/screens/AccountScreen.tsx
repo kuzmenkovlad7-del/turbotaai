@@ -26,7 +26,7 @@ import { colors, fontSize, spacing, radii } from "@/constants/theme"
 const LOCALES: Locale[] = ["en", "uk", "ru"]
 
 export default function AccountScreen() {
-  const { user, accessInfo, logout, refreshAccess, setAccessFromPromo } = useAuth()
+  const { user, accessInfo, logout, refreshAccess } = useAuth()
   const { t, locale, setLocale } = useT()
   const {
     purchasing,
@@ -116,12 +116,12 @@ export default function AccountScreen() {
         logEvent("subscription_started", { method: "promo" })
         setPromoMsg({ text: t.accountPromoSuccess, ok: true })
         setPromoCode("")
-        // Optimistic update: apply promo access immediately using the value
-        // from the API response so every screen reflects the change at once,
-        // without waiting for the background bootstrap round-trip.
-        if (result.promo_until) {
-          setAccessFromPromo(result.promo_until)
-        }
+        // Refresh from bootstrap — the server is the single source of truth for
+        // promo_until. Do NOT apply result.promo_until optimistically: the redeem
+        // route computes addDaysIso(days) fresh from today on every call, so the
+        // response date may differ from the stored grant date (which laterDateIso
+        // may have set earlier). Applying it optimistically causes a visible flash
+        // of the wrong date that then reverts when bootstrap responds.
         try { await refreshAccess() } catch {}
       } else {
         // Map by HTTP status so the user sees a meaningful localised message
@@ -142,7 +142,7 @@ export default function AccountScreen() {
     } finally {
       setPromoLoading(false)
     }
-  }, [promoCode, refreshAccess, setAccessFromPromo, t])
+  }, [promoCode, refreshAccess, t])
 
   const handleCancelAutoRenew = useCallback(() => {
     Alert.alert(t.accountCancelAutoRenew, t.accountCancelConfirm, [
