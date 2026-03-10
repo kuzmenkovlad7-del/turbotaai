@@ -17,7 +17,7 @@ import Button from "@/components/Button"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { useSubscription } from "@/hooks/useSubscription"
-import { redeemPromo, cancelAutoRenew, resumeAutoRenew } from "@/services/api"
+import { redeemPromo, cancelAutoRenew, resumeAutoRenew, cancelPromo } from "@/services/api"
 import { logEvent } from "@/services/analytics"
 import { API_BASE_URL, IAP_PRODUCTS, DEBUG_ENABLED } from "@/constants/config"
 import { LOCALE_LABELS, type Locale } from "@/constants/i18n"
@@ -197,6 +197,33 @@ export default function AccountScreen() {
     ])
   }, [refreshAccess, t])
 
+  const handleCancelPromo = useCallback(() => {
+    Alert.alert(t.accountCancelPromo, t.accountCancelPromoConfirm, [
+      { text: t.accountCancel, style: "cancel" },
+      {
+        text: t.accountCancelPromo,
+        style: "destructive",
+        onPress: async () => {
+          setActionLoading(true)
+          setActionMsg(null)
+          try {
+            const result = await cancelPromo()
+            if (result.ok) {
+              setActionMsg({ text: t.accountActionSuccess, ok: true })
+              await refreshAccess()
+            } else {
+              setActionMsg({ text: t.accountPromoErrorServer, ok: false })
+            }
+          } catch (e: any) {
+            setActionMsg({ text: t.accountPromoErrorServer, ok: false })
+          } finally {
+            setActionLoading(false)
+          }
+        },
+      },
+    ])
+  }, [refreshAccess, t])
+
   const fmtDate = (iso: string | null) => {
     if (!iso) return null
     try {
@@ -294,6 +321,23 @@ export default function AccountScreen() {
             <View style={styles.noAccessBox}>
               <Text style={styles.noAccessLabel}>{t.accountNoPlan}</Text>
               <Text style={styles.noAccessDesc}>{t.accountNoPlanDesc}</Text>
+            </View>
+          )}
+
+          {/* Cancel promo for promo users — mirrors web /profile "Cancel promo" button */}
+          {isPromo && (
+            <View style={styles.actionSection}>
+              <Button
+                title={t.accountCancelPromo}
+                variant="outline"
+                onPress={handleCancelPromo}
+                loading={actionLoading}
+              />
+              {actionMsg && (
+                <Text style={[styles.actionFeedback, { color: actionMsg.ok ? colors.success : colors.error }]}>
+                  {actionMsg.text}
+                </Text>
+              )}
             </View>
           )}
 

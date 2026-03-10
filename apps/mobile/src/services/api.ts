@@ -315,6 +315,14 @@ export async function validateReceipt(receipt: {
 
 /* ── Promo codes ── */
 
+export async function cancelPromo(): Promise<{ ok: boolean; errorCode?: string; error?: string }> {
+  const res = await apiFetch("/api/billing/promo/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  })
+  return safeJson(res, { ok: false, error: `HTTP ${res.status}` })
+}
+
 export async function redeemPromo(
   code: string,
 ): Promise<{ ok: boolean; promo_until?: string; error?: string; httpStatus: number }> {

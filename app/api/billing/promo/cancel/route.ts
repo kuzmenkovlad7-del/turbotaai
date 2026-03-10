@@ -32,32 +32,6 @@ function trialDefaultValue() {
   return clampInt(process.env.TRIAL_QUESTIONS_LIMIT, 5, 0, 999)
 }
 
-function routeSessionSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anon) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY")
-
-  const cookieStore = cookies()
-  const pendingCookies: any[] = []
-
-  const sb = createServerClient(url, anon, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll()
-      },
-      setAll(cookiesToSet) {
-        pendingCookies.push(...cookiesToSet)
-      },
-    },
-  })
-
-  const applyPendingCookies = (res: NextResponse) => {
-    for (const c of pendingCookies) res.cookies.set(c.name, c.value, c.options)
-  }
-
-  return { sb, applyPendingCookies }
-}
-
 function routeAdminSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const service = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -93,25 +67,69 @@ async function updateGrant(sb: any, id: string, patch: Partial<GrantRow>) {
   return (data ?? null) as GrantRow | null
 }
 
-export async function POST(_req: NextRequest) {
+/**
+ * Resolve user ID from the request.
+ * Mobile clients send Authorization: Bearer <token>.
+ * Web browsers rely on cookie-based session via next/headers.
+ */
+async function resolveUserId(req: NextRequest): Promise<string | null> {
+  // Mobile: Bearer token
+  const authHeader = req.headers.get("authorization") || ""
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim()
+  if (bearerToken) {
+    try {
+      const admin = routeAdminSupabase()
+      const { data } = await admin.auth.getUser(bearerToken)
+      if (data?.user?.id) return data.user.id
+    } catch {}
+  }
+
+  // Web: cookie-based session
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anon) return null
+  try {
+    const cookieStore = cookies()
+    const pendingCookies: any[] = []
+    const sb = createServerClient(url, anon, {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) { pendingCookies.push(...cookiesToSet) },
+      },
+    })
+    const { data: userData } = await sb.auth.getUser()
+    return userData?.user?.id ?? null
+  } catch {
+    return null
+  }
+}
+
+export async function POST(req: NextRequest) {
   try {
     const nowIso = new Date().toISOString()
     const trialDefault = trialDefaultValue()
 
-    const cookieStore = cookies()
-    let deviceUuid = cookieStore.get(DEVICE_COOKIE)?.value ?? null
+    // Resolve device hash: mobile sends X-Device-Hash header; web uses cookie.
+    const xDeviceHash = req.headers.get("x-device-hash") || ""
+    let deviceUuid: string
     let needSetDeviceCookie = false
-    if (!deviceUuid) {
-      deviceUuid = crypto.randomUUID()
-      needSetDeviceCookie = true
+
+    if (xDeviceHash) {
+      deviceUuid = xDeviceHash
+    } else {
+      const cookieStore = cookies()
+      const cookieDevice = cookieStore.get(DEVICE_COOKIE)?.value ?? null
+      if (cookieDevice) {
+        deviceUuid = cookieDevice
+      } else {
+        deviceUuid = crypto.randomUUID()
+        needSetDeviceCookie = true
+      }
     }
 
-    const { sb: sessionSb, applyPendingCookies } = routeSessionSupabase()
     const adminSb = routeAdminSupabase()
 
-    const { data: userData } = await sessionSb.auth.getUser()
-    const user = userData?.user ?? null
-    const userId = user?.id ?? null
+    const userId = await resolveUserId(req)
     const isLoggedIn = Boolean(userId)
 
     const targets: string[] = [deviceUuid]
@@ -158,7 +176,6 @@ export async function POST(_req: NextRequest) {
       })
     }
 
-    applyPendingCookies(res)
     res.headers.set("cache-control", "no-store, max-age=0")
     return res
   } catch (_e: any) {
