@@ -3,24 +3,12 @@ import crypto from "crypto"
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { createClient } from "@supabase/supabase-js"
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const DEVICE_COOKIE = "ta_device_hash"
 const ACCOUNT_PREFIX = "account:"
-
-type GrantRow = {
-  id: string
-  user_id: string | null
-  device_hash: string
-  trial_questions_left: number | null
-  paid_until: any
-  promo_until: any
-  created_at?: string | null
-  updated_at?: string | null
-}
 
 function clampInt(v: any, fallback: number, min = 0, max = 9999) {
   const n = Number(v)
@@ -32,53 +20,25 @@ function trialDefaultValue() {
   return clampInt(process.env.TRIAL_QUESTIONS_LIMIT, 5, 0, 999)
 }
 
-function routeAdminSupabase() {
+function makeAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const service = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !service) {
-    throw new Error("Missing Supabase admin env: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY")
-  }
-
-  const sb = createClient(url, service, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
+  if (!url || !service) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY")
+  return createClient(url, service, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   })
-
-  return sb
-}
-
-async function findGrantByDevice(sb: any, deviceHash: string): Promise<GrantRow | null> {
-  const { data } = await sb
-    .from("access_grants")
-    .select("*")
-    .eq("device_hash", deviceHash)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  return (data ?? null) as GrantRow | null
-}
-
-async function updateGrant(sb: any, id: string, patch: Partial<GrantRow>) {
-  const { data } = await sb.from("access_grants").update(patch).eq("id", id).select("*").maybeSingle()
-  return (data ?? null) as GrantRow | null
 }
 
 /**
  * Resolve user ID from the request.
- * Mobile clients send Authorization: Bearer <token>.
- * Web browsers rely on cookie-based session via next/headers.
+ * Mobile sends Authorization: Bearer <token>; web uses cookie session.
  */
-async function resolveUserId(req: NextRequest): Promise<string | null> {
+async function resolveUserId(req: NextRequest, admin: ReturnType<typeof makeAdmin>): Promise<string | null> {
   // Mobile: Bearer token
   const authHeader = req.headers.get("authorization") || ""
   const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim()
   if (bearerToken) {
     try {
-      const admin = routeAdminSupabase()
       const { data } = await admin.auth.getUser(bearerToken)
       if (data?.user?.id) return data.user.id
     } catch {}
@@ -90,15 +50,14 @@ async function resolveUserId(req: NextRequest): Promise<string | null> {
   if (!url || !anon) return null
   try {
     const cookieStore = cookies()
-    const pendingCookies: any[] = []
     const sb = createServerClient(url, anon, {
       cookies: {
         getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) { pendingCookies.push(...cookiesToSet) },
+        setAll() {},
       },
     })
-    const { data: userData } = await sb.auth.getUser()
-    return userData?.user?.id ?? null
+    const { data } = await sb.auth.getUser()
+    return data?.user?.id ?? null
   } catch {
     return null
   }
@@ -127,44 +86,41 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const adminSb = routeAdminSupabase()
+    const admin = makeAdmin()
+    const userId = await resolveUserId(req, admin)
 
-    const userId = await resolveUserId(req)
-    const isLoggedIn = Boolean(userId)
-
+    // Same targets as redeem: device grant + account grant
     const targets: string[] = [deviceUuid]
-    if (isLoggedIn && userId) targets.push(`${ACCOUNT_PREFIX}${userId}`)
+    if (userId) targets.push(`${ACCOUNT_PREFIX}${userId}`)
 
-    let okAny = false
-
-    for (const deviceHash of targets) {
-      const g = await findGrantByDevice(adminSb, deviceHash)
-
-      if (g?.id) {
-        const current = typeof g.trial_questions_left === "number" ? g.trial_questions_left : null
-        const restoredTrial = current && current > 0 ? current : trialDefault
-
-        await updateGrant(adminSb, g.id, {
-          promo_until: null,
-          trial_questions_left: restoredTrial,
-          updated_at: nowIso,
-        }).catch(() => null)
-
-        okAny = true
+    // Update grants by device_hash (the unique key we know) — same pattern as
+    // redeem/route.ts. DO NOT update by `id`: the id may be missing from the
+    // returned row shape, causing silent no-ops while the route still returns ok.
+    // Restoring trial_questions_left to the default (promo sets it to 0 on redeem).
+    for (const dh of targets) {
+      const { error } = await admin
+        .from("access_grants")
+        .update({ promo_until: null, trial_questions_left: trialDefault, updated_at: nowIso })
+        .eq("device_hash", dh)
+      if (error) {
+        console.error("[promo/cancel] grant update error for", dh, ":", error.message ?? error)
       }
     }
 
-    if (isLoggedIn && userId) {
-      try {
-        const admin = getSupabaseAdmin()
-        await admin
-          .from("profiles")
-          .update({ promo_until: null, updated_at: nowIso } as any)
-          .eq("id", userId)
-      } catch {}
+    // Clear profiles.promo_until — this is the source that mobile bootstrap
+    // includes in its 3-way merge (device grant + account grant + profiles).
+    // Must be cleared in sync with grants so all three sources agree.
+    if (userId) {
+      const { error: profErr } = await admin
+        .from("profiles")
+        .update({ promo_until: null, updated_at: nowIso } as any)
+        .eq("id", userId)
+      if (profErr) {
+        console.error("[promo/cancel] profiles update error for", userId, ":", profErr.message ?? profErr)
+      }
     }
 
-    const res = NextResponse.json(okAny ? { ok: true } : { ok: false, errorCode: "GRANT_NOT_FOUND" }, { status: 200 })
+    const res = NextResponse.json({ ok: true }, { status: 200 })
 
     if (needSetDeviceCookie) {
       res.cookies.set(DEVICE_COOKIE, deviceUuid, {
@@ -179,6 +135,7 @@ export async function POST(req: NextRequest) {
     res.headers.set("cache-control", "no-store, max-age=0")
     return res
   } catch (_e: any) {
+    console.error("[promo/cancel] Unexpected error:", _e)
     return NextResponse.json({ ok: false, errorCode: "CANCEL_FAILED" }, { status: 200 })
   }
 }
