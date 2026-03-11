@@ -253,12 +253,25 @@ export async function POST(req: NextRequest) {
     const guestGrant = await ensureGrant(admin, guestHash, userId ?? null, trialDefault, nowIso)
     const mergedGuest = laterDateIso(guestGrant.promo_until ?? null, promoUntil) ?? promoUntil
 
-    // Use device_hash (not id) as the update key — works even when ensureGrant
-    // returns a fallback object whose id is not in the DB.
-    await admin
+    // Update device grant. Verify the row was actually modified by reading back
+    // the updated row — if 0 rows matched (ensureGrant returned an in-memory
+    // fallback not in the DB, or the update silently failed) return a real error
+    // instead of a fake ok:true that leaves bootstrap unchanged.
+    const { data: guestUpdated, error: guestUpdateErr } = await admin
       .from("access_grants")
       .update({ promo_until: mergedGuest, trial_questions_left: 0, updated_at: nowIso })
       .eq("device_hash", guestHash)
+      .select("device_hash,promo_until")
+
+    if (guestUpdateErr || !Array.isArray(guestUpdated) || guestUpdated.length === 0) {
+      console.error(
+        "[promo/redeem] device grant update failed — err:",
+        guestUpdateErr?.message ?? "none",
+        "rows:", guestUpdated?.length ?? 0,
+        "device_hash:", guestHash,
+      )
+      return NextResponse.json({ ok: false, error: "server_error" }, { status: 500 })
+    }
 
     let mergedAcc: string | null = null
 
@@ -266,10 +279,16 @@ export async function POST(req: NextRequest) {
       const accGrant = await ensureGrant(admin, accountHash, userId, trialDefault, nowIso)
       mergedAcc = laterDateIso(accGrant.promo_until ?? null, mergedGuest) ?? mergedGuest
 
-      await admin
+      const { error: accUpdateErr } = await admin
         .from("access_grants")
         .update({ promo_until: mergedAcc, trial_questions_left: 0, updated_at: nowIso })
         .eq("device_hash", accountHash)
+
+      if (accUpdateErr) {
+        // Non-fatal: device grant succeeded, promo is active on this device.
+        // Account grant will auto-sync on next buildAccessSummary (auto-claim).
+        console.error("[promo/redeem] account grant update error:", accUpdateErr?.message ?? accUpdateErr)
+      }
 
       try {
         await admin

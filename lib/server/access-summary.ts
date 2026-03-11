@@ -219,18 +219,40 @@ export async function buildAccessSummary(req: NextRequest): Promise<{
   const host = req.headers.get("host")
   const cookieDomain = cookieDomainFromHost(host)
 
-  let deviceHash = String(jar.get(DEVICE_COOKIE)?.value || "").trim()
+  // Device hash: X-Device-Hash header (mobile) takes precedence over cookie (web).
+  const headerDeviceHash = req.headers.get("x-device-hash") || ""
+  let deviceHash = headerDeviceHash || String(jar.get(DEVICE_COOKIE)?.value || "").trim()
   let needSetDeviceCookie = false
   if (!deviceHash) {
     deviceHash = randomUUID()
-    needSetDeviceCookie = true
+    needSetDeviceCookie = true  // only for web (mobile uses the header, not cookies)
   }
 
-  const { userId, email, pending } = await getUserFromCookies()
+  // User: cookie session (web) first; Bearer token (mobile) as fallback.
+  const { userId: cookieUserId, email: cookieEmail, pending } = await getUserFromCookies()
+  let userId: string | null = cookieUserId
+  let email: string | null = cookieEmail
+
+  const admin = makeAdmin()
+
+  // Mobile: no session cookie → try Authorization: Bearer <token>.
+  if (!userId && admin) {
+    const authHeader = req.headers.get("authorization") || ""
+    const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim()
+    if (bearerToken) {
+      try {
+        const { data } = await admin.auth.getUser(bearerToken)
+        if (data?.user?.id) {
+          userId = data.user.id
+          email = (data.user.email as string) ?? null
+        }
+      } catch {}
+    }
+  }
+
   const isLoggedIn = Boolean(userId)
   const accountKey = isLoggedIn && userId ? `${ACCOUNT_PREFIX}${userId}` : null
 
-  const admin = makeAdmin()
   if (!admin) {
     const s: AccessSummary = {
       ok: true,
