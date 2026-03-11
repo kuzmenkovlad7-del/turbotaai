@@ -8,8 +8,6 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
-  Linking,
-  Platform,
 } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 import ScreenWrapper from "@/components/ScreenWrapper"
@@ -19,7 +17,7 @@ import { useT } from "@/hooks/useLanguage"
 import { useSubscription } from "@/hooks/useSubscription"
 import { redeemPromo, cancelAutoRenew, resumeAutoRenew, cancelPromo } from "@/services/api"
 import { logEvent } from "@/services/analytics"
-import { API_BASE_URL, IAP_PRODUCTS, DEBUG_ENABLED } from "@/constants/config"
+import { IAP_PRODUCTS, DEBUG_ENABLED } from "@/constants/config"
 import { LOCALE_LABELS, type Locale } from "@/constants/i18n"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 
@@ -35,15 +33,8 @@ export default function AccountScreen() {
     restorePurchases,
     manageSubscription,
     iapEnabled,
-    storeBuild,
     error: iapError,
   } = useSubscription()
-
-  // iOS App Store policy: external purchase CTAs are never permitted on iOS,
-  // regardless of the EXPO_PUBLIC_STORE_BUILD flag.  Apply as a belt-and-
-  // suspenders guard so the wrong flag cannot accidentally surface a
-  // non-compliant UI during App Store review.
-  const hideExternalCTA = storeBuild || Platform.OS === "ios"
 
   // Promo code state
   const [promoCode, setPromoCode] = useState("")
@@ -86,17 +77,27 @@ export default function AccountScreen() {
     return () => clearTimeout(timer)
   }, [promoMsg])
 
+  // Clear stale action feedback whenever the access level changes (e.g. trial→promo
+  // after redeem, or promo→trial after cancel).  Without this, a "Done!" message
+  // from a previous cancel stays in the actionMsg state and re-appears if the user
+  // redeems a promo code and the promo block re-mounts.
+  useEffect(() => {
+    setActionMsg(null)
+  }, [accessInfo?.access])
+
+  // Auto-dismiss action success message after 3 s (mirrors promoMsg behaviour)
+  useEffect(() => {
+    if (!actionMsg?.ok) return
+    const timer = setTimeout(() => setActionMsg(null), 3_000)
+    return () => clearTimeout(timer)
+  }, [actionMsg])
+
   const handleLogout = () => {
     Alert.alert(t.accountSignOut, t.accountSignOutConfirm, [
       { text: t.accountCancel, style: "cancel" },
       { text: t.accountSignOut, style: "destructive", onPress: logout },
     ])
   }
-
-  const handleSubscribeWeb = useCallback(() => {
-    logEvent("subscription_cta_tapped", { method: "web" })
-    Linking.openURL(`${API_BASE_URL}/pricing`).catch(() => {})
-  }, [])
 
   const handleApplyPromo = useCallback(async () => {
     const code = promoCode.trim()
@@ -381,12 +382,10 @@ export default function AccountScreen() {
           )}
 
           {/* Subscribe CTAs for non-unlimited users.
-              Three modes, controlled by env + platform:
-              1. iapEnabled=true     → native IAP buttons (Monthly / Yearly)
-              2. hideExternalCTA     → store-safe info notice, no external link
-                 (true when EXPO_PUBLIC_STORE_BUILD=true OR Platform.OS==="ios")
-              3. default (preview)   → "Subscribe on turbotaai.com" (QA only,
-                 Android non-store builds only) */}
+              Two modes:
+              1. iapEnabled=true  → native IAP buttons (Monthly / Yearly)
+              2. iapEnabled=false → info notice only; no external link shown
+                 (demo build: IAP not yet wired, web pricing link not appropriate) */}
           {showSubscribeCTA && (
             <View style={styles.actionSection}>
               {iapEnabled ? (
@@ -405,18 +404,11 @@ export default function AccountScreen() {
                     loading={purchasing}
                   />
                 </>
-              ) : hideExternalCTA ? (
-                // Store-build or iOS: no external purchase CTA (store guidelines)
+              ) : (
+                // No IAP: show coming-soon notice (store-safe, no external link)
                 <View style={styles.iapComingSoon}>
                   <Text style={styles.iapComingSoonText}>{t.accountIapSoon}</Text>
                 </View>
-              ) : (
-                // Android preview / QA only — opens external browser
-                <Button
-                  title={t.accountSubscribeWeb}
-                  onPress={handleSubscribeWeb}
-                  style={{ marginBottom: spacing.sm }}
-                />
               )}
               {iapError && <Text style={styles.error}>{iapError}</Text>}
             </View>
