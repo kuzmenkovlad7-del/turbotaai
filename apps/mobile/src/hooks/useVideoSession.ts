@@ -29,7 +29,7 @@ export type VideoTurn = { role: "user" | "assistant"; text: string; ts: number }
 // ── Silence-detection tuning (same as voice) ─────────────────────────────────
 const SPEECH_DB = -35
 const SILENCE_DB = -45
-const SILENCE_AFTER_MS = 2500
+const SILENCE_AFTER_MS = 3500
 // Hard fallback: force-submit the recording after this many ms regardless of
 // whether silence-detection (metering) fired. Android metering can silently
 // return -100 dBFS on some devices, making speechDetected always false and
