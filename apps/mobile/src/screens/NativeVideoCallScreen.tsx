@@ -68,7 +68,7 @@ export type NativeVideoCallParams = {
 // ── Phase → status label key ──────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<VideoPhase, string> = {
-  idle:       "rgba(0,0,0,0.5)",
+  idle:       "rgba(255,255,255,0.18)",
   listening:  colors.primary,
   processing: "#f59e0b",
   speaking:   "#16a34a",
@@ -332,7 +332,7 @@ export default function NativeVideoCallScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: "#0f172a",
   },
   centered: {
     alignItems: "center",
@@ -341,16 +341,16 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
 
-  // Video layer — always black so ResizeMode.CONTAIN letterboxing is dark.
+  // Video layer — deep graphite so ResizeMode.CONTAIN letterboxing blends as a stage.
   videoContainer: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: "#1e293b",
   },
   videoLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#000",
+    backgroundColor: "#1e293b",
     gap: spacing.md,
   },
   videoLoadingText: {
@@ -359,7 +359,9 @@ const styles = StyleSheet.create({
   },
   // Bottom panel — below video, opaque, never overlaps avatar
   bottomPanel: {
-    backgroundColor: "rgba(0,0,0,0.85)",
+    backgroundColor: "#0d1829",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.07)",
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
   },
