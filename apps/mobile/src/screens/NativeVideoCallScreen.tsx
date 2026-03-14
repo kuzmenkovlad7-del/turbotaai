@@ -333,7 +333,7 @@ export default function NativeVideoCallScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: "#000",
   },
   centered: {
     alignItems: "center",
@@ -342,16 +342,17 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
 
-  // Video layer
+  // Video layer — black background so ResizeMode.CONTAIN letterboxing is dark,
+  // not the light app background colour that produces a white canvas effect.
   videoContainer: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: "#000",
   },
   videoLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.background,
+    backgroundColor: "#000",
     gap: spacing.md,
   },
   videoLoadingText: {

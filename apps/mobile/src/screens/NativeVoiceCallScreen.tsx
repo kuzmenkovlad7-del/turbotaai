@@ -5,7 +5,7 @@
  * Requests microphone permission (iOS: expo-av; Android: already gated in the
  * previous screen), then runs the STT → Agent → TTS loop via useVoiceSession.
  *
- * Primary flow: silence detection auto-submits after 1.5 s of quiet.
+ * Primary flow: silence detection auto-submits after 2.5 s of quiet.
  * No "Send Now" button — matches web voice experience.
  *
  * Error debug box: any API error (STT / Agent / TTS) is shown in full in a
