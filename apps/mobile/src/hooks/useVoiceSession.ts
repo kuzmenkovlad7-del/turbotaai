@@ -6,7 +6,7 @@
  * backend endpoints.
  *
  * Silence detection works by polling expo-av metering every 150 ms.
- * After speech is detected, 1.5 s of continuous silence triggers auto-submit.
+ * After speech is detected, 2.5 s of continuous silence triggers auto-submit.
  *
  * The agent call uses the same buildMessagePayload + sendMessage path as Chat,
  * so userId / sessionId / deviceId / clientMessageId are always included.
@@ -32,7 +32,7 @@ export type VoiceTurn = { role: "user" | "assistant"; text: string; ts: number }
 // ── Silence-detection tuning ──────────────────────────────────────────────────
 const SPEECH_DB = -35         // dBFS — above this counts as speech
 const SILENCE_DB = -45        // dBFS — below this counts as silence
-const SILENCE_AFTER_MS = 1500 // ms of silence after speech → auto-submit
+const SILENCE_AFTER_MS = 2500 // ms of silence after speech → auto-submit
 const MAX_REC_MS = 60_000     // max single recording (safety cutoff)
 const POLL_MS = 150           // metering poll interval
 // Max wait for Audio.Recording.createAsync before releasing lock and retrying.
