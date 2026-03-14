@@ -27,6 +27,7 @@ import {
   Platform,
   PermissionsAndroid,
   StatusBar,
+  useColorScheme,
 } from "react-native"
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
@@ -65,10 +66,10 @@ export type NativeVideoCallParams = {
   locale: Locale
 }
 
-// ── Phase → status label key ──────────────────────────────────────────────────
+// ── Phase → accent colors (idle resolved from theme at runtime) ───────────────
 
-const STATUS_COLOR: Record<VideoPhase, string> = {
-  idle:       "rgba(255,255,255,0.18)",
+const PHASE_PILL_COLOR: Record<VideoPhase, string> = {
+  idle:       "",               // overridden by theme at runtime
   listening:  colors.primary,
   processing: "#f59e0b",
   speaking:   "#16a34a",
@@ -82,6 +83,9 @@ export default function NativeVideoCallScreen() {
   const route = useRoute()
   const insets = useSafeAreaInsets()
   const { t } = useT()
+  const colorScheme = useColorScheme()
+  const isDark = colorScheme !== "light"
+
   const { characterId, avatarSlug, gender, locale } = route.params as NativeVideoCallParams
 
   const meta = CHARACTER_META[characterId] ?? CHARACTER_META["dr-maria"]
@@ -96,6 +100,23 @@ export default function NativeVideoCallScreen() {
   // decrementTrialLeft is now called inside useVideoSession after each AI reply
   const { phase, turns, error, diagLog, start, stop, retryFromError } =
     useVideoSession(characterId, avatarSlug, gender, locale)
+
+  // ── Theme tokens ─────────────────────────────────────────────────────────────
+  // Light: clean neutral surface matching the web's slate-100/200 stage.
+  // Dark:  deep graphite, no harsh black void.
+  const th = {
+    rootBg:        isDark ? "#0f172a"                 : "#f1f5f9",
+    stageBg:       isDark ? "#1e293b"                 : "#e8ecf1",
+    stageBorder:   isDark ? "rgba(255,255,255,0.08)"  : "rgba(0,0,0,0.07)",
+    panelBg:       isDark ? "#0d1829"                 : "#ffffff",
+    panelBorder:   isDark ? "rgba(255,255,255,0.07)"  : "rgba(0,0,0,0.06)",
+    idlePillBg:    isDark ? "rgba(255,255,255,0.18)"  : "rgba(0,0,0,0.08)",
+    idlePillText:  isDark ? "#fff"                    : "rgba(0,0,0,0.60)",
+    hintColor:     isDark ? "rgba(255,255,255,0.55)"  : "rgba(0,0,0,0.45)",
+    labelColor:    isDark ? "rgba(255,255,255,0.50)"  : "rgba(0,0,0,0.40)",
+    aiBubbleBg:    isDark ? "rgba(255,255,255,0.10)"  : "rgba(0,0,0,0.05)",
+    aiBubbleText:  isDark ? "rgba(255,255,255,0.92)"  : "#1e293b",
+  }
 
   // Stop session when the screen loses focus (e.g. Android hardware back while
   // session is active). The hook's unmount cleanup also fires, but this runs
@@ -171,7 +192,7 @@ export default function NativeVideoCallScreen() {
   // ── Permission denied ─────────────────────────────────────────────────────
   if (permGranted === false) {
     return (
-      <View style={[styles.root, styles.centered, { paddingBottom: insets.bottom }]}>
+      <View style={[styles.root, styles.centered, { paddingBottom: insets.bottom, backgroundColor: th.rootBg }]}>
         <Text style={styles.permDeniedIcon}>🎙️</Text>
         <Text style={styles.permDeniedText}>{t.permMicDenied}</Text>
         <TouchableOpacity style={styles.endBtn} onPress={() => navigation.goBack()}>
@@ -184,70 +205,84 @@ export default function NativeVideoCallScreen() {
   // ── Waiting for permission ────────────────────────────────────────────────
   if (permGranted === null) {
     return (
-      <View style={[styles.root, styles.centered, { paddingBottom: insets.bottom }]}>
+      <View style={[styles.root, styles.centered, { paddingBottom: insets.bottom, backgroundColor: th.rootBg }]}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     )
   }
 
   const isSpeaking = phase === "speaking"
-  const statusColor = STATUS_COLOR[phase]
   const accentColor = meta.accent
+  // Idle pill uses theme-aware background + text; all other phases use colored bg + white text
+  const statusPillBg    = phase === "idle" ? th.idlePillBg    : PHASE_PILL_COLOR[phase]
+  const statusPillText  = phase === "idle" ? th.idlePillText  : "#fff"
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" />
+    <View style={[styles.root, { backgroundColor: th.rootBg }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* ── Avatar video — always fully visible above the bottom panel ──────── */}
-      <View style={styles.videoContainer}>
-        {/* Idle video — visible when NOT speaking */}
-        <Video
-          ref={idleVideoRef}
-          source={{ uri: avatarUri(meta.avatarNum, "idle") }}
-          style={StyleSheet.absoluteFillObject}
-          resizeMode={ResizeMode.CONTAIN}
-          isLooping
-          shouldPlay={!isSpeaking && permGranted}
-          isMuted
-          onLoad={() => setVideoReady(true)}
-        />
+      {/* ── Stage section — padded wrapper containing the rounded avatar card ── */}
+      {/* flex:3 gives ~60 % of the body height to the video, mirroring the web  */}
+      {/* grid-rows-[minmax(200px,1.5fr)_minmax(0,1fr)] split used on mobile web  */}
+      <View style={[styles.stageSection, { paddingTop: insets.top + spacing.sm }]}>
+        <View style={[styles.stageCard, { backgroundColor: th.stageBg, borderColor: th.stageBorder }]}>
 
-        {/* Speaking video — on top; transparent when not speaking */}
-        <Video
-          ref={speakingVideoRef}
-          source={{ uri: avatarUri(meta.avatarNum, "speaking") }}
-          style={[StyleSheet.absoluteFillObject, { opacity: isSpeaking ? 1 : 0 }]}
-          resizeMode={ResizeMode.CONTAIN}
-          isLooping
-          shouldPlay={isSpeaking}
-          isMuted
-        />
+          {/* Idle video — visible when NOT speaking */}
+          <Video
+            ref={idleVideoRef}
+            source={{ uri: avatarUri(meta.avatarNum, "idle") }}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode={ResizeMode.CONTAIN}
+            isLooping
+            shouldPlay={!isSpeaking && permGranted}
+            isMuted
+            onLoad={() => setVideoReady(true)}
+          />
 
-        {/* Loading indicator while first video loads */}
-        {!videoReady && (
-          <View style={styles.videoLoadingOverlay}>
-            <ActivityIndicator size="large" color="#fff" />
-            <Text style={styles.videoLoadingText}>{t.loading}</Text>
-          </View>
-        )}
+          {/* Speaking video — on top; transparent when not speaking */}
+          <Video
+            ref={speakingVideoRef}
+            source={{ uri: avatarUri(meta.avatarNum, "speaking") }}
+            style={[StyleSheet.absoluteFillObject, { opacity: isSpeaking ? 1 : 0 }]}
+            resizeMode={ResizeMode.CONTAIN}
+            isLooping
+            shouldPlay={isSpeaking}
+            isMuted
+          />
+
+          {/* Loading indicator while first video loads */}
+          {!videoReady && (
+            <View style={[styles.videoLoadingOverlay, { backgroundColor: th.stageBg }]}>
+              <ActivityIndicator size="large" color={isDark ? "#fff" : colors.primary} />
+              <Text style={styles.videoLoadingText}>{t.loading}</Text>
+            </View>
+          )}
+        </View>
       </View>
 
-      {/* ── Bottom panel — opaque, below video, never overlaps avatar ─────── */}
-      <View style={[styles.bottomPanel, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+      {/* ── Bottom panel — chat + controls, fills remaining ~40 % ────────────── */}
+      <View style={[
+        styles.bottomPanel,
+        {
+          paddingBottom: Math.max(insets.bottom, spacing.md),
+          backgroundColor: th.panelBg,
+          borderTopColor: th.panelBorder,
+        },
+      ]}>
 
         {/* Character name + phase status row */}
         <View style={styles.statusRow}>
           <View style={[styles.namePill, { backgroundColor: accentColor }]}>
             <Text style={styles.namePillText}>{t[meta.nameKey]}</Text>
           </View>
-          <View style={[styles.statusPill, { backgroundColor: statusColor }]}>
-            <Text style={styles.statusPillText} numberOfLines={1}>
+          <View style={[styles.statusPill, { backgroundColor: statusPillBg }]}>
+            <Text style={[styles.statusPillText, { color: statusPillText }]} numberOfLines={1}>
               {phaseLabel()}
             </Text>
           </View>
         </View>
 
-        {/* Conversation bubbles — scrollable, does not cover video */}
+        {/* Conversation bubbles — scrollable, fills available flex space */}
         {turns.length > 0 ? (
           <ScrollView
             style={styles.convoScroll}
@@ -257,20 +292,20 @@ export default function NativeVideoCallScreen() {
             {turns.map((turn, i) =>
               turn.role === "user" ? (
                 <View key={i} style={styles.userBubble}>
-                  <Text style={styles.bubbleLabel}>{t.voiceYou}</Text>
+                  <Text style={[styles.bubbleLabel, { color: th.labelColor }]}>{t.voiceYou}</Text>
                   <Text style={styles.userBubbleText}>{turn.text}</Text>
                 </View>
               ) : (
-                <View key={i} style={styles.aiBubble}>
-                  <Text style={styles.bubbleLabel}>{t.voiceAI}</Text>
-                  <Text style={styles.aiBubbleText}>{turn.text}</Text>
+                <View key={i} style={[styles.aiBubble, { backgroundColor: th.aiBubbleBg }]}>
+                  <Text style={[styles.bubbleLabel, { color: th.labelColor }]}>{t.voiceAI}</Text>
+                  <Text style={[styles.aiBubbleText, { color: th.aiBubbleText }]}>{turn.text}</Text>
                 </View>
               )
             )}
           </ScrollView>
         ) : (
           phase === "listening" && (
-            <Text style={styles.hint}>{t.videoSpeakHint}</Text>
+            <Text style={[styles.hint, { color: th.hintColor }]}>{t.videoSpeakHint}</Text>
           )
         )}
 
@@ -332,7 +367,7 @@ export default function NativeVideoCallScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#0f172a",
+    // backgroundColor applied dynamically via th.rootBg
   },
   centered: {
     alignItems: "center",
@@ -341,27 +376,36 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
 
-  // Video layer — deep graphite so ResizeMode.CONTAIN letterboxing blends as a stage.
-  videoContainer: {
+  // Stage section — padded outer wrapper (≈60 % of body height via flex:3).
+  // Mirrors the web's grid-rows-[minmax(200px,1.5fr)_...] mobile split.
+  stageSection: {
+    flex: 3,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  // Stage card — rounded container; letterbox bars from ResizeMode.CONTAIN
+  // are clipped inside the rounded border instead of spanning edge-to-edge.
+  stageCard: {
     flex: 1,
-    backgroundColor: "#1e293b",
+    borderRadius: radii.lg,
+    overflow: "hidden",
+    borderWidth: 1,
   },
   videoLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1e293b",
     gap: spacing.md,
   },
   videoLoadingText: {
     color: colors.textSecondary,
     fontSize: fontSize.sm,
   },
-  // Bottom panel — below video, opaque, never overlaps avatar
+
+  // Bottom panel — fills remaining ≈40 % of body height (flex:2)
   bottomPanel: {
-    backgroundColor: "#0d1829",
+    flex: 2,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.07)",
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
   },
@@ -391,35 +435,35 @@ const styles = StyleSheet.create({
     maxWidth: 220,
   },
   statusPillText: {
-    color: "#fff",
     fontSize: fontSize.xs,
     fontWeight: "600",
+    // color applied dynamically
   },
 
-  // Conversation area
+  // Conversation area — flex:1 fills available space between statusRow and controls
   convoScroll: {
-    maxHeight: 180,
+    flex: 1,
     marginBottom: spacing.sm,
   },
   convoContent: {
     gap: spacing.xs,
   },
   hint: {
-    color: "rgba(255,255,255,0.6)",
     fontSize: fontSize.sm,
     textAlign: "center",
     marginBottom: spacing.sm,
     lineHeight: 20,
+    // color applied dynamically
   },
 
   // Bubbles
   bubbleLabel: {
     fontSize: fontSize.xs,
     fontWeight: "700",
-    color: "rgba(255,255,255,0.6)",
     marginBottom: 2,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    // color applied dynamically
   },
   userBubble: {
     backgroundColor: "rgba(124,58,237,0.6)",
@@ -432,14 +476,14 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   aiBubble: {
-    backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: radii.md,
     padding: spacing.sm,
+    // backgroundColor applied dynamically
   },
   aiBubbleText: {
-    color: "rgba(255,255,255,0.95)",
     fontSize: fontSize.sm,
     lineHeight: 20,
+    // color applied dynamically
   },
 
   // Buttons
