@@ -20,6 +20,7 @@ import { buildMessagePayload } from "@/services/messagePayload"
 import { generateUUID } from "@/services/storage"
 import { useAuth } from "@/hooks/useAuth"
 import { lockForUnload, waitForUnlock } from "@/utils/recordingLock"
+import { isMostlyGarbage } from "@/utils/sttGuard"
 import { API_BASE_URL } from "@/constants/config"
 import type { Locale } from "@/constants/i18n"
 
@@ -223,6 +224,13 @@ export function useVideoSession(
 
         if (!text || !s.mounted || !s.active) {
           s.appendDiag("STT: empty transcript — loop")
+          s.processing = false
+          if (s.mounted && s.active) s.startListen()
+          return
+        }
+        // Junk / hallucination guard — mirrors web isMostlyGarbage().
+        if (isMostlyGarbage(text)) {
+          s.appendDiag(`STT: junk — loop ("${text.slice(0, 30)}")`)
           s.processing = false
           if (s.mounted && s.active) s.startListen()
           return
@@ -447,7 +455,13 @@ export function useVideoSession(
             if (db > SPEECH_DB) {
               s.speechDetected = true
               s.silenceAt = 0
-            } else if (s.speechDetected && db < SILENCE_DB) {
+            } else if (db >= SILENCE_DB) {
+              // Gray zone: audible but not speech-level — reset silence clock.
+              // Prevents a brief quiet pause (breath, room echo) from triggering
+              // auto-send while the user is still thinking mid-phrase.
+              s.silenceAt = 0
+            } else if (s.speechDetected) {
+              // Definitively silent (db < SILENCE_DB) after speech detected.
               if (s.silenceAt === 0) s.silenceAt = Date.now()
               if (Date.now() - s.silenceAt >= SILENCE_AFTER_MS) {
                 clearTimers()

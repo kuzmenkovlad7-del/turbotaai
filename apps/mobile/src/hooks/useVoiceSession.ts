@@ -22,6 +22,7 @@ import { buildMessagePayload } from "@/services/messagePayload"
 import { generateUUID } from "@/services/storage"
 import { useAuth } from "@/hooks/useAuth"
 import { lockForUnload, waitForUnlock } from "@/utils/recordingLock"
+import { isMostlyGarbage } from "@/utils/sttGuard"
 import { API_BASE_URL } from "@/constants/config"
 import type { Locale } from "@/constants/i18n"
 
@@ -242,8 +243,17 @@ export function useVoiceSession(
         const text: string = (sttData?.text || "").toString().trim()
 
         if (!text || !s.mounted || !s.active) {
-          // Empty / garbage transcript — loop back silently
+          // Empty transcript — loop back silently
           s.appendDiag("STT: empty transcript — loop")
+          s.processing = false
+          if (s.mounted && s.active) s.startListen()
+          return
+        }
+        // Junk / hallucination guard — mirrors web isMostlyGarbage().
+        // Whisper produces phantom phrases like "Продолжение следует…" when
+        // fed ambient noise or silence; discard them and keep listening.
+        if (isMostlyGarbage(text)) {
+          s.appendDiag(`STT: junk — loop ("${text.slice(0, 30)}")`)
           s.processing = false
           if (s.mounted && s.active) s.startListen()
           return
@@ -474,9 +484,19 @@ export function useVoiceSession(
             const db: number = (status as any).metering ?? -100
 
             if (db > SPEECH_DB) {
+              // Clearly speech — mark detected, reset silence clock.
               s.speechDetected = true
               s.silenceAt = 0
-            } else if (s.speechDetected && db < SILENCE_DB) {
+            } else if (db >= SILENCE_DB) {
+              // Gray zone (SILENCE_DB ≤ db ≤ SPEECH_DB): audible but below
+              // the speech threshold.  Reset the silence clock so that a
+              // natural thinking pause (breath, quiet room echo) that keeps
+              // the level in this range does NOT trigger auto-send.
+              // Matches the web VAD's hangover / noise-floor behaviour.
+              s.silenceAt = 0
+            } else if (s.speechDetected) {
+              // Definitively silent (db < SILENCE_DB) after speech — start/
+              // advance the silence clock and fire when grace period expires.
               if (s.silenceAt === 0) s.silenceAt = Date.now()
               if (Date.now() - s.silenceAt >= SILENCE_AFTER_MS) {
                 clearTimers()

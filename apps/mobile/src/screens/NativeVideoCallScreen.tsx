@@ -27,7 +27,6 @@ import {
   Platform,
   PermissionsAndroid,
   StatusBar,
-  useColorScheme,
 } from "react-native"
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
@@ -83,15 +82,9 @@ export default function NativeVideoCallScreen() {
   const route = useRoute()
   const insets = useSafeAreaInsets()
   const { t } = useT()
-  const colorScheme = useColorScheme()
-
   const { characterId, avatarSlug, gender, locale } = route.params as NativeVideoCallParams
 
   const meta = CHARACTER_META[characterId] ?? CHARACTER_META["dr-maria"]
-
-  // Theme-aware background for the video stage: dark = black (letterboxing
-  // blends with the video), light = neutral gray (avoids harsh white canvas).
-  const videoBg = colorScheme === "dark" ? "#000" : "#e8eaed"
 
   // Video refs — idle + speaking videos pre-loaded
   const idleVideoRef = useRef<Video | null>(null)
@@ -202,11 +195,11 @@ export default function NativeVideoCallScreen() {
   const accentColor = meta.accent
 
   return (
-    <View style={[styles.root, { backgroundColor: videoBg }]}>
+    <View style={styles.root}>
       <StatusBar barStyle="light-content" />
 
       {/* ── Avatar video — always fully visible above the bottom panel ──────── */}
-      <View style={[styles.videoContainer, { backgroundColor: videoBg }]}>
+      <View style={styles.videoContainer}>
         {/* Idle video — visible when NOT speaking */}
         <Video
           ref={idleVideoRef}
@@ -232,8 +225,8 @@ export default function NativeVideoCallScreen() {
 
         {/* Loading indicator while first video loads */}
         {!videoReady && (
-          <View style={[styles.videoLoadingOverlay, { backgroundColor: videoBg }]}>
-            <ActivityIndicator size="large" color={colorScheme === "dark" ? "#fff" : colors.textSecondary} />
+          <View style={styles.videoLoadingOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
             <Text style={styles.videoLoadingText}>{t.loading}</Text>
           </View>
         )}
@@ -348,8 +341,7 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
 
-  // Video layer — background overridden inline with videoBg (theme-aware).
-  // Static value here is just a dark fallback for StyleSheet.
+  // Video layer — always black so ResizeMode.CONTAIN letterboxing is dark.
   videoContainer: {
     flex: 1,
     backgroundColor: "#000",
