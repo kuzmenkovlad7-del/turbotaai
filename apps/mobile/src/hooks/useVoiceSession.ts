@@ -39,6 +39,11 @@ const POLL_MS = 150           // metering poll interval
 // Max wait for Audio.Recording.createAsync before releasing lock and retrying.
 // Android can hang here after an audio-session mode transition (record→play→record).
 const PREPARE_TIMEOUT_MS = 8_000
+// Minimum voiced polling frames required before sending audio to STT.
+// At POLL_MS=150 this is ≈300 ms of metered speech above SPEECH_DB,
+// which mirrors the web VAD's MIN_UTTERANCE_MS=250 ms threshold.
+// Keeps the Android max-timer fallback intact (meteringActive=false path).
+const MIN_SPEECH_FRAMES = 2
 
 // ── Recording options (metering enabled, 16 kHz mono) ────────────────────────
 const RECORDING_OPTIONS: Audio.RecordingOptions = {
@@ -119,6 +124,8 @@ export function useVoiceSession(
     preparingTimer: null as ReturnType<typeof setTimeout> | null, // timeout-safe lock release
     speechDetected: false,
     silenceAt: 0,
+    speechFrameCount: 0,   // voiced frames (db > SPEECH_DB) in current recording
+    meteringActive: false, // true once any db reading > -99 dBFS is received
     // Latest-ref for user — updated on every render so the effect closure always
     // reads current data without needing user in the effect's dependency array.
     user: user,
@@ -223,6 +230,20 @@ export function useVoiceSession(
         return
       }
       s.appendDiag("REC done — got URI")
+
+      // ── Real-speech gate ─────────────────────────────────────────────────
+      // Mirrors the web's onFramesNeeded + MIN_UTTERANCE_MS model.
+      // If metering gave us real readings (not the Android -100 dBFS broken
+      // path) but accumulated fewer than MIN_SPEECH_FRAMES voiced frames, the
+      // recording is silence or ambient noise — skip STT and restart.
+      // Falls through when meteringActive=false (Android metering broken) so
+      // the existing max-timer Android fallback is fully preserved.
+      if (s.meteringActive && s.speechFrameCount < MIN_SPEECH_FRAMES) {
+        s.appendDiag(`STT: gate — ${s.speechFrameCount} voiced frame(s) — loop`)
+        s.processing = false
+        if (s.mounted && s.active) s.startListen()
+        return
+      }
 
       try {
         // 1. STT — FormData upload (file:// URI, works on iOS + Android)
@@ -438,6 +459,8 @@ export function useVoiceSession(
       s.preparing = true        // acquire lock
       s.speechDetected = false
       s.silenceAt = 0
+      s.speechFrameCount = 0
+      s.meteringActive = false
       s.appendDiag("REC start — createAsync")
 
       // FIX #2: timeout-safe lock release.
@@ -487,10 +510,12 @@ export function useVoiceSession(
             const status = await rec.getStatusAsync()
             if (!status.isRecording) return
             const db: number = (status as any).metering ?? -100
+            if (db > -99) s.meteringActive = true // real reading — not the Android -100 broken path
 
             if (db > SPEECH_DB) {
               // Clearly speech — mark detected, reset silence clock.
               s.speechDetected = true
+              s.speechFrameCount++
               s.silenceAt = 0
             } else if (db >= SILENCE_DB) {
               // Gray zone (SILENCE_DB ≤ db ≤ SPEECH_DB): audible but below
