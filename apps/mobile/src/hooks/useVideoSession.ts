@@ -388,6 +388,11 @@ export function useVideoSession(
 
       s.processing = false
       s.appendDiag("LOOP")
+      // Post-TTS cooldown — mirrors the web's 400 ms ttsCooldownUntilRef.
+      // Lets the audio hardware and OS echo-canceller settle before the mic
+      // reopens; prevents TTS speaker output from being captured and
+      // transcribed as phantom user speech (e.g. "Субтитры предоставил …").
+      await new Promise<void>(r => setTimeout(r, 350))
       if (s.mounted && s.active) s.startListen()
     }
 

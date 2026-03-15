@@ -23,6 +23,20 @@ const JUNK_PHRASES_SUB: readonly string[] = [
   "переходите по ссылке",
   "зверніть увагу",
   "дивіться на екран",
+  // Subtitle-credit hallucinations — extremely common Whisper output when fed
+  // silence, ambient noise, or room hiss with a Russian/Ukrainian language hint.
+  // Pattern: "Субтитры предоставил <username>" / "Субтитры предоставлены" etc.
+  "субтитры предоставил",   // "Субтитры предоставил DimaTorzok" — primary reported phrase
+  "субтитры предоставлен",  // passive variant ("предоставлены")
+  "субтитри надав",         // Ukrainian equivalent
+  "субтитры сделал",        // Russian variant
+  "субтитри зробив",        // Ukrainian variant
+  "субтитры редактировал",  // editor-credit variant
+  "субтитры:",              // bare label prefix
+  "субтитри:",              // Ukrainian bare label
+  // Additional common silence-triggered phrases
+  "не забудьте подписаться",
+  "продолжение в следующей",
   // English hallucinations
   "like and subscribe",
   "subscribe to the channel",
