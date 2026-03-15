@@ -413,7 +413,9 @@ export function useVoiceSession(
             if (!st.isLoaded) finish()         // unloaded or error
             else if (st.didJustFinish) finish() // normal completion
           })
-          setTimeout(finish, 30_000) // safety timeout
+          // Safety timeout: estimate from base64 length (~5333 chars/sec at 32kbps AAC)
+          const safetyMs = Math.min(180_000, Math.max(30_000, Math.ceil(audioContent.length / 5.3) + 10_000))
+          setTimeout(finish, safetyMs)
         })
 
         await sound.unloadAsync().catch(() => {})

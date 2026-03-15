@@ -29,8 +29,6 @@ import LoginScreen from "@/screens/LoginScreen"
 import RegisterScreen from "@/screens/RegisterScreen"
 import HomeScreen from "@/screens/HomeScreen"
 import ChatScreen from "@/screens/ChatScreen"
-import HistoryScreen from "@/screens/HistoryScreen"
-import ConversationDetailScreen from "@/screens/ConversationDetailScreen"
 import AccountScreen from "@/screens/AccountScreen"
 import VideoAssistantScreen from "@/screens/VideoAssistantScreen"
 import VoiceAssistantScreen from "@/screens/VoiceAssistantScreen"
@@ -54,13 +52,11 @@ export type AppStackParams = {
   VoiceAssistant: undefined
   NativeVoiceCall: NativeVoiceCallParams
   NativeVideoCall: NativeVideoCallParams
-  ConversationDetail: { id: string; title?: string }
   WebView: WebViewScreenParams
 }
 
 type TabParams = {
   HomeTab: undefined
-  HistoryTab: undefined
   AccountTab: undefined
 }
 
@@ -111,12 +107,6 @@ function MainTabs() {
         options={{ tabBarLabel: t.homeTabLabel }}
       >
         {(props) => <HomeScreen navigation={props.navigation.getParent() ?? props.navigation} />}
-      </Tab.Screen>
-      <Tab.Screen
-        name="HistoryTab"
-        options={{ tabBarLabel: t.historyTitle }}
-      >
-        {(props) => <HistoryScreen navigation={props.navigation.getParent() ?? props.navigation} />}
       </Tab.Screen>
       <Tab.Screen
         name="AccountTab"
@@ -284,17 +274,6 @@ export default function AppNavigator() {
               headerShown: false,   // full-screen video call — no header bar
               orientation: "portrait",
             }}
-          />
-          <AppStack.Screen
-            name="ConversationDetail"
-            component={ConversationDetailScreen}
-            options={({ route }) => ({
-              headerShown: true,
-              title: (route.params as any)?.title || "Conversation",
-              headerTintColor: colors.primary,
-              headerStyle: { backgroundColor: colors.surface },
-              headerTitleStyle: { fontWeight: "600" },
-            })}
           />
           <AppStack.Screen
             name="WebView"

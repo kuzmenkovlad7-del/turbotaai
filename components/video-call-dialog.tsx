@@ -1467,6 +1467,7 @@ export default function VideoCallDialog({
           audio.onended = null
           audio.onerror = null
           audio.onplay = null
+          audio.onloadedmetadata = null
         } catch {}
         if (timeoutId) {
           try {
@@ -1491,11 +1492,21 @@ export default function VideoCallDialog({
         } catch {}
       }
 
-      timeoutId = setTimeout(() => done(), 60000)
+      // Initial safety timeout estimated from base64 size; refined below via onloadedmetadata
+      timeoutId = setTimeout(() => done(), Math.min(150_000, Math.max(30_000, Math.ceil(audioB64.length / 5.3) + 10_000)))
 
       audio.onplay = () => startOnce()
       audio.onended = () => done()
       audio.onerror = () => done()
+      audio.onloadedmetadata = () => {
+        try {
+          const dur = Number(audio.duration)
+          if (Number.isFinite(dur) && dur > 0) {
+            clearTimeout(timeoutId)
+            timeoutId = setTimeout(() => done(), Math.min(180_000, Math.max(25_000, Math.floor(dur * 1000) + 8_000)))
+          }
+        } catch {}
+      }
 
       // ВАЖНО: не data:base64 (на iOS может “обрезать”), а blob URL
       try {

@@ -70,14 +70,6 @@ export default function HomeScreen({ navigation }: Props) {
       accent: "#0ea5e9",
     },
     {
-      key: "history",
-      icon: "\uD83D\uDCCB",
-      title: t.homeHistory,
-      desc: t.homeHistoryDesc,
-      onPress: () => navigation.navigate("MainTabs", { screen: "HistoryTab" }),
-      accent: "#f59e0b",
-    },
-    {
       key: "account",
       icon: "\uD83D\uDC64",
       title: t.homeAccount,
