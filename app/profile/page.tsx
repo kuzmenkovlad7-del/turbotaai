@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { useLanguage } from "@/lib/i18n/language-context"
 
 type Summary = {
@@ -48,8 +47,6 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
-  const [conversations, setConversations] = useState<Array<{ id: string; title: string | null; mode: string; updated_at: string }>>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
 
   const lang = useMemo(() => {
     const code = String(currentLanguage?.code || "uk").toLowerCase()
@@ -240,25 +237,6 @@ export default function ProfilePage() {
   const isLoggedIn = Boolean(summary?.isLoggedIn)
   const email = summary?.email || null
 
-  useEffect(() => {
-    if (!isLoggedIn) return
-    let alive = true
-    const fetchHistory = async () => {
-      setHistoryLoading(true)
-      try {
-        const r = await fetch("/api/history/list", { cache: "no-store", credentials: "include" })
-        const data = await r.json().catch(() => ({} as any))
-        if (alive) setConversations(Array.isArray(data?.conversations) ? data.conversations : [])
-      } catch {
-        if (alive) setConversations([])
-      } finally {
-        if (alive) setHistoryLoading(false)
-      }
-    }
-    fetchHistory()
-    return () => { alive = false }
-  }, [isLoggedIn])
-
   const accessLabel = paidActive
     ? copy.subActive
     : promoActive
@@ -277,7 +255,7 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-1 max-w-2xl">
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="mb-6">
             <div className="text-xl font-semibold">{copy.profile}</div>
@@ -385,35 +363,6 @@ export default function ProfilePage() {
           )}
         </div>
 
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <div className="mb-2 text-xl font-semibold">{copy.history}</div>
-          <div className="text-sm text-gray-500">{copy.savedSessions}</div>
-
-          {!isLoggedIn ? (
-            <div className="mt-4 text-sm text-gray-500">{copy.loginToSeeHistory}</div>
-          ) : historyLoading ? (
-            <div className="mt-4 text-sm text-gray-500">{copy.historyLoading}</div>
-          ) : conversations.length === 0 ? (
-            <div className="mt-4 text-sm text-gray-500">{copy.historyEmpty}</div>
-          ) : (
-            <div className="mt-4 space-y-2 max-h-[400px] overflow-y-auto">
-              {conversations.map((conv) => (
-                <Link
-                  key={conv.id}
-                  href={`/history/${conv.id}`}
-                  className="block rounded-lg border p-3 transition-colors hover:bg-gray-50"
-                >
-                  <div className="font-medium text-sm truncate">
-                    {conv.title || copy.historyUntitled}
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    {new Date(conv.updated_at).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   )
