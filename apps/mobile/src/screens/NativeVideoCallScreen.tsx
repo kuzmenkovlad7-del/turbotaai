@@ -376,17 +376,17 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
 
-  // Stage section — padded outer wrapper (≈60 % of body height via flex:3).
-  // Mirrors the web's grid-rows-[minmax(200px,1.5fr)_...] mobile split.
+  // Stage section — auto-height wrapper; height is driven by the card's
+  // aspectRatio, not by flex, so it never balloons on tall phones.
   stageSection: {
-    flex: 3,
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
   },
-  // Stage card — rounded container; letterbox bars from ResizeMode.CONTAIN
-  // are clipped inside the rounded border instead of spanning edge-to-edge.
+  // Stage card — width-driven 16:9 frame.  CONTAIN letterbox bars are clipped
+  // inside the rounded border so they read as part of the stage, not loose chrome.
   stageCard: {
-    flex: 1,
+    width: "100%",
+    aspectRatio: 16 / 9,
     borderRadius: radii.lg,
     overflow: "hidden",
     borderWidth: 1,
@@ -402,9 +402,9 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
   },
 
-  // Bottom panel — fills remaining ≈40 % of body height (flex:2)
+  // Bottom panel — fills all remaining height after the fixed-ratio stage card
   bottomPanel: {
-    flex: 2,
+    flex: 1,
     borderTopWidth: 1,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
