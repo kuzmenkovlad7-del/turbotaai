@@ -163,7 +163,13 @@ export async function requireAccessByDeviceHash(args: {
     return { ok: true, status: 200, grant: null }
   }
 
-  const grant = await getOrCreateGrant(deviceHash)
+  let grant: AccessGrant | null = null
+  try {
+    grant = await getOrCreateGrant(deviceHash)
+  } catch (e) {
+    console.error("[access-control] device grant lookup failed, failing open:", e)
+    return { ok: true, status: 200, grant: null }
+  }
   if (!grant) return { ok: true, status: 200, grant: null }
 
   if (hasUnlimited(grant)) return { ok: true, status: 200, grant }
@@ -176,7 +182,12 @@ export async function requireAccessByDeviceHash(args: {
   if (req) {
     const userId = await getUserIdFromReq(req)
     if (userId) {
-      const acc = await getOrCreateGrant(`account:${userId}`, 0)
+      let acc: AccessGrant | null = null
+      try {
+        acc = await getOrCreateGrant(`account:${userId}`, 0)
+      } catch (e) {
+        console.error("[access-control] account grant lookup failed:", e)
+      }
       if (hasUnlimited(acc)) return { ok: true, status: 200, grant: acc }
 
       // profiles fallback — same check bootstrap performs
@@ -195,15 +206,20 @@ export async function requireAccessByDeviceHash(args: {
     const supabase = getSupabaseServerClient()
     const next = Math.max(0, left - 1)
 
-    const { data: updated, error: updErr } = await supabase
-      .from(TABLE)
-      .update({ trial_questions_left: next, updated_at: new Date().toISOString() })
-      .eq("id", grant.id)
-      .select("id,device_hash,trial_questions_left,paid_until,promo_until")
-      .single()
+    try {
+      const { data: updated, error: updErr } = await supabase
+        .from(TABLE)
+        .update({ trial_questions_left: next, updated_at: new Date().toISOString() })
+        .eq("id", grant.id)
+        .select("id,device_hash,trial_questions_left,paid_until,promo_until")
+        .single()
 
-    if (updErr) throw updErr
-    return { ok: true, status: 200, grant: (updated as AccessGrant) ?? grant }
+      if (updErr) throw updErr
+      return { ok: true, status: 200, grant: (updated as AccessGrant) ?? grant }
+    } catch (e) {
+      console.error("[access-control] trial decrement failed, allowing request:", e)
+      return { ok: true, status: 200, grant }
+    }
   }
 
   return { ok: false, status: 402, grant, reason: "payment_required" }
