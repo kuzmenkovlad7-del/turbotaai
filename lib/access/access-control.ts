@@ -180,7 +180,12 @@ export async function requireAccessByDeviceHash(args: {
   // All three must be checked so that access granted on web (which may only write
   // to profiles) is visible here too — not just in bootstrap.
   if (req) {
-    const userId = await getUserIdFromReq(req)
+    let userId: string | null = null
+    try {
+      userId = await getUserIdFromReq(req)
+    } catch (e) {
+      console.error("[access-control] getUserIdFromReq threw unexpectedly:", e)
+    }
     if (userId) {
       let acc: AccessGrant | null = null
       try {
