@@ -128,7 +128,7 @@ function pickMime(): string | null {
 function normalizeUtterance(s: string): string {
   return (s || "")
     .toLowerCase()
-    .replace(/[.,!?;:«»"""‚‘’…]/g, "")
+    .replace(/[.,!?;:«»"“”‚‘’…]/g, "")
     .replace(/\s+/g, " ")
     .trim()
 }
@@ -256,7 +256,7 @@ function diffTranscript(prev: string, full: string): string {
   const normalize = (s: string) =>
     s
       .toLowerCase()
-      .replace(/[.,!?;:«»"""‚‘’…]/g, "")
+      .replace(/[.,!?;:«»"“”‚‘’…]/g, "")
       .replace(/\s+/g, " ")
       .trim()
 
@@ -409,22 +409,6 @@ function b64ToBlobUrl(b64: string, mime: string): { url: string; revoke: () => v
   const blob = new Blob([bytes], { type: mime || "audio/mpeg" })
   const url = URL.createObjectURL(blob)
   return { url, revoke: () => URL.revokeObjectURL(url) }
-}
-
-/** Split text into ≤maxLen-char chunks at sentence boundaries for pipelined TTS. */
-function splitTtsChunks(text: string, maxLen = 200): string[] {
-  if (text.length <= maxLen) return [text]
-  const parts: string[] = []
-  let rem = text
-  while (rem.length > maxLen) {
-    const head = rem.slice(0, maxLen)
-    const m = head.match(/^[\s\S]*[.!?](?:\s|$)/)
-    const cut = m ? m[0].length : maxLen
-    parts.push(rem.slice(0, cut).trim())
-    rem = rem.slice(cut).trim()
-  }
-  if (rem) parts.push(rem)
-  return parts.filter(Boolean)
 }
 
 export default function VideoCallDialog({
@@ -1441,118 +1425,115 @@ export default function VideoCallDialog({
   ) {
     const ttsGender = gender === "male" ? "MALE" : "FEMALE"
     const langCode = computeLangCode()
-    const ttsChunks = splitTtsChunks(text)
-    let audioStartFired = false
 
-    for (let ci = 0; ci < ttsChunks.length; ci++) {
-      const _ttsStart = performance.now()
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: ttsChunks[ci],
-          language: langCode,
-          gender: ttsGender,
-        }),
-      })
-      const json = await res.json().catch(() => null)
-      if (!res.ok || !json?.success || !json?.audioContent) {
-        throw new Error(json?.error || `TTS error: ${res.status}`)
-      }
-
-      if (ci === 0) {
-        const _ttsMs = Math.round(performance.now() - _ttsStart)
-        console.log(`[perf] TTS: ${_ttsMs}ms`)
-        if (debugEnabled) {
-          setLastTurnMs({ stt: turnSttMsRef.current, agent: turnAgentMsRef.current, tts: _ttsMs })
-        }
-      }
-
-      const contentType = (json.contentType || "audio/mpeg").toString()
-      const audioB64 = String(json.audioContent || "")
-
-      await new Promise<void>((resolve) => {
-        const audio = ttsAudioRef.current ?? new Audio()
-        ttsAudioRef.current = audio
-        currentAudioRef.current = audio
-
-        audio.preload = "auto"
-        audio.volume = 1
-        ;(audio as any).playsInline = true
-
-        let settled = false
-        let timeoutId: any = null
-
-        const cleanup = () => {
-          try {
-            audio.onended = null
-            audio.onerror = null
-            audio.onplay = null
-            audio.onloadedmetadata = null
-          } catch {}
-          if (timeoutId) {
-            try {
-              clearTimeout(timeoutId)
-            } catch {}
-            timeoutId = null
-          }
-        }
-
-        const done = () => {
-          if (settled) return
-          settled = true
-          cleanup()
-          resolve()
-        }
-
-        audio.onplay = () => {
-          if (!audioStartFired) {
-            audioStartFired = true
-            try { onAudioStart?.() } catch {}
-          }
-        }
-        audio.onended = () => done()
-        audio.onerror = () => done()
-        audio.onloadedmetadata = () => {
-          try {
-            const dur = Number(audio.duration)
-            if (Number.isFinite(dur) && dur > 0) {
-              clearTimeout(timeoutId)
-              timeoutId = setTimeout(() => done(), Math.min(180_000, Math.max(25_000, Math.floor(dur * 1000) + 8_000)))
-            }
-          } catch {}
-        }
-
-        // Initial safety timeout estimated from base64 size; refined above via onloadedmetadata
-        timeoutId = setTimeout(() => done(), Math.min(150_000, Math.max(30_000, Math.ceil(audioB64.length / 5.3) + 10_000)))
-
-        // ВАЖНО: не data:base64 (на iOS может "обрезать"), а blob URL
-        try {
-          if (ttsObjectUrlRef.current) {
-            try {
-              URL.revokeObjectURL(ttsObjectUrlRef.current)
-            } catch {}
-            ttsObjectUrlRef.current = null
-          }
-          const { url, revoke } = b64ToBlobUrl(audioB64, contentType)
-          ttsObjectUrlRef.current = url
-          audio.src = url
-
-          const p = audio.play()
-          ;(p as any)?.catch?.((err: any) => {
-            console.warn("[TTS] play blocked", err)
-            try {
-              revoke()
-            } catch {}
-            ttsObjectUrlRef.current = null
-            done()
-          })
-        } catch (e) {
-          console.warn("[TTS] blob decode failed", e)
-          done()
-        }
-      })
+    const _ttsStart = performance.now()
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        language: langCode,
+        gender: ttsGender,
+      }),
+    })
+    const json = await res.json().catch(() => null)
+    if (!res.ok || !json?.success || !json?.audioContent) {
+      throw new Error(json?.error || `TTS error: ${res.status}`)
     }
+
+    const _ttsMs = Math.round(performance.now() - _ttsStart)
+    console.log(`[perf] TTS: ${_ttsMs}ms`)
+    if (debugEnabled) {
+      setLastTurnMs({ stt: turnSttMsRef.current, agent: turnAgentMsRef.current, tts: _ttsMs })
+    }
+    const contentType = (json.contentType || "audio/mpeg").toString()
+    const audioB64 = String(json.audioContent || "")
+
+    await new Promise<void>((resolve) => {
+      const audio = ttsAudioRef.current ?? new Audio()
+      ttsAudioRef.current = audio
+      currentAudioRef.current = audio
+
+      audio.preload = "auto"
+      audio.volume = 1
+      ;(audio as any).playsInline = true
+
+      let settled = false
+      let timeoutId: any = null
+      let started = false
+
+      const cleanup = () => {
+        try {
+          audio.onended = null
+          audio.onerror = null
+          audio.onplay = null
+          audio.onloadedmetadata = null
+        } catch {}
+        if (timeoutId) {
+          try {
+            clearTimeout(timeoutId)
+          } catch {}
+          timeoutId = null
+        }
+      }
+
+      const done = () => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve()
+      }
+
+      const startOnce = () => {
+        if (started) return
+        started = true
+        try {
+          onAudioStart?.()
+        } catch {}
+      }
+
+      // Initial safety timeout estimated from base64 size; refined below via onloadedmetadata
+      timeoutId = setTimeout(() => done(), Math.min(150_000, Math.max(30_000, Math.ceil(audioB64.length / 5.3) + 10_000)))
+
+      audio.onplay = () => startOnce()
+      audio.onended = () => done()
+      audio.onerror = () => done()
+      audio.onloadedmetadata = () => {
+        try {
+          const dur = Number(audio.duration)
+          if (Number.isFinite(dur) && dur > 0) {
+            clearTimeout(timeoutId)
+            timeoutId = setTimeout(() => done(), Math.min(180_000, Math.max(25_000, Math.floor(dur * 1000) + 8_000)))
+          }
+        } catch {}
+      }
+
+      // ВАЖНО: не data:base64 (на iOS может “обрезать”), а blob URL
+      try {
+        if (ttsObjectUrlRef.current) {
+          try {
+            URL.revokeObjectURL(ttsObjectUrlRef.current)
+          } catch {}
+          ttsObjectUrlRef.current = null
+        }
+        const { url, revoke } = b64ToBlobUrl(audioB64, contentType)
+        ttsObjectUrlRef.current = url
+        audio.src = url
+
+        const p = audio.play()
+        ;(p as any)?.catch?.((err: any) => {
+          console.warn("[TTS] play blocked", err)
+          try {
+            revoke()
+          } catch {}
+          ttsObjectUrlRef.current = null
+          done()
+        })
+      } catch (e) {
+        console.warn("[TTS] blob decode failed", e)
+        done()
+      }
+    })
   }
 
   const hasEnhancedVideo =

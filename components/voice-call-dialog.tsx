@@ -278,22 +278,6 @@ function base64ToObjectUrl(b64: string, mime = "audio/mpeg"): string {
   return URL.createObjectURL(blob)
 }
 
-/** Split text into ≤maxLen-char chunks at sentence boundaries for pipelined TTS. */
-function splitTtsChunks(text: string, maxLen = 200): string[] {
-  if (text.length <= maxLen) return [text]
-  const parts: string[] = []
-  let rem = text
-  while (rem.length > maxLen) {
-    const head = rem.slice(0, maxLen)
-    const m = head.match(/^[\s\S]*[.!?](?:\s|$)/)
-    const cut = m ? m[0].length : maxLen
-    parts.push(rem.slice(0, cut).trim())
-    rem = rem.slice(cut).trim()
-  }
-  if (rem) parts.push(rem)
-  return parts.filter(Boolean)
-}
-
 export default function VoiceCallDialog({
   isOpen,
   onClose,
@@ -927,80 +911,73 @@ export default function VoiceCallDialog({
     ;(async () => {
       begin()
       const _ttsStart = performance.now()
-      const ttsChunks = splitTtsChunks(cleanText)
 
       try {
-        for (let ci = 0; ci < ttsChunks.length; ci++) {
-          if (seq !== ttsSeqRef.current) return
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: cleanText, language: langCode, gender }),
+        })
 
-          const res = await fetch("/api/tts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: ttsChunks[ci], language: langCode, gender }),
-          })
-
-          const raw = await res.text()
-          let data: any = null
-          try {
-            data = raw ? JSON.parse(raw) : null
-          } catch {
-            data = null
-          }
-
-          if (!res.ok || !data || data.success === false || !data.audioContent) {
-            finishOnce()
-            return
-          }
-
-          if (seq !== ttsSeqRef.current) return
-
-          const a = ttsAudioRef.current ?? new Audio()
-          ;(a as any).playsInline = true
-          ;(a as any).preload = "auto"
-          ttsAudioRef.current = a
-
-          const ct = (data.contentType || "audio/mpeg") as string
-          revokeUrl()
-          objectUrl = base64ToObjectUrl(data.audioContent, ct)
-          a.src = objectUrl
-
-          if (ci === 0 && debugParams.voiceDebug) {
-            const _ttsMs = Math.round(performance.now() - _ttsStart)
-            console.log(`[VOICE_DEBUG] tts_ready: ${_ttsMs}ms`)
-            setLastTurnMs({ stt: turnSttMsRef.current, agent: turnAgentMsRef.current, tts: _ttsMs })
-            a.onplay = () => {
-              const _playMs = Math.round(performance.now() - _ttsStart)
-              console.log(`[VOICE_DEBUG] first_audio_play: ${_playMs}ms from tts_start`)
-            }
-          } else {
-            a.onplay = null
-          }
-
-          await new Promise<void>((chunkDone) => {
-            a.onloadedmetadata = () => {
-              try {
-                const dur = Number(a.duration)
-                if (Number.isFinite(dur) && dur > 0) {
-                  const ms = Math.min(150000, Math.max(25000, Math.floor(dur * 1000) + 8000))
-                  clearWatchdog()
-                  watchdogId = window.setTimeout(() => {
-                    try { a.pause() } catch {}
-                    chunkDone()
-                  }, ms)
-                }
-              } catch {}
-            }
-            a.onended = () => { clearWatchdog(); chunkDone() }
-            a.onerror = () => { clearWatchdog(); chunkDone() }
-            clearWatchdog()
-            watchdogId = window.setTimeout(() => {
-              try { a.pause() } catch {}
-              chunkDone()
-            }, Math.min(120000, Math.max(30000, ttsChunks[ci].length * 140)))
-            a.play().catch(() => { clearWatchdog(); chunkDone() })
-          })
+        const raw = await res.text()
+        let data: any = null
+        try {
+          data = raw ? JSON.parse(raw) : null
+        } catch {
+          data = null
         }
-        finishOnce()
+
+        if (!res.ok || !data || data.success === false || !data.audioContent) {
+          finishOnce()
+          return
+        }
+
+        // если пока грузилось — уже пришёл новый TTS, этот игнорируем
+        if (seq !== ttsSeqRef.current) return
+
+        const a = ttsAudioRef.current ?? new Audio()
+        ;(a as any).playsInline = true
+        ;(a as any).preload = "auto"
+        ttsAudioRef.current = a
+
+        const ct = (data.contentType || "audio/mpeg") as string
+        objectUrl = base64ToObjectUrl(data.audioContent, ct)
+        a.src = objectUrl
+
+        const _ttsMs = Math.round(performance.now() - _ttsStart)
+        if (debugParams.voiceDebug) {
+          console.log(`[VOICE_DEBUG] tts_ready: ${_ttsMs}ms`)
+          setLastTurnMs({ stt: turnSttMsRef.current, agent: turnAgentMsRef.current, tts: _ttsMs })
+          a.onplay = () => {
+            const _playMs = Math.round(performance.now() - _ttsStart)
+            console.log(`[VOICE_DEBUG] first_audio_play: ${_playMs}ms from tts_start`)
+          }
+        }
+
+        a.onended = () => finishOnce()
+        a.onerror = () => finishOnce()
+
+        a.onloadedmetadata = () => {
+          try {
+            const dur = Number(a.duration)
+            if (Number.isFinite(dur) && dur > 0) {
+              const ms = Math.min(150000, Math.max(25000, Math.floor(dur * 1000) + 8000))
+              clearWatchdog()
+              watchdogId = window.setTimeout(() => {
+                try {
+                  a.pause()
+                } catch {}
+                finishOnce()
+              }, ms)
+            }
+          } catch {}
+        }
+
+        try {
+          await a.play()
+        } catch {
+          finishOnce()
+        }
       } catch (e) {
         console.error("[TTS] fatal", e)
         finishOnce()
