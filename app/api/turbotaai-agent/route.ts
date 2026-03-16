@@ -67,23 +67,45 @@ export async function POST(request: NextRequest) {
       console.warn("[turbotaai-agent] Auth reconciliation: body.userId was null but server auth resolved:", authUserId)
     }
 
-    const clientMessageId = String(body?.clientMessageId || crypto.randomUUID())
-    const sessionId = String(body?.sessionId || `sess_${clientMessageId}`)
-    const deviceId = String(body?.deviceId ?? "")
-    const timestamp = String(body?.timestamp || new Date().toISOString())
-    const email = body?.email || undefined
-    const user = userId ?? `guest:${sessionId}`
+    // ── Pre-webhook payload preparation ─────────────────────────────────────
+    // Wrapped so that any unexpected throw is visible in Vercel logs with a
+    // clear label, rather than silently becoming "Agent route failed".
+    let clientMessageId: string
+    let sessionId: string
+    let deviceId: string
+    let timestamp: string
+    let email: string | undefined
+    let user: string
+    let characterId: string
+    let genderNorm: "male" | "female"
+    let voiceId: string | null
+    let voiceLanguage: string | null
 
-    // Gender normalization: resolve from any frontend field, never "unknown"
-    const characterId = (typeof body?.characterId === "string" && body.characterId.trim())
-      ? body.characterId.trim()
-      : "mia"
-    const rawGender = normalizeGender(body?.gender ?? body?.roleGender ?? body?.assistantGender)
-    const genderNorm: "male" | "female" = rawGender ?? (characterId === "leo" || characterId === "alex" ? "male" : "female")
-    const voiceId = (typeof body?.voiceId === "string" && body.voiceId.trim()) ? body.voiceId.trim() : null
-    const voiceLanguage = (typeof body?.voiceLanguage === "string" && body.voiceLanguage.trim())
-      ? body.voiceLanguage.trim()
-      : (typeof body?.language === "string" && body.language.trim()) ? body.language.trim() : null
+    try {
+      clientMessageId = String(body?.clientMessageId || crypto.randomUUID())
+      sessionId = String(body?.sessionId || `sess_${clientMessageId}`)
+      deviceId = String(body?.deviceId ?? "")
+      timestamp = String(body?.timestamp || new Date().toISOString())
+      email = body?.email || undefined
+      user = userId ?? `guest:${sessionId}`
+
+      // Gender normalization: resolve from any frontend field, never "unknown"
+      characterId = (typeof body?.characterId === "string" && body.characterId.trim())
+        ? body.characterId.trim()
+        : "mia"
+      const rawGender = normalizeGender(body?.gender ?? body?.roleGender ?? body?.assistantGender)
+      genderNorm = rawGender ?? (characterId === "leo" || characterId === "alex" ? "male" : "female")
+      voiceId = (typeof body?.voiceId === "string" && body.voiceId.trim()) ? body.voiceId.trim() : null
+      voiceLanguage = (typeof body?.voiceLanguage === "string" && body.voiceLanguage.trim())
+        ? body.voiceLanguage.trim()
+        : (typeof body?.language === "string" && body.language.trim()) ? body.language.trim() : null
+    } catch (prepErr: any) {
+      console.error("[turbotaai-agent] CRASH in pre-webhook payload prep:", prepErr?.message, prepErr?.stack)
+      return NextResponse.json(
+        { ok: false, error: "Agent route failed", details: String(prepErr?.message || prepErr) },
+        { status: 500, headers: { "cache-control": "no-store" } }
+      )
+    }
 
     if (mode === "voice" || mode === "video") {
       console.debug(`[turbotaai-agent] mode=${mode} gender=${genderNorm} characterId=${characterId} voiceId=${voiceId}`)
@@ -145,6 +167,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, response: raw, ...extra }, { status: 200, headers: { "cache-control": "no-store" } })
     }
   } catch (e: any) {
+    console.error("[turbotaai-agent] OUTER CATCH — unexpected throw:", e?.message, e?.stack ?? String(e))
     return NextResponse.json(
       { ok: false, error: "Agent route failed", details: String(e?.message || e) },
       { status: 500, headers: { "cache-control": "no-store" } }
