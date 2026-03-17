@@ -44,7 +44,10 @@ const PREPARE_TIMEOUT_MS = 8_000
 // At POLL_MS=150 this is ≈300 ms of metered speech above SPEECH_DB,
 // which mirrors the web VAD's MIN_UTTERANCE_MS=250 ms threshold.
 // Keeps the Android max-timer fallback intact (meteringActive=false path).
-const MIN_SPEECH_FRAMES = 2
+// Reduced from 2 → 1 so crisp short phrases like "Привет" (single voiced
+// frame, ~150 ms) are no longer discarded. isMostlyGarbage() still guards
+// against Whisper hallucinations on real silence.
+const MIN_SPEECH_FRAMES = 1
 
 const RECORDING_OPTIONS: Audio.RecordingOptions = {
   android: {
@@ -64,6 +67,27 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
   },
   web: {},
   isMeteringEnabled: true,
+}
+
+/**
+ * Split a TTS text into sentence-boundary chunks of at most maxLen chars.
+ * Splitting at sentence endings lets each chunk be synthesized and played
+ * immediately, so the first audio starts after ~300–600 ms instead of
+ * waiting for the full reply to be synthesized (~10 s for long responses).
+ */
+function splitTtsChunks(text: string, maxLen = 200): string[] {
+  if (text.length <= maxLen) return [text]
+  const parts: string[] = []
+  let rem = text
+  while (rem.length > maxLen) {
+    const head = rem.slice(0, maxLen)
+    const m = head.match(/^[\s\S]*[.!?](?:\s|$)/)
+    const cut = m ? m[0].length : maxLen
+    parts.push(rem.slice(0, cut).trim())
+    rem = rem.slice(cut).trim()
+  }
+  if (rem) parts.push(rem)
+  return parts.filter(Boolean)
 }
 
 function sttLang(locale: Locale): string {
@@ -332,31 +356,15 @@ export function useVideoSession(
         // Sync server access state after every turn. Fire-and-forget.
         refreshAccess().catch(() => {})
 
-        // 3. TTS
-        s.appendDiag("TTS → /api/tts")
-        const ttsRes = await apiFetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: replyText, language: locale, gender }),
-        })
-        s.appendDiag(`TTS ← ${ttsRes.status}`)
-        if (!ttsRes.ok) {
-          const body = await ttsRes.text().catch(() => "")
-          throw new Error(`TTS ${ttsRes.status}: ${body || ttsRes.statusText}`)
-        }
-        const ttsData = await ttsRes.json()
-        const audioContent: string = ttsData?.audioContent || ""
-        const contentType: string = ttsData?.contentType || "audio/wav"
+        // 3. TTS + playback — sentence-chunked pipeline.
+        // Split the reply into ≤200-char sentence chunks so the first chunk
+        // can be synthesized and played immediately (~300–600 ms) rather than
+        // waiting for the full reply to be synthesized (~10 s for long text).
+        const ttsChunks = splitTtsChunks(replyText)
+        s.appendDiag(`TTS → ${ttsChunks.length} chunk(s)`)
 
-        if (!audioContent || !s.mounted || !s.active) {
-          s.appendDiag("TTS: empty audio — loop")
-          s.processing = false
-          if (s.mounted && s.active) s.startListen()
-          return
-        }
-        s.appendDiag(`TTS: audioLen=${audioContent.length}`)
-
-        // 4. Playback — phase "speaking" triggers the avatar speaking video in the UI
+        // 4. Playback — phase "speaking" triggers the avatar speaking video in the UI.
+        // Set audio mode once before the chunk loop.
         setPhase("speaking")
         await stopSound()
         await Audio.setAudioModeAsync({
@@ -364,39 +372,66 @@ export function useVideoSession(
           playsInSilentModeIOS: true,
         })
 
-        const ext = contentType.includes("wav") ? "wav" : "m4a"
-        const tmpPath = `${FileSystem.cacheDirectory}vid_tts_${Date.now()}.${ext}`
-        await FileSystem.writeAsStringAsync(tmpPath, audioContent, {
-          encoding: FileSystem.EncodingType.Base64,
-        })
-
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: tmpPath },
-          { shouldPlay: true },
-        )
-        s.sound = sound
-        s.appendDiag("PLAY start")
-
-        // Wait for playback to finish.
-        // IMPORTANT: only resolve on didJustFinish (or unload/error).
-        // Do NOT resolve on !isPlaying — the first status callback fires before
-        // playback actually starts with isPlaying:false, which would resolve
-        // the promise immediately and unload the sound before audio plays.
-        await new Promise<void>((resolve) => {
-          let done = false
-          const finish = () => { if (!done) { done = true; resolve() } }
-          sound.setOnPlaybackStatusUpdate((st) => {
-            if (!st.isLoaded) finish()         // unloaded or error
-            else if (st.didJustFinish) finish() // normal completion
+        let playedAny = false
+        for (let ci = 0; ci < ttsChunks.length; ci++) {
+          if (!s.mounted || !s.active) break
+          const chunk = ttsChunks[ci]
+          const ttsRes = await apiFetch("/api/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: chunk, language: locale, gender }),
           })
-          // Safety timeout: estimate from base64 length (~5333 chars/sec at 32kbps AAC)
-          const safetyMs = Math.min(180_000, Math.max(30_000, Math.ceil(audioContent.length / 5.3) + 10_000))
-          setTimeout(finish, safetyMs)
-        })
+          if (!ttsRes.ok) {
+            const body = await ttsRes.text().catch(() => "")
+            throw new Error(`TTS ${ttsRes.status}: ${body || ttsRes.statusText}`)
+          }
+          const ttsData = await ttsRes.json()
+          const audioContent: string = ttsData?.audioContent || ""
+          const contentType: string = ttsData?.contentType || "audio/wav"
+          if (!audioContent || !s.mounted || !s.active) continue
 
-        await sound.unloadAsync().catch(() => {})
-        s.sound = null
-        await FileSystem.deleteAsync(tmpPath, { idempotent: true }).catch(() => {})
+          const ext = contentType.includes("wav") ? "wav" : "m4a"
+          const tmpPath = `${FileSystem.cacheDirectory}vid_tts_${Date.now()}_${ci}.${ext}`
+          await FileSystem.writeAsStringAsync(tmpPath, audioContent, {
+            encoding: FileSystem.EncodingType.Base64,
+          })
+
+          const { sound } = await Audio.Sound.createAsync(
+            { uri: tmpPath },
+            { shouldPlay: true },
+          )
+          s.sound = sound
+          if (ci === 0) s.appendDiag("PLAY start")
+
+          // Wait for playback to finish.
+          // IMPORTANT: only resolve on didJustFinish (or unload/error).
+          // Do NOT resolve on !isPlaying — the first status callback fires before
+          // playback actually starts with isPlaying:false, which would resolve
+          // the promise immediately and unload the sound before audio plays.
+          await new Promise<void>((resolve) => {
+            let done = false
+            const finish = () => { if (!done) { done = true; resolve() } }
+            sound.setOnPlaybackStatusUpdate((st) => {
+              if (!st.isLoaded) finish()         // unloaded or error
+              else if (st.didJustFinish) finish() // normal completion
+            })
+            // Safety timeout: estimate from base64 length (~5333 chars/sec at 32kbps AAC)
+            const safetyMs = Math.min(180_000, Math.max(30_000, Math.ceil(audioContent.length / 5.3) + 10_000))
+            setTimeout(finish, safetyMs)
+          })
+
+          await sound.unloadAsync().catch(() => {})
+          s.sound = null
+          await FileSystem.deleteAsync(tmpPath, { idempotent: true }).catch(() => {})
+          playedAny = true
+        }
+
+        if (!playedAny || !s.mounted || !s.active) {
+          s.appendDiag("TTS: no audio played — loop")
+          s.processing = false
+          if (s.mounted && s.active) s.startListen()
+          return
+        }
         s.appendDiag("PLAY done")
       } catch (err: any) {
         const msg: string = err?.message || "Video session error"
