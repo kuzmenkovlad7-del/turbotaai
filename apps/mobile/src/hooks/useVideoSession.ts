@@ -70,7 +70,9 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
 }
 
 /**
- * Split a TTS text into sentence-boundary chunks of at most maxLen chars.
+ * Split a TTS text into sentence-boundary chunks of at most maxLen chars,
+ * then merge consecutive very-short chunks (< 80 chars) into their neighbour
+ * to reduce the number of TTS round-trips without losing sentence boundaries.
  * Splitting at sentence endings lets each chunk be synthesized and played
  * immediately, so the first audio starts after ~300–600 ms instead of
  * waiting for the full reply to be synthesized (~10 s for long responses).
@@ -87,7 +89,19 @@ function splitTtsChunks(text: string, maxLen = 200): string[] {
     rem = rem.slice(cut).trim()
   }
   if (rem) parts.push(rem)
-  return parts.filter(Boolean)
+  const raw = parts.filter(Boolean)
+  // Merge short preceding chunks (< 80 chars) forward into the next chunk
+  // to cut round-trips for sentences like "Да." / "Хорошо." / "I see.".
+  const merged: string[] = []
+  for (const part of raw) {
+    const last = merged.length - 1
+    if (last >= 0 && merged[last].length < 80 && merged[last].length + 1 + part.length <= maxLen) {
+      merged[last] = merged[last] + " " + part
+    } else {
+      merged.push(part)
+    }
+  }
+  return merged
 }
 
 function sttLang(locale: Locale): string {
@@ -356,12 +370,31 @@ export function useVideoSession(
         // Sync server access state after every turn. Fire-and-forget.
         refreshAccess().catch(() => {})
 
-        // 3. TTS + playback — sentence-chunked pipeline.
+        // 3. TTS + playback — sentence-chunked look-ahead pipeline.
         // Split the reply into ≤200-char sentence chunks so the first chunk
         // can be synthesized and played immediately (~300–600 ms) rather than
         // waiting for the full reply to be synthesized (~10 s for long text).
         const ttsChunks = splitTtsChunks(replyText)
         s.appendDiag(`TTS → ${ttsChunks.length} chunk(s)`)
+
+        // Helper: fetch one TTS chunk, returns { audioContent, contentType }.
+        type TtsResult = { audioContent: string; contentType: string }
+        async function fetchTtsChunk(chunkText: string): Promise<TtsResult> {
+          const ttsRes = await apiFetch("/api/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: chunkText, language: locale, gender }),
+          })
+          if (!ttsRes.ok) {
+            const errBody = await ttsRes.text().catch(() => "")
+            throw new Error(`TTS ${ttsRes.status}: ${errBody || ttsRes.statusText}`)
+          }
+          const ttsData = await ttsRes.json()
+          return {
+            audioContent: ttsData?.audioContent || "",
+            contentType: ttsData?.contentType || "audio/wav",
+          }
+        }
 
         // 4. Playback — phase "speaking" triggers the avatar speaking video in the UI.
         // Set audio mode once before the chunk loop.
@@ -372,22 +405,28 @@ export function useVideoSession(
           playsInSilentModeIOS: true,
         })
 
+        // Pre-fetch chunk[0] immediately — runs while audio mode is being set above,
+        // eliminating the first-chunk fetch latency from the perceived start time.
+        let nextFetch: Promise<TtsResult | null> = (s.mounted && s.active && ttsChunks.length > 0)
+          ? fetchTtsChunk(ttsChunks[0]).catch(() => null)
+          : Promise.resolve(null)
+
         let playedAny = false
         for (let ci = 0; ci < ttsChunks.length; ci++) {
           if (!s.mounted || !s.active) break
-          const chunk = ttsChunks[ci]
-          const ttsRes = await apiFetch("/api/tts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: chunk, language: locale, gender }),
-          })
-          if (!ttsRes.ok) {
-            const body = await ttsRes.text().catch(() => "")
-            throw new Error(`TTS ${ttsRes.status}: ${body || ttsRes.statusText}`)
-          }
-          const ttsData = await ttsRes.json()
-          const audioContent: string = ttsData?.audioContent || ""
-          const contentType: string = ttsData?.contentType || "audio/wav"
+
+          // Await the pre-fetched result for this chunk.
+          const fetched = await nextFetch
+
+          // Immediately kick off the NEXT chunk's fetch so it runs in parallel
+          // with writing + loading + playing the current chunk.
+          // This reduces inter-sentence gap from ~1.5 s to ~150 ms (write+load time).
+          nextFetch = (ci + 1 < ttsChunks.length && s.mounted && s.active)
+            ? fetchTtsChunk(ttsChunks[ci + 1]).catch(() => null)
+            : Promise.resolve(null)
+
+          if (!fetched) continue
+          const { audioContent, contentType } = fetched
           if (!audioContent || !s.mounted || !s.active) continue
 
           const ext = contentType.includes("wav") ? "wav" : "m4a"
