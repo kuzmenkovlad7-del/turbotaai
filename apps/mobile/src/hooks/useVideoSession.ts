@@ -396,9 +396,10 @@ export function useVideoSession(
           }
         }
 
-        // 4. Playback — phase "speaking" triggers the avatar speaking video in the UI.
-        // Set audio mode once before the chunk loop.
-        setPhase("speaking")
+        // 4. Playback — set audio mode once before the chunk loop.
+        // NOTE: setPhase("speaking") is deferred to the exact moment the first
+        // chunk's audio starts (after createAsync) so the avatar animation is
+        // synced with actual sound, not with the TTS fetch / file-write steps.
         await stopSound()
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -440,7 +441,14 @@ export function useVideoSession(
             { shouldPlay: true },
           )
           s.sound = sound
-          if (ci === 0) s.appendDiag("PLAY start")
+          if (ci === 0) {
+            // Switch avatar to speaking only when the FIRST chunk's audio is loaded
+            // and playback has been initiated by createAsync({shouldPlay:true}).
+            // This eliminates the ~500–700 ms head-start where the avatar mouth
+            // moved before any sound was audible.
+            setPhase("speaking")
+            s.appendDiag("PLAY start")
+          }
 
           // Wait for playback to finish.
           // IMPORTANT: only resolve on didJustFinish (or unload/error).
@@ -464,6 +472,10 @@ export function useVideoSession(
           await FileSystem.deleteAsync(tmpPath, { idempotent: true }).catch(() => {})
           playedAny = true
         }
+
+        // Stop avatar speaking animation immediately when the last chunk ends —
+        // don't let the mouth keep moving through the post-TTS cooldown delay.
+        if (s.mounted) setPhase("processing")
 
         if (!playedAny || !s.mounted || !s.active) {
           s.appendDiag("TTS: no audio played — loop")
@@ -561,13 +573,16 @@ export function useVideoSession(
               s.speechDetected = true
               s.speechFrameCount++
               s.silenceAt = 0
-            } else if (db >= SILENCE_DB) {
-              // Gray zone: audible but not speech-level — reset silence clock.
-              // Prevents a brief quiet pause (breath, room echo) from triggering
-              // auto-send while the user is still thinking mid-phrase.
+            } else if (db >= SILENCE_DB && !s.speechDetected) {
+              // Gray zone BEFORE speech: audible but sub-threshold — keep silence
+              // clock cleared so ambient noise / breathing before the user starts
+              // speaking does not pre-arm the submit timer.
               s.silenceAt = 0
             } else if (s.speechDetected) {
-              // Definitively silent (db < SILENCE_DB) after speech detected.
+              // Below SPEECH_DB after speech was detected — treat as silence.
+              // Crucially this includes the gray zone (-45 to -35 dBFS): without
+              // this, room noise after a short word like "Привет" or "Да" keeps
+              // silenceAt at 0 forever and auto-submit never fires.
               if (s.silenceAt === 0) s.silenceAt = Date.now()
               if (Date.now() - s.silenceAt >= SILENCE_AFTER_MS) {
                 clearTimers()
