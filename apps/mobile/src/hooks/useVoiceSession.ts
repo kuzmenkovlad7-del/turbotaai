@@ -417,7 +417,9 @@ export function useVoiceSession(
 
         // 4. Playback — write base64 to temp files (data URIs unsupported on Android).
         // Set audio mode once before the chunk loop.
-        setPhase("speaking")
+        // NOTE: setPhase("speaking") is deferred to the exact moment the first
+        // chunk's audio starts (after createAsync) so the speaking indicator is
+        // synced with actual sound, not with the TTS fetch / file-write steps.
         await stopSound()
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -459,7 +461,12 @@ export function useVoiceSession(
             { shouldPlay: true },
           )
           s.sound = sound
-          if (ci === 0) s.appendDiag("PLAY start")
+          if (ci === 0) {
+            // Switch to "speaking" only when the first chunk is loaded and
+            // playback has been initiated — syncs speaking indicator with sound.
+            setPhase("speaking")
+            s.appendDiag("PLAY start")
+          }
 
           // Wait for playback to finish.
           // IMPORTANT: only resolve on didJustFinish (or unload/error).
@@ -483,6 +490,9 @@ export function useVoiceSession(
           await FileSystem.deleteAsync(tmpPath, { idempotent: true }).catch(() => {})
           playedAny = true
         }
+
+        // Stop speaking indicator immediately when the last chunk ends.
+        if (s.mounted) setPhase("processing")
 
         if (!playedAny || !s.mounted || !s.active) {
           s.appendDiag("TTS: no audio played — loop")
@@ -588,16 +598,16 @@ export function useVoiceSession(
               s.speechDetected = true
               s.speechFrameCount++
               s.silenceAt = 0
-            } else if (db >= SILENCE_DB) {
-              // Gray zone (SILENCE_DB ≤ db ≤ SPEECH_DB): audible but below
-              // the speech threshold.  Reset the silence clock so that a
-              // natural thinking pause (breath, quiet room echo) that keeps
-              // the level in this range does NOT trigger auto-send.
-              // Matches the web VAD's hangover / noise-floor behaviour.
+            } else if (db >= SILENCE_DB && !s.speechDetected) {
+              // Gray zone BEFORE speech: audible but sub-threshold — keep silence
+              // clock cleared so ambient noise / breathing before the user starts
+              // speaking does not pre-arm the submit timer.
               s.silenceAt = 0
             } else if (s.speechDetected) {
-              // Definitively silent (db < SILENCE_DB) after speech — start/
-              // advance the silence clock and fire when grace period expires.
+              // Below SPEECH_DB after speech was detected — treat as silence.
+              // Crucially this includes the gray zone (-45 to -35 dBFS): without
+              // this, room noise after a short word like "Привет" or "Да" keeps
+              // silenceAt at 0 forever and auto-submit never fires.
               if (s.silenceAt === 0) s.silenceAt = Date.now()
               if (Date.now() - s.silenceAt >= SILENCE_AFTER_MS) {
                 clearTimers()
