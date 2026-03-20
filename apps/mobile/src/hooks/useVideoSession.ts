@@ -30,12 +30,12 @@ export type VideoTurn = { role: "user" | "assistant"; text: string; ts: number }
 // ── Silence-detection tuning (same as voice) ─────────────────────────────────
 const SPEECH_DB = -35
 const SILENCE_DB = -45
-const SILENCE_AFTER_MS = 3500
+const SILENCE_AFTER_MS = 4500
 // Hard fallback: force-submit the recording after this many ms regardless of
 // whether silence-detection (metering) fired. Android metering can silently
 // return -100 dBFS on some devices, making speechDetected always false and
 // leaving the session stuck in "listening" forever.
-const MAX_REC_MS = 9_000
+const MAX_REC_MS = 60_000
 const POLL_MS = 150
 // Max wait for Audio.Recording.createAsync before releasing lock and retrying.
 // Android can hang here after an audio-session mode transition (record→play→record).
