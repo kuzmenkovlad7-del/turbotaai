@@ -92,17 +92,17 @@ async function upsertAccessGrant(admin: ReturnType<typeof sbAdmin>, args: {
   planId: string
   paidUntilIso: string
 }) {
-  // never regress
+  // never regress: read the current paid_until before writing
   let finalIso = args.paidUntilIso
   try {
     const { data } = await admin
       .from("access_grants")
-      .select("access_until")
+      .select("paid_until")
       .eq("device_hash", args.deviceHash)
       .limit(1)
       .maybeSingle()
 
-    const existingIso = (data as any)?.access_until as string | undefined
+    const existingIso = (data as any)?.paid_until as string | undefined
     if (existingIso) {
       const ex = Date.parse(existingIso)
       const nu = Date.parse(args.paidUntilIso)
@@ -113,7 +113,7 @@ async function upsertAccessGrant(admin: ReturnType<typeof sbAdmin>, args: {
   const base: any = {
     device_hash: args.deviceHash,
     plan_id: args.planId,
-    access_until: finalIso,
+    paid_until: finalIso,
     subscription_status: "active",
     source: "iap",
     updated_at: new Date().toISOString(),
@@ -124,7 +124,7 @@ async function upsertAccessGrant(admin: ReturnType<typeof sbAdmin>, args: {
     base,
     (() => { const x = { ...base }; delete x.source; return x })(),
     (() => { const x = { ...base }; delete x.source; delete x.subscription_status; delete x.user_id; return x })(),
-    { device_hash: args.deviceHash, access_until: finalIso, updated_at: new Date().toISOString() },
+    { device_hash: args.deviceHash, paid_until: finalIso, updated_at: new Date().toISOString() },
   ]
 
   let lastErr: any = null
