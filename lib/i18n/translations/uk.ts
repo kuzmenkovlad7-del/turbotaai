@@ -264,6 +264,7 @@ export const uk = {
   "nav.privacyPolicy": "Політика конфіденційності",
   "nav.programs": "Програми",
   "nav.termsOfUse": "Умови користування",
+  "nav.deleteAccount": "Видалити обліковий запис",
   "NGOs and initiatives that work with vulnerable groups.": "Громадські організації та ініціативи, що працюють із вразливими групами.",
   "Night chat instead of endless scrolling": "Нічний чат замість безкінечного скролу",
   "No microphone was found on this device. Please check your hardware.": "На цьому пристрої не знайдено мікрофон. Перевірте обладнання.",

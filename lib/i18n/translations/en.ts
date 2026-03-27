@@ -264,6 +264,7 @@ export const en = {
   "nav.privacyPolicy": "Privacy Policy",
   "nav.programs": "Programs",
   "nav.termsOfUse": "Terms of Use",
+  "nav.deleteAccount": "Delete Account",
   "NGOs and initiatives that work with vulnerable groups.": "NGOs and initiatives that work with vulnerable groups.",
   "Night chat instead of endless scrolling": "Night chat instead of endless scrolling",
   "No microphone was found on this device. Please check your hardware.": "No microphone was found on this device. Please check your hardware.",

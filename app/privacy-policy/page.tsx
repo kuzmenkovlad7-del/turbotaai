@@ -1,7 +1,9 @@
 "use client"
 
 import { useMemo } from "react"
+import Link from "next/link"
 import { useLanguage } from "@/lib/i18n/language-context"
+import { APP_SUPPORT_EMAIL } from "@/lib/app-config"
 
 export default function PrivacyPolicyPage() {
   const { currentLanguage } = useLanguage()
@@ -67,6 +69,14 @@ export default function PrivacyPolicyPage() {
         rightsI4: "заперечити або обмежити обробку;",
         rightsI5: "подати скаргу до органу нагляду.",
         rightsContact: "Для реалізації прав зверніться через форму зворотнього звʼязку або на email підтримки.",
+        deleteTitle: "Видалення облікового запису",
+        deleteP1: "Ви маєте право надіслати запит на видалення вашого облікового запису та персональних даних.",
+        deleteWhat: "Після підтвердженого запиту ми видалимо: обліковий запис і профіль, повну історію розмов, ідентифікатор пристрою та токени доступу.",
+        deleteRetain: "Записи про платежі зберігаються відповідно до фінансового законодавства. Голосові та відеодані не зберігаються — вони обробляються в реальному часі та одразу видаляються.",
+        deleteHow: "Щоб видалити обліковий запис, надішліть запит на ",
+        deleteHowB: " або перейдіть на ",
+        deleteHowC: "сторінку видалення облікового запису",
+        deleteHowD: ".",
         changesTitle: "Зміни до цієї Політики",
         changesP1: "Ми можемо оновлювати цю Політику. Дата оновлення вказана вгорі сторінки.",
         changesP2: "Продовжуючи використовувати Сервіс після змін, ви погоджуєтесь з оновленою Політикою.",
@@ -127,6 +137,14 @@ export default function PrivacyPolicyPage() {
         rightsI4: "ограничить обработку;",
         rightsI5: "подать жалобу в надзорный орган.",
         rightsContact: "Для реализации прав — форма обратной связи или email поддержки.",
+        deleteTitle: "Удаление учётной записи",
+        deleteP1: "Вы вправе подать запрос на удаление учётной записи и персональных данных.",
+        deleteWhat: "После подтверждённого запроса мы удалим: учётную запись и профиль, полную историю разговоров, идентификатор устройства и токены доступа.",
+        deleteRetain: "Платёжные записи хранятся по финансовому законодательству. Голосовые и видеоданные не хранятся — они обрабатываются в реальном времени и немедленно удаляются.",
+        deleteHow: "Для удаления учётной записи отправьте запрос на ",
+        deleteHowB: " или перейдите на ",
+        deleteHowC: "страницу удаления учётной записи",
+        deleteHowD: ".",
         changesTitle: "Изменения Политики",
         changesP1: "Мы можем обновлять Политику. Дата обновления — вверху страницы.",
         changesP2: "Продолжая использовать Сервис после изменений, вы соглашаетесь с обновлённой Политикой.",
@@ -187,6 +205,14 @@ export default function PrivacyPolicyPage() {
         rightsI4: "restrict certain types of processing;",
         rightsI5: "lodge a complaint with a supervisory authority.",
         rightsContact: "To exercise your rights, contact us via feedback form or support email.",
+        deleteTitle: "Account Deletion",
+        deleteP1: "You have the right to request deletion of your account and personal data.",
+        deleteWhat: "Upon a confirmed request we will delete: your account and profile, your full conversation history, device identifier and access tokens.",
+        deleteRetain: "Payment records are retained as required by financial law. Voice and video data are never stored — they are processed in real time and discarded immediately.",
+        deleteHow: "To delete your account, send a request to ",
+        deleteHowB: " or visit the ",
+        deleteHowC: "account deletion page",
+        deleteHowD: ".",
         changesTitle: "Changes to This Policy",
         changesP1: "We may update this Policy. The update date is at the top of this page.",
         changesP2: "By continuing to use the Service after changes, you agree to the updated Policy.",
@@ -290,6 +316,30 @@ export default function PrivacyPolicyPage() {
                 <li>{copy.rightsI5}</li>
               </ul>
               <p>{copy.rightsContact}</p>
+            </section>
+
+            <section id="delete-account" className="space-y-3 scroll-mt-8">
+              <h2 className="text-xl font-semibold">{copy.deleteTitle}</h2>
+              <p>{copy.deleteP1}</p>
+              <p>{copy.deleteWhat}</p>
+              <p>{copy.deleteRetain}</p>
+              <p>
+                {copy.deleteHow}
+                <a
+                  href={`mailto:${APP_SUPPORT_EMAIL}`}
+                  className="font-medium text-violet-700 underline underline-offset-2 hover:text-violet-900"
+                >
+                  {APP_SUPPORT_EMAIL}
+                </a>
+                {copy.deleteHowB}
+                <Link
+                  href="/delete-account"
+                  className="font-medium text-violet-700 underline underline-offset-2 hover:text-violet-900"
+                >
+                  {copy.deleteHowC}
+                </Link>
+                {copy.deleteHowD}
+              </p>
             </section>
 
             <section className="space-y-3">

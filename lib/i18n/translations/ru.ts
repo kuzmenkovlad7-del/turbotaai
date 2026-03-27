@@ -264,6 +264,7 @@ export const ru = {
   "nav.privacyPolicy": "Политика конфиденциальности",
   "nav.programs": "Программы",
   "nav.termsOfUse": "Условия пользования",
+  "nav.deleteAccount": "Удалить учётную запись",
   "NGOs and initiatives that work with vulnerable groups.": "НКО и инициативы, работающие с уязвимыми группами.",
   "Night chat instead of endless scrolling": "Ночной чат вместо бесконечного скролла",
   "No microphone was found on this device. Please check your hardware.": "На этом устройстве не найден микрофон. Проверьте оборудование.",

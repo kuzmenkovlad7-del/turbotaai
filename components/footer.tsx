@@ -16,6 +16,7 @@ const mainLinks: FooterLink[] = SITE_NAV.map((x) => ({ href: x.href, labelKey: x
 const legalLinks: FooterLink[] = [
   { href: "/privacy-policy", labelKey: "nav.privacyPolicy" },
   { href: "/terms-of-use", labelKey: "nav.termsOfUse" },
+  { href: "/delete-account", labelKey: "nav.deleteAccount" },
 ]
 
 export default function Footer() {
