@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react"
 import { Platform, Alert, Linking } from "react-native"
-import { IAP_ENABLED, STORE_BUILD } from "@/constants/config"
+import { IAP_ENABLED, STORE_BUILD, IAP_PRODUCTS } from "@/constants/config"
 import { useAuth } from "@/hooks/useAuth"
 import { validateReceipt } from "@/services/api"
 
@@ -22,12 +22,24 @@ type SubState = {
  *    com.turbotaai.monthly, com.turbotaai.yearly
  * 3. EAS build (react-native-iap requires native code, not Expo Go)
  * 4. Backend receipt validation at /api/billing/iap/validate
+ *
+ * Platform notes:
+ * - iOS (StoreKit): requestSubscription resolves with the purchase object.
+ * - Android (Google Play Billing): requestSubscription launches the billing
+ *   UI and resolves with null/void. The purchase data arrives asynchronously
+ *   via purchaseUpdatedListener. We use the listener pattern on Android
+ *   to handle both immediate and deferred (pending) purchases.
  */
 
 /* ── Lazy-import react-native-iap so the module is not required in Expo Go ─ */
 async function getRNIap() {
   return import("react-native-iap")
 }
+
+const PRODUCT_IDS = [IAP_PRODUCTS.MONTHLY, IAP_PRODUCTS.YEARLY] as const
+
+/** Timeout for awaiting a purchase listener event on Android (60 s). */
+const ANDROID_PURCHASE_TIMEOUT_MS = 60_000
 
 export function useSubscription() {
   const { refreshAccess } = useAuth()
@@ -52,44 +64,114 @@ export function useSubscription() {
       const RNIap = await getRNIap()
       await RNIap.initConnection()
 
-      const result = await RNIap.requestSubscription({ sku: productId })
-      if (!result) throw new Error("Purchase cancelled or no result returned")
+      if (Platform.OS === "android") {
+        // ── Android path ─────────────────────────────────────────────────────
+        // Google Play Billing resolves requestSubscription with null/void.
+        // The actual purchase object arrives via purchaseUpdatedListener.
+        // We wrap both the listener and the billing-flow initiation in a
+        // single Promise so purchasing: true stays set until fully handled.
+        await new Promise<void>((resolve, reject) => {
+          let handled = false
 
-      // Purchases may come as array (Android) or single object (iOS)
-      const purchase = Array.isArray(result) ? result[0] : result
-      const transactionReceipt =
-        (purchase as any)?.transactionReceipt ||
-        (purchase as any)?.purchaseToken ||
-        ""
-      const transactionId: string | undefined =
-        (purchase as any)?.transactionId || (purchase as any)?.orderId || undefined
+          const timer = setTimeout(() => {
+            if (handled) return
+            handled = true
+            purchaseSub.remove()
+            errorSub.remove()
+            reject(new Error("Purchase timed out. Please try again."))
+          }, ANDROID_PURCHASE_TIMEOUT_MS)
 
-      if (transactionReceipt) {
-        const validated = await validateReceipt({
-          platform: Platform.OS as "ios" | "android",
-          productId,
-          transactionReceipt,
-          transactionId,
+          const purchaseSub = RNIap.purchaseUpdatedListener(async (p: any) => {
+            if (p.productId !== productId) return
+            if (handled) return
+            handled = true
+            clearTimeout(timer)
+            purchaseSub.remove()
+            errorSub.remove()
+
+            try {
+              const token = p.purchaseToken || p.transactionReceipt || ""
+              if (!token) throw new Error("No purchase token received from Play Store")
+
+              const validated = await validateReceipt({
+                platform: "android",
+                productId: p.productId,
+                transactionReceipt: token,
+                transactionId: p.transactionId || p.orderId || undefined,
+              })
+              if (!validated.ok) throw new Error(validated.error || "Receipt validation failed")
+
+              // Acknowledge the purchase — required within 3 days or Google refunds it.
+              await RNIap.acknowledgePurchaseAndroid({ token }).catch(() => {})
+              await refreshAccess()
+              setState(s => ({ ...s, purchasing: false }))
+              resolve()
+            } catch (innerErr: any) {
+              setState(s => ({
+                ...s,
+                purchasing: false,
+                error: innerErr?.message || "Purchase could not be completed",
+              }))
+              resolve()
+            }
+          })
+
+          const errorSub = RNIap.purchaseErrorListener((err: any) => {
+            if (handled) return
+            handled = true
+            clearTimeout(timer)
+            purchaseSub.remove()
+            errorSub.remove()
+
+            const isCancelled =
+              err?.code === "E_USER_CANCELLED" ||
+              err?.message?.toLowerCase().includes("cancel")
+
+            setState(s => ({
+              ...s,
+              purchasing: false,
+              error: isCancelled ? null : (err?.message || "Purchase could not be completed"),
+            }))
+            resolve()
+          })
+
+          // Initiate the billing flow — the result is intentionally ignored on Android.
+          RNIap.requestSubscription({ sku: productId }).catch((err: any) => {
+            if (handled) return
+            handled = true
+            clearTimeout(timer)
+            purchaseSub.remove()
+            errorSub.remove()
+            reject(err)
+          })
         })
-        if (!validated.ok) {
-          throw new Error(validated.error || "Receipt validation failed")
-        }
-        // Acknowledge purchase on Android (prevents refund after 3 days)
-        if (Platform.OS === "android" && (purchase as any)?.purchaseToken) {
-          await RNIap.acknowledgePurchaseAndroid({
-            token: (purchase as any).purchaseToken,
-          }).catch(() => {})
-        }
-        // Finish the transaction on iOS
-        if (Platform.OS === "ios") {
-          await RNIap.finishTransaction({ purchase, isConsumable: false }).catch(() => {})
-        }
-      }
+      } else {
+        // ── iOS path ──────────────────────────────────────────────────────────
+        // StoreKit resolves requestSubscription with the purchase object.
+        const result = await RNIap.requestSubscription({ sku: productId })
+        if (!result) throw new Error("Purchase cancelled or no result returned")
 
-      await refreshAccess()
-      setState(s => ({ ...s, purchasing: false }))
+        const p: any = Array.isArray(result) ? result[0] : result
+        const transactionReceipt: string = p?.transactionReceipt || ""
+        const transactionId: string | undefined = p?.transactionId || undefined
+
+        if (transactionReceipt) {
+          const validated = await validateReceipt({
+            platform: "ios",
+            productId,
+            transactionReceipt,
+            transactionId,
+          })
+          if (!validated.ok) throw new Error(validated.error || "Receipt validation failed")
+
+          // Finish the StoreKit transaction so the OS doesn't re-deliver it.
+          await RNIap.finishTransaction({ purchase: p, isConsumable: false }).catch(() => {})
+        }
+
+        await refreshAccess()
+        setState(s => ({ ...s, purchasing: false }))
+      }
     } catch (e: any) {
-      // User cancellation is not an error worth surfacing
       const isCancelled =
         e?.code === "E_USER_CANCELLED" ||
         e?.message?.toLowerCase().includes("cancel")
@@ -119,32 +201,37 @@ export function useSubscription() {
       await RNIap.initConnection()
       const purchases = await RNIap.getAvailablePurchases()
 
-      // Validate the most recent purchase for this app
+      // Find the most recent active subscription for this app.
+      // getAvailablePurchases returns only non-consumed / active purchases.
       const latest = purchases.find((p: any) =>
-        p.productId === "com.turbotaai.monthly" ||
-        p.productId === "com.turbotaai.yearly"
+        (PRODUCT_IDS as readonly string[]).includes(p.productId),
       )
 
       if (latest) {
-        const transactionReceipt =
-          (latest as any)?.transactionReceipt ||
+        const token: string =
           (latest as any)?.purchaseToken ||
+          (latest as any)?.transactionReceipt ||
           ""
-        if (transactionReceipt) {
+
+        if (token) {
           await validateReceipt({
             platform: Platform.OS as "ios" | "android",
             productId: latest.productId,
-            transactionReceipt,
+            transactionReceipt: token,
+            transactionId: (latest as any)?.transactionId || (latest as any)?.orderId,
           }).catch(() => {})
         }
         await refreshAccess()
+        setState(s => ({ ...s, restoring: false, error: null }))
       } else {
-        // No active subscription found — refresh access to confirm server state
+        // No active subscription found — refresh access to confirm server state.
         await refreshAccess()
-        Alert.alert("No Active Subscription", "No active subscription was found for this account.")
+        setState(s => ({ ...s, restoring: false, error: null }))
+        Alert.alert(
+          "No Active Subscription",
+          "No active subscription was found for this account.",
+        )
       }
-
-      setState(s => ({ ...s, restoring: false, error: null }))
     } catch (e: any) {
       setState(s => ({ ...s, restoring: false, error: e?.message || "Restore failed" }))
     } finally {
@@ -154,13 +241,13 @@ export function useSubscription() {
 
   const manageSubscription = useCallback(() => {
     if (Platform.OS === "ios") {
-      // Opens the iOS subscription management sheet
+      // Opens the iOS subscription management sheet (iOS 15+).
       Linking.openURL("https://apps.apple.com/account/subscriptions").catch(() => {
-        // Fallback for older iOS
+        // Fallback deep link for older iOS.
         Linking.openURL("itms-apps://apps.apple.com/account/subscriptions").catch(() => {})
       })
     } else {
-      // Opens Google Play subscription management
+      // Opens Google Play subscription management for this app.
       Linking.openURL(
         "https://play.google.com/store/account/subscriptions?package=com.turbotaai.app",
       ).catch(() => {
@@ -179,8 +266,6 @@ export function useSubscription() {
      * true when EXPO_PUBLIC_STORE_BUILD=true (or legacy EXPO_PUBLIC_STORE_SAFE).
      * AccountScreen uses this to hide the external "Subscribe on web" CTA,
      * which is not permitted by App Store / Google Play guidelines.
-     * AccountScreen also applies an iOS Platform.OS guard as a belt-and-suspenders
-     * safety net so the CTA can never appear on iOS regardless of this flag.
      */
     storeBuild: STORE_BUILD,
   }
