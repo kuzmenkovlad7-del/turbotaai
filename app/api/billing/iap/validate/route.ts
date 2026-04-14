@@ -100,14 +100,22 @@ async function extendGrant(
   paidUntilIso: string,
   nowIso: string,
 ) {
-  const { data: rows } = await admin
+  console.log(`[iap/validate] extendGrant start key=${key.slice(0, 20)}... paidUntilIso=${paidUntilIso}`)
+
+  const { data: rows, error: selectErr } = await admin
     .from("access_grants")
     .select("id,paid_until,user_id")
     .eq("device_hash", key)
     .order("updated_at", { ascending: false })
     .limit(1)
 
+  if (selectErr) {
+    console.error(`[iap/validate] extendGrant select error key=${key.slice(0, 20)}:`, selectErr.message)
+  }
+
   const existing = Array.isArray(rows) ? rows[0] : null
+  console.log(`[iap/validate] extendGrant existing=${existing ? `id=${existing.id} paid_until=${existing.paid_until}` : "none"}`)
+
   const curMs = existing?.paid_until ? Date.parse(String(existing.paid_until)) : 0
   const newMs = Date.parse(paidUntilIso)
   // Never regress: if current expiry is already later, keep it.
@@ -116,6 +124,8 @@ async function extendGrant(
     ? String(existing.paid_until)
     : paidUntilIso
 
+  console.log(`[iap/validate] extendGrant finalPaidUntil=${finalPaidUntil} curMs=${curMs} newMs=${newMs}`)
+
   if (existing?.id) {
     const patch: Record<string, any> = {
       paid_until: finalPaidUntil,
@@ -123,10 +133,15 @@ async function extendGrant(
       updated_at: nowIso,
     }
     if (userId && !existing.user_id) patch.user_id = userId
-    await admin.from("access_grants").update(patch).eq("id", existing.id)
+    const { error: updateErr } = await admin.from("access_grants").update(patch).eq("id", existing.id)
+    if (updateErr) {
+      console.error(`[iap/validate] extendGrant update error key=${key.slice(0, 20)}:`, updateErr.message)
+    } else {
+      console.log(`[iap/validate] extendGrant update OK key=${key.slice(0, 20)}`)
+    }
   } else {
     // Row doesn't exist yet — insert it
-    await admin.from("access_grants").insert({
+    const { error: insertErr } = await admin.from("access_grants").insert({
       id: crypto.randomUUID(),
       device_hash: key,
       user_id: userId,
@@ -136,6 +151,11 @@ async function extendGrant(
       created_at: nowIso,
       updated_at: nowIso,
     } as any)
+    if (insertErr) {
+      console.error(`[iap/validate] extendGrant insert error key=${key.slice(0, 20)}:`, insertErr.message)
+    } else {
+      console.log(`[iap/validate] extendGrant insert OK key=${key.slice(0, 20)}`)
+    }
   }
 
   return finalPaidUntil
@@ -156,6 +176,7 @@ async function grantPaidAccess(admin: ReturnType<typeof sbAdmin>, args: {
   paidUntilIso: string
 }) {
   const nowIso = new Date().toISOString()
+  console.log(`[iap/validate] grantPaidAccess start deviceHash=...${args.deviceHash.slice(-8)} userId=${args.userId ?? "null"} paidUntilIso=${args.paidUntilIso}`)
 
   // 1. Device grant — always
   await extendGrant(admin, args.deviceHash, args.userId, args.paidUntilIso, nowIso)
@@ -166,8 +187,9 @@ async function grantPaidAccess(admin: ReturnType<typeof sbAdmin>, args: {
     await extendGrant(admin, accountKey, args.userId, args.paidUntilIso, nowIso)
 
     // 3. Update profiles for web parity (matches WayForPay callback behaviour)
+    console.log(`[iap/validate] grantPaidAccess profiles update start userId=${args.userId}`)
     try {
-      await admin
+      const { error: profileErr } = await admin
         .from("profiles")
         .update({
           paid_until: args.paidUntilIso,
@@ -176,9 +198,17 @@ async function grantPaidAccess(admin: ReturnType<typeof sbAdmin>, args: {
           updated_at: nowIso,
         } as any)
         .eq("id", args.userId)
-    } catch {
+      if (profileErr) {
+        console.error(`[iap/validate] grantPaidAccess profiles update error:`, profileErr.message)
+      } else {
+        console.log(`[iap/validate] grantPaidAccess profiles update OK userId=${args.userId}`)
+      }
+    } catch (e: any) {
       // Non-fatal: bootstrap will sync on next call
+      console.error(`[iap/validate] grantPaidAccess profiles update exception:`, e?.message)
     }
+  } else {
+    console.log(`[iap/validate] grantPaidAccess skipping account grant + profiles (no userId)`)
   }
 }
 
@@ -223,16 +253,30 @@ async function verifyApple(productId: string, receiptData: string) {
 }
 
 async function googleAccessToken() {
-  const raw = mustEnv("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
+  console.log(`[iap/validate] googleAccessToken start`)
+
+  const rawEnv = process.env["GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"] || ""
+  if (!rawEnv.trim()) {
+    console.error(`[iap/validate] googleAccessToken GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is MISSING or empty`)
+    throw new Error("Missing env GOOGLE_PLAY_SERVICE_ACCOUNT_JSON")
+  }
+  console.log(`[iap/validate] googleAccessToken env present length=${rawEnv.trim().length}`)
+
   let key: any
   try {
-    key = JSON.parse(raw)
-  } catch {
+    key = JSON.parse(rawEnv)
+  } catch (e: any) {
+    console.error(`[iap/validate] googleAccessToken JSON.parse failed:`, e?.message)
     throw new Error("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is not valid JSON")
   }
+
   const clientEmail = key.client_email
   const privateKey = key.private_key
-  if (!clientEmail || !privateKey) throw new Error("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON missing client_email or private_key")
+  if (!clientEmail || !privateKey) {
+    console.error(`[iap/validate] googleAccessToken missing client_email=${!!clientEmail} private_key=${!!privateKey}`)
+    throw new Error("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON missing client_email or private_key")
+  }
+  console.log(`[iap/validate] googleAccessToken client_email=${clientEmail}`)
 
   const now = Math.floor(Date.now() / 1000)
   const header = { alg: "RS256", typ: "JWT" }
@@ -247,6 +291,7 @@ async function googleAccessToken() {
     assertion: jwt,
   })
 
+  console.log(`[iap/validate] googleAccessToken fetching token from ${GOOGLE_TOKEN_URL}`)
   const res = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -254,7 +299,12 @@ async function googleAccessToken() {
   })
 
   const j: any = await res.json().catch(() => ({}))
-  if (!j.access_token) throw new Error(`google_oauth_failed: ${JSON.stringify(j).slice(0, 400)}`)
+  if (!j.access_token) {
+    console.error(`[iap/validate] googleAccessToken oauth failed status=${res.status} response=${JSON.stringify(j).slice(0, 400)}`)
+    throw new Error(`google_oauth_failed: ${JSON.stringify(j).slice(0, 400)}`)
+  }
+
+  console.log(`[iap/validate] googleAccessToken OK token_type=${j.token_type} expires_in=${j.expires_in}`)
   return j.access_token as string
 }
 
@@ -275,16 +325,24 @@ async function verifyGoogle(
   productId: string,
   purchaseToken: string,
 ): Promise<{ ok: true; expiresMs: number; transactionId: string | null } | { ok: false; error: string }> {
+  const tokenSuffix = purchaseToken.slice(-12)
+  console.log(`[iap/validate] verifyGoogle start productId=${productId} token=...${tokenSuffix}`)
+
   const accessToken = await googleAccessToken()
   const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(ANDROID_PKG)}`
 
   // ── Try subscriptionsv2 (new billing model with base plans / offers) ──────
   const v2Url = `${base}/purchases/subscriptionsv2/tokens/${encodeURIComponent(purchaseToken)}`
+  console.log(`[iap/validate] verifyGoogle v2 GET ${v2Url.replace(purchaseToken, `...${tokenSuffix}`)}`)
+
   const v2Res = await fetch(v2Url, { headers: { authorization: `Bearer ${accessToken}` } })
+  console.log(`[iap/validate] verifyGoogle v2 response status=${v2Res.status}`)
 
   if (v2Res.ok) {
     let j: any
     try { j = await v2Res.json() } catch { j = {} }
+
+    console.log(`[iap/validate] verifyGoogle v2 body subscriptionState=${j?.subscriptionState} lineItems=${JSON.stringify(j?.lineItems)?.slice(0, 200)}`)
 
     const lineItems: any[] = Array.isArray(j?.lineItems) ? j.lineItems : []
     // Prefer the line item matching our productId; fall back to first item
@@ -293,7 +351,10 @@ async function verifyGoogle(
     const expiryIso: string | null = item?.expiryTime ?? null
     const expiresMs = expiryIso ? Date.parse(expiryIso) : 0
 
+    console.log(`[iap/validate] verifyGoogle v2 item=${JSON.stringify(item)} expiryIso=${expiryIso} expiresMs=${expiresMs} now=${Date.now()}`)
+
     if (!expiresMs || expiresMs <= Date.now()) {
+      console.error(`[iap/validate] verifyGoogle v2 expired expiresMs=${expiresMs}`)
       return { ok: false, error: "google_expired" }
     }
 
@@ -301,32 +362,49 @@ async function verifyGoogle(
     const state = String(j?.subscriptionState ?? "")
     const ACTIVE_STATES = ["SUBSCRIPTION_STATE_ACTIVE", "SUBSCRIPTION_STATE_IN_GRACE_PERIOD", ""]
     if (state && !ACTIVE_STATES.includes(state)) {
+      console.error(`[iap/validate] verifyGoogle v2 inactive state=${state}`)
       return { ok: false, error: `google_state_${state}` }
     }
 
     const tx = (j?.latestOrderId ?? item?.purchaseToken ?? null) as string | null
+    console.log(`[iap/validate] verifyGoogle v2 OK expiresMs=${expiresMs} transactionId=${tx}`)
     return { ok: true, expiresMs, transactionId: tx }
   }
 
   // ── Fallback: legacy purchases.subscriptions v1 ───────────────────────────
+  console.log(`[iap/validate] verifyGoogle v2 failed (${v2Res.status}), falling back to v1`)
   const v1Url = `${base}/purchases/subscriptions/${encodeURIComponent(productId)}/tokens/${encodeURIComponent(purchaseToken)}`
+  console.log(`[iap/validate] verifyGoogle v1 GET ${v1Url.replace(purchaseToken, `...${tokenSuffix}`)}`)
+
   const v1Res = await fetch(v1Url, { headers: { authorization: `Bearer ${accessToken}` } })
   const v1Txt = await v1Res.text()
+  console.log(`[iap/validate] verifyGoogle v1 response status=${v1Res.status} body=${v1Txt.slice(0, 300)}`)
+
   let j1: any
   try { j1 = JSON.parse(v1Txt) } catch { j1 = { _raw: v1Txt } }
 
-  if (!v1Res.ok) return { ok: false, error: `google_http_${v1Res.status}` }
+  if (!v1Res.ok) {
+    console.error(`[iap/validate] verifyGoogle v1 HTTP error status=${v1Res.status}`)
+    return { ok: false, error: `google_http_${v1Res.status}` }
+  }
 
   const expiresMs = Number(j1?.expiryTimeMillis || 0)
-  if (!expiresMs || expiresMs <= Date.now()) return { ok: false, error: "google_expired" }
+  console.log(`[iap/validate] verifyGoogle v1 expiryTimeMillis=${j1?.expiryTimeMillis} expiresMs=${expiresMs} now=${Date.now()}`)
+
+  if (!expiresMs || expiresMs <= Date.now()) {
+    console.error(`[iap/validate] verifyGoogle v1 expired expiresMs=${expiresMs}`)
+    return { ok: false, error: "google_expired" }
+  }
 
   const paymentState = j1?.paymentState
   // paymentState: 0=pending, 1=paid, 2=free trial. Accept 1 and 2.
   if (paymentState !== undefined && ![1, 2].includes(Number(paymentState))) {
+    console.error(`[iap/validate] verifyGoogle v1 bad paymentState=${paymentState}`)
     return { ok: false, error: `google_payment_state_${String(paymentState)}` }
   }
 
   const tx = (j1?.orderId ?? null) as string | null
+  console.log(`[iap/validate] verifyGoogle v1 OK expiresMs=${expiresMs} transactionId=${tx}`)
   return { ok: true, expiresMs, transactionId: tx }
 }
 
@@ -335,12 +413,17 @@ export async function POST(req: NextRequest) {
   const deviceHash = req.headers.get("x-device-hash") || ""
   if (!deviceHash) return json({ ok: false, error: "missing_device_hash" }, 400)
 
+  console.log(`[iap/validate] POST start deviceHash=...${deviceHash.slice(-8)}`)
+
   const admin = sbAdmin()
   const userId = tryGetUserId(req)
+  console.log(`[iap/validate] userId=${userId ?? "null (unauthenticated)"}`)
 
   try {
     const body = await req.json().catch(() => ({} as any))
     const { platform, productId, transactionReceipt, transactionId } = body || {}
+
+    console.log(`[iap/validate] body platform=${platform} productId=${productId} receiptLength=${String(transactionReceipt || "").length} transactionId=${transactionId ?? "null"}`)
 
     if (!platform || !productId || !transactionReceipt) return json({ ok: false, error: "missing_fields" }, 400)
     if (platform !== "ios" && platform !== "android") return json({ ok: false, error: "invalid_platform" }, 400)
@@ -348,22 +431,29 @@ export async function POST(req: NextRequest) {
     const planId = planIdFromProduct(String(productId))
     const receiptLen = String(transactionReceipt).length
 
+    console.log(`[iap/validate] planId=${planId} receiptLen=${receiptLen}`)
+
     let expiresMs = 0
     let txId: string | null = transactionId || null
     let err: string | null = null
 
     if (platform === "ios") {
+      console.log(`[iap/validate] verifyApple start productId=${productId}`)
       const r = await verifyApple(String(productId), String(transactionReceipt))
+      console.log(`[iap/validate] verifyApple result ok=${r.ok} ${r.ok ? `expiresMs=${r.expiresMs}` : `error=${r.error}`}`)
       if (!r.ok) err = r.error
       else { expiresMs = r.expiresMs; txId = txId || r.transactionId || null }
     } else {
       // Android: transactionReceipt is the purchaseToken from Google Play
+      console.log(`[iap/validate] verifyGoogle start productId=${productId} tokenSuffix=...${String(transactionReceipt).slice(-12)}`)
       const r = await verifyGoogle(String(productId), String(transactionReceipt))
+      console.log(`[iap/validate] verifyGoogle result ok=${r.ok} ${r.ok ? `expiresMs=${r.expiresMs}` : `error=${r.error}`}`)
       if (!r.ok) err = r.error
       else { expiresMs = r.expiresMs; txId = txId || r.transactionId || null }
     }
 
     if (!expiresMs || err) {
+      console.error(`[iap/validate] validation failed err=${err} expiresMs=${expiresMs}`)
       await logOrder(admin, {
         deviceHash,
         status: "iap_invalid",
@@ -378,10 +468,12 @@ export async function POST(req: NextRequest) {
     }
 
     const paidUntilIso = new Date(expiresMs).toISOString()
+    console.log(`[iap/validate] paidUntilIso=${paidUntilIso} — granting access`)
 
     // Grant access: update device grant, account grant, and profiles
     await grantPaidAccess(admin, { deviceHash, userId, paidUntilIso })
 
+    console.log(`[iap/validate] logOrder iap_valid start`)
     await logOrder(admin, {
       deviceHash,
       status: "iap_valid",
@@ -391,13 +483,15 @@ export async function POST(req: NextRequest) {
       expiresMs,
       receiptLength: receiptLen,
       error: null,
-    }).catch(() => {})
+    }).catch((e: any) => console.error(`[iap/validate] logOrder error:`, e?.message))
 
+    console.log(`[iap/validate] POST success productId=${productId} paidUntil=${paidUntilIso}`)
     return json({ ok: true, paid_until: paidUntilIso, platform, productId })
   } catch (e: any) {
     // Surface the actual error message so it's visible in server logs
     // and in the mobile debug panel (DEBUG_ENABLED=true)
     console.error("[iap/validate] unhandled error:", e?.message ?? e)
+    console.error("[iap/validate] stack:", e?.stack ?? "(no stack)")
     return json({ ok: false, error: "iap_validate_failed", details: String(e?.message || e) }, 500)
   }
 }
