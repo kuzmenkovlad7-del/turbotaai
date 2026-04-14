@@ -70,7 +70,6 @@ export const DEBUG_ENABLED: boolean =
 /** IAP product identifiers — must match App Store Connect / Google Play Console */
 export const IAP_PRODUCTS = {
   MONTHLY: "com.turbotaai.monthly",
-  YEARLY: "com.turbotaai.yearly",
 } as const
 
 export const STORAGE_KEYS = {

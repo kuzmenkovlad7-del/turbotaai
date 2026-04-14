@@ -6,7 +6,6 @@ import { validateReceipt } from "@/services/api"
 
 type SubState = {
   purchasing: boolean
-  restoring: boolean
   error: string | null
 }
 
@@ -18,10 +17,15 @@ type SubState = {
  *
  * Full IAP flow (production builds, EXPO_PUBLIC_IAP_ENABLED=true):
  * 1. Apple Developer + Google Play accounts configured
- * 2. Products created in App Store Connect / Play Console with IDs:
- *    com.turbotaai.monthly, com.turbotaai.yearly
+ * 2. Monthly product created in App Store Connect / Play Console with ID:
+ *    com.turbotaai.monthly
  * 3. EAS build (react-native-iap requires native code, not Expo Go)
  * 4. Backend receipt validation at /api/billing/iap/validate
+ *
+ * Android note: Google Play Billing Library v5+ (required for targetSdk 35)
+ * requires subscriptionOffers with an offerToken in requestSubscription.
+ * The offerToken is fetched at purchase time via getSubscriptions() and is
+ * NOT hardcoded — it changes per base plan / offer configuration in Play Console.
  */
 
 /* ── Lazy-import react-native-iap so the module is not required in Expo Go ─ */
@@ -33,7 +37,6 @@ export function useSubscription() {
   const { refreshAccess } = useAuth()
   const [state, setState] = useState<SubState>({
     purchasing: false,
-    restoring: false,
     error: null,
   })
 
@@ -52,7 +55,34 @@ export function useSubscription() {
       const RNIap = await getRNIap()
       await RNIap.initConnection()
 
-      const result = await RNIap.requestSubscription({ sku: productId })
+      // ── Android: Google Play Billing v5+ requires subscriptionOffers ──────
+      // requestSubscription({ sku }) alone throws:
+      //   "subscriptionOffers are required for Google Play subscriptions"
+      // We must call getSubscriptions() first to obtain the offerToken for
+      // the product's default base plan offer, then pass it in subscriptionOffers.
+      let purchaseParams: any
+      if (Platform.OS === "android") {
+        const subs: any[] = await RNIap.getSubscriptions({ skus: [productId] }).catch(() => [])
+        const sub = subs.find((s: any) => s.productId === productId)
+        const offerDetails: any[] = (sub as any)?.subscriptionOfferDetails ?? []
+        const offerToken: string | null =
+          offerDetails.length > 0 ? (offerDetails[0]?.offerToken ?? null) : null
+
+        if (!offerToken) {
+          throw new Error(
+            "This subscription is not available right now. Please check back later or contact support.",
+          )
+        }
+        purchaseParams = {
+          sku: productId,
+          subscriptionOffers: [{ sku: productId, offerToken }],
+        }
+      } else {
+        // iOS — plain sku is sufficient
+        purchaseParams = { sku: productId }
+      }
+
+      const result = await RNIap.requestSubscription(purchaseParams)
       if (!result) throw new Error("Purchase cancelled or no result returned")
 
       // Purchases may come as array (Android) or single object (iOS)
@@ -103,60 +133,10 @@ export function useSubscription() {
     }
   }, [refreshAccess])
 
-  const restorePurchases = useCallback(async () => {
-    if (!IAP_ENABLED) {
-      Alert.alert(
-        "Restore Purchases",
-        "In-app purchases are not yet enabled. If you subscribed via the web, your access is already linked to your account.",
-      )
-      return
-    }
-
-    setState(s => ({ ...s, restoring: true, error: null }))
-
-    try {
-      const RNIap = await getRNIap()
-      await RNIap.initConnection()
-      const purchases = await RNIap.getAvailablePurchases()
-
-      // Validate the most recent purchase for this app
-      const latest = purchases.find((p: any) =>
-        p.productId === "com.turbotaai.monthly" ||
-        p.productId === "com.turbotaai.yearly"
-      )
-
-      if (latest) {
-        const transactionReceipt =
-          (latest as any)?.transactionReceipt ||
-          (latest as any)?.purchaseToken ||
-          ""
-        if (transactionReceipt) {
-          await validateReceipt({
-            platform: Platform.OS as "ios" | "android",
-            productId: latest.productId,
-            transactionReceipt,
-          }).catch(() => {})
-        }
-        await refreshAccess()
-      } else {
-        // No active subscription found — refresh access to confirm server state
-        await refreshAccess()
-        Alert.alert("No Active Subscription", "No active subscription was found for this account.")
-      }
-
-      setState(s => ({ ...s, restoring: false, error: null }))
-    } catch (e: any) {
-      setState(s => ({ ...s, restoring: false, error: e?.message || "Restore failed" }))
-    } finally {
-      getRNIap().then(r => r.endConnection()).catch(() => {})
-    }
-  }, [refreshAccess])
-
   const manageSubscription = useCallback(() => {
     if (Platform.OS === "ios") {
       // Opens the iOS subscription management sheet
       Linking.openURL("https://apps.apple.com/account/subscriptions").catch(() => {
-        // Fallback for older iOS
         Linking.openURL("itms-apps://apps.apple.com/account/subscriptions").catch(() => {})
       })
     } else {
@@ -172,15 +152,11 @@ export function useSubscription() {
   return {
     ...state,
     purchase,
-    restorePurchases,
     manageSubscription,
     iapEnabled: IAP_ENABLED,
     /**
      * true when EXPO_PUBLIC_STORE_BUILD=true (or legacy EXPO_PUBLIC_STORE_SAFE).
-     * AccountScreen uses this to hide the external "Subscribe on web" CTA,
-     * which is not permitted by App Store / Google Play guidelines.
-     * AccountScreen also applies an iOS Platform.OS guard as a belt-and-suspenders
-     * safety net so the CTA can never appear on iOS regardless of this flag.
+     * AccountScreen uses this to hide the external "Subscribe on web" CTA.
      */
     storeBuild: STORE_BUILD,
   }

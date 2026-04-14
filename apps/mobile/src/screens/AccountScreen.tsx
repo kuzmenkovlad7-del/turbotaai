@@ -28,9 +28,7 @@ export default function AccountScreen() {
   const { t, locale, setLocale } = useT()
   const {
     purchasing,
-    restoring,
     purchase,
-    restorePurchases,
     manageSubscription,
     iapEnabled,
     error: iapError,
@@ -381,29 +379,15 @@ export default function AccountScreen() {
             </View>
           )}
 
-          {/* Subscribe CTAs for non-unlimited users.
-              Two modes:
-              1. iapEnabled=true  → native IAP buttons (Monthly / Yearly)
-              2. iapEnabled=false → info notice only; no external link shown
-                 (demo build: IAP not yet wired, web pricing link not appropriate) */}
+          {/* Subscribe CTA — monthly plan only */}
           {showSubscribeCTA && (
             <View style={styles.actionSection}>
               {iapEnabled ? (
-                // Native IAP — full billing integration required before enabling
-                <>
-                  <Button
-                    title={t.accountMonthly}
-                    onPress={() => purchase(IAP_PRODUCTS.MONTHLY)}
-                    loading={purchasing}
-                    style={{ marginBottom: spacing.sm }}
-                  />
-                  <Button
-                    title={t.accountYearly}
-                    variant="secondary"
-                    onPress={() => purchase(IAP_PRODUCTS.YEARLY)}
-                    loading={purchasing}
-                  />
-                </>
+                <Button
+                  title={t.accountMonthly}
+                  onPress={() => purchase(IAP_PRODUCTS.MONTHLY)}
+                  loading={purchasing}
+                />
               ) : (
                 // No IAP: show coming-soon notice (store-safe, no external link)
                 <View style={styles.iapComingSoon}>
@@ -414,16 +398,8 @@ export default function AccountScreen() {
             </View>
           )}
 
-          {/* Restore purchases + Refresh access */}
+          {/* Refresh access */}
           <View style={[styles.actionSection, { marginTop: spacing.xs }]}>
-            {iapEnabled && (
-              <Button
-                title={t.accountRestorePurchases}
-                variant="ghost"
-                onPress={restorePurchases}
-                loading={restoring}
-              />
-            )}
             <Button
               title={t.accountRefreshAccess}
               variant="outline"
