@@ -92,6 +92,13 @@ async function logOrder(admin: ReturnType<typeof sbAdmin>, args: {
  *   - writes `paid_until` (correct column, not `access_until`)
  *   - zeroes `trial_questions_left`
  *   - never regresses an already-later paid_until
+ *
+ * The `userId` parameter controls user_id assignment:
+ *   - non-null: on INSERT the row is created with user_id=userId; on UPDATE
+ *     user_id is only set when existing.user_id is null (never overwrites).
+ *   - null: user_id is neither inserted nor updated. Used for device-hash
+ *     rows — the canonical user_id lives on the account:${userId} row to
+ *     respect the access_grants_user_id_uq unique constraint.
  */
 async function extendGrant(
   admin: ReturnType<typeof sbAdmin>,
@@ -100,7 +107,7 @@ async function extendGrant(
   paidUntilIso: string,
   nowIso: string,
 ) {
-  console.log(`[iap/validate] extendGrant start key=${key.slice(0, 20)}... paidUntilIso=${paidUntilIso}`)
+  console.log(`[iap/validate] extendGrant start key=${key.slice(0, 20)}... userId=${userId ?? "null"} paidUntilIso=${paidUntilIso}`)
 
   const { data: rows, error: selectErr } = await admin
     .from("access_grants")
@@ -114,7 +121,7 @@ async function extendGrant(
   }
 
   const existing = Array.isArray(rows) ? rows[0] : null
-  console.log(`[iap/validate] extendGrant existing=${existing ? `id=${existing.id} paid_until=${existing.paid_until}` : "none"}`)
+  console.log(`[iap/validate] extendGrant existing=${existing ? `id=${existing.id} paid_until=${existing.paid_until} user_id=${existing.user_id ?? "null"}` : "none"}`)
 
   const curMs = existing?.paid_until ? Date.parse(String(existing.paid_until)) : 0
   const newMs = Date.parse(paidUntilIso)
@@ -132,6 +139,9 @@ async function extendGrant(
       trial_questions_left: 0,
       updated_at: nowIso,
     }
+    // Only attach user_id on UPDATE when explicitly requested (userId non-null)
+    // AND the existing row has no user_id yet. Prevents overwriting and avoids
+    // violating the access_grants_user_id_uq unique constraint.
     if (userId && !existing.user_id) patch.user_id = userId
     const { error: updateErr } = await admin.from("access_grants").update(patch).eq("id", existing.id)
     if (updateErr) {
@@ -140,7 +150,8 @@ async function extendGrant(
       console.log(`[iap/validate] extendGrant update OK key=${key.slice(0, 20)}`)
     }
   } else {
-    // Row doesn't exist yet — insert it
+    // Row doesn't exist yet — insert it. user_id is whatever the caller passed
+    // (may be null for device-hash rows).
     const { error: insertErr } = await admin.from("access_grants").insert({
       id: crypto.randomUUID(),
       device_hash: key,
@@ -162,13 +173,22 @@ async function extendGrant(
 }
 
 /**
- * Grant paid access to the user after a successful IAP validation.
+ * Grant paid access after a successful IAP validation.
  *
- * Updates three places to ensure mobile AND web both show paid access
- * immediately after the user taps "Refresh Access":
- *   1. Device grant (keyed by X-Device-Hash) — mobile bootstrap reads this
- *   2. Account grant (keyed by account:<userId>) — shared across devices
- *   3. profiles.paid_until — web subscription page reads this
+ * Canonical design (respecting access_grants_user_id_uq):
+ *   - The single row carrying user_id for this account is at
+ *     device_hash = "account:<userId>".  This is the source-of-truth grant.
+ *   - The purchase-device row (device_hash = X-Device-Hash) keeps paid_until
+ *     for offline / bootstrap parity but NEVER carries user_id.
+ *   - profiles.paid_until is mirrored for web parity.
+ *
+ * Bootstrap (buildAccessSummary) reads both rows and merges paid_until via
+ * laterIso(), so having both rows updated keeps the device immediately paid
+ * even if the user later signs out or uses another device.
+ *
+ * Self-healing: if a previous run placed user_id on the device-hash row
+ * (the bug this refactor fixes), we detect the conflict row and clear its
+ * user_id before writing the canonical account row.
  */
 async function grantPaidAccess(admin: ReturnType<typeof sbAdmin>, args: {
   deviceHash: string
@@ -178,37 +198,77 @@ async function grantPaidAccess(admin: ReturnType<typeof sbAdmin>, args: {
   const nowIso = new Date().toISOString()
   console.log(`[iap/validate] grantPaidAccess start deviceHash=...${args.deviceHash.slice(-8)} userId=${args.userId ?? "null"} paidUntilIso=${args.paidUntilIso}`)
 
-  // 1. Device grant — always
-  await extendGrant(admin, args.deviceHash, args.userId, args.paidUntilIso, nowIso)
+  if (!args.userId) {
+    // Anonymous / logged-out device: only the device grant can be written.
+    console.log(`[iap/validate] grantPaidAccess anonymous — writing device grant only`)
+    await extendGrant(admin, args.deviceHash, null, args.paidUntilIso, nowIso)
+    return
+  }
 
-  // 2. Account grant + profiles — only when user is authenticated
-  if (args.userId) {
-    const accountKey = `account:${args.userId}`
-    await extendGrant(admin, accountKey, args.userId, args.paidUntilIso, nowIso)
+  const accountKey = `account:${args.userId}`
 
-    // 3. Update profiles for web parity (matches WayForPay callback behaviour)
-    console.log(`[iap/validate] grantPaidAccess profiles update start userId=${args.userId}`)
-    try {
-      const { error: profileErr } = await admin
-        .from("profiles")
-        .update({
-          paid_until: args.paidUntilIso,
-          subscription_status: "active",
-          auto_renew: true,
-          updated_at: nowIso,
-        } as any)
-        .eq("id", args.userId)
-      if (profileErr) {
-        console.error(`[iap/validate] grantPaidAccess profiles update error:`, profileErr.message)
-      } else {
-        console.log(`[iap/validate] grantPaidAccess profiles update OK userId=${args.userId}`)
-      }
-    } catch (e: any) {
-      // Non-fatal: bootstrap will sync on next call
-      console.error(`[iap/validate] grantPaidAccess profiles update exception:`, e?.message)
+  // ── STEP 1: Clear conflicting user_id on any non-canonical row ───────────
+  // The unique constraint access_grants_user_id_uq permits only one row per
+  // user_id.  Old runs of this endpoint accidentally placed user_id on the
+  // device-hash row, so the canonical account row could not be inserted.
+  // Free the slot before writing below.
+  {
+    const { data: conflicts, error: confErr } = await admin
+      .from("access_grants")
+      .select("id,device_hash,user_id,paid_until")
+      .eq("user_id", args.userId)
+      .neq("device_hash", accountKey)
+
+    if (confErr) {
+      console.error(`[iap/validate] grantPaidAccess conflict-scan error:`, confErr.message)
     }
-  } else {
-    console.log(`[iap/validate] grantPaidAccess skipping account grant + profiles (no userId)`)
+
+    const conflictCount = Array.isArray(conflicts) ? conflicts.length : 0
+    console.log(`[iap/validate] grantPaidAccess conflict rows: ${conflictCount}`)
+
+    for (const c of conflicts || []) {
+      const { error } = await admin
+        .from("access_grants")
+        .update({ user_id: null, updated_at: nowIso } as any)
+        .eq("id", c.id)
+      if (error) {
+        console.error(`[iap/validate] grantPaidAccess clear user_id id=${c.id} error:`, error.message)
+      } else {
+        console.log(`[iap/validate] grantPaidAccess cleared user_id from conflict row id=${c.id} device_hash=${String(c.device_hash).slice(0, 20)}...`)
+      }
+    }
+  }
+
+  // ── STEP 2: Write canonical account grant (single source of truth) ───────
+  console.log(`[iap/validate] grantPaidAccess writing canonical account grant: ${accountKey}`)
+  await extendGrant(admin, accountKey, args.userId, args.paidUntilIso, nowIso)
+
+  // ── STEP 3: Mirror paid_until on device-hash row for bootstrap parity ───
+  // Pass userId=null so extendGrant never places user_id on the device row,
+  // preserving the invariant that only the canonical row holds user_id.
+  console.log(`[iap/validate] grantPaidAccess mirroring paid_until onto device grant: ...${args.deviceHash.slice(-8)}`)
+  await extendGrant(admin, args.deviceHash, null, args.paidUntilIso, nowIso)
+
+  // ── STEP 4: Update profiles for web parity (matches WayForPay callback) ──
+  console.log(`[iap/validate] grantPaidAccess profiles update start userId=${args.userId}`)
+  try {
+    const { error: profileErr } = await admin
+      .from("profiles")
+      .update({
+        paid_until: args.paidUntilIso,
+        subscription_status: "active",
+        auto_renew: true,
+        updated_at: nowIso,
+      } as any)
+      .eq("id", args.userId)
+    if (profileErr) {
+      console.error(`[iap/validate] grantPaidAccess profiles update error:`, profileErr.message)
+    } else {
+      console.log(`[iap/validate] grantPaidAccess profiles update OK userId=${args.userId}`)
+    }
+  } catch (e: any) {
+    // Non-fatal: bootstrap will re-sync on next call
+    console.error(`[iap/validate] grantPaidAccess profiles update exception:`, e?.message)
   }
 }
 
