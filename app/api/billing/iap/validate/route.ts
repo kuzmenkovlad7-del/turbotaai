@@ -110,8 +110,11 @@ async function extendGrant(
   const existing = Array.isArray(rows) ? rows[0] : null
   const curMs = existing?.paid_until ? Date.parse(String(existing.paid_until)) : 0
   const newMs = Date.parse(paidUntilIso)
-  // Never regress: if current expiry is already later, keep it
-  const finalPaidUntil = (!Number.isNaN(curMs) && curMs > newMs) ? String(existing.paid_until) : paidUntilIso
+  // Never regress: if current expiry is already later, keep it.
+  // Guard: existing may be null when no row exists yet — use paidUntilIso in that case.
+  const finalPaidUntil = (existing && !Number.isNaN(curMs) && curMs > newMs)
+    ? String(existing.paid_until)
+    : paidUntilIso
 
   if (existing?.id) {
     const patch: Record<string, any> = {
