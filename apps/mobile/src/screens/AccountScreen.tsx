@@ -29,6 +29,7 @@ export default function AccountScreen() {
   const {
     purchasing,
     purchase,
+    syncExistingPurchases,
     manageSubscription,
     iapEnabled,
     error: iapError,
@@ -64,8 +65,11 @@ export default function AccountScreen() {
       if (now - lastFocusRefreshRef.current > 30_000) {
         lastFocusRefreshRef.current = now
         refreshAccess().catch(() => {})
+        // Silently recover any existing Google Play subscription on Android.
+        // No-op on iOS or when IAP is disabled.
+        syncExistingPurchases().catch(() => {})
       }
-    }, [refreshAccess]),
+    }, [refreshAccess, syncExistingPurchases]),
   )
 
   // Auto-dismiss the promo success message after 3 s so it never stays stale
@@ -408,7 +412,12 @@ export default function AccountScreen() {
                 setRefreshError(null)
                 setRefreshDone(false)
                 try {
-                  await refreshAccess()
+                  // Run bootstrap and Android purchase recovery concurrently.
+                  // syncExistingPurchases is a no-op on iOS / when IAP is disabled.
+                  await Promise.all([
+                    refreshAccess(),
+                    syncExistingPurchases().catch(() => {}),
+                  ])
                   setRefreshDone(true)
                   setTimeout(() => setRefreshDone(false), 2_500)
                 } catch {

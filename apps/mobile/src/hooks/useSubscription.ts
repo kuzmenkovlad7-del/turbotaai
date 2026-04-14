@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react"
 import { Platform, Alert, Linking } from "react-native"
-import { IAP_ENABLED, STORE_BUILD } from "@/constants/config"
+import { IAP_ENABLED, IAP_PRODUCTS, STORE_BUILD } from "@/constants/config"
 import { useAuth } from "@/hooks/useAuth"
 import { validateReceipt } from "@/services/api"
 
@@ -22,15 +22,66 @@ type SubState = {
  * 3. EAS build (react-native-iap requires native code, not Expo Go)
  * 4. Backend receipt validation at /api/billing/iap/validate
  *
- * Android note: Google Play Billing Library v5+ (required for targetSdk 35)
- * requires subscriptionOffers with an offerToken in requestSubscription.
- * The offerToken is fetched at purchase time via getSubscriptions() and is
- * NOT hardcoded — it changes per base plan / offer configuration in Play Console.
+ * Android notes:
+ * - Google Play Billing v5+ requires subscriptionOffers with offerToken.
+ * - If the user already owns the subscription (E_ALREADY_OWNED), the hook
+ *   silently retrieves the existing purchaseToken via getAvailablePurchases(),
+ *   re-validates it with the backend, and refreshes access — no visible error.
  */
 
 /* ── Lazy-import react-native-iap so the module is not required in Expo Go ─ */
 async function getRNIap() {
   return import("react-native-iap")
+}
+
+/**
+ * Silently validate an existing (already-owned) Android subscription.
+ *
+ * Called in two situations:
+ *   1. requestSubscription throws E_ALREADY_OWNED — the user purchased on
+ *      this account before but access was never granted (e.g. after a
+ *      reinstall or a failed previous validation).
+ *   2. syncExistingPurchases() — triggered on Account screen focus and
+ *      Refresh Access press, so recovery happens without user interaction.
+ *
+ * Returns true if validation succeeded and access was refreshed.
+ */
+async function validateExistingAndroidPurchase(
+  productId: string,
+  refreshAccess: () => Promise<void>,
+): Promise<boolean> {
+  try {
+    const RNIap = await getRNIap()
+    await RNIap.initConnection()
+
+    const purchases: any[] = await RNIap.getAvailablePurchases().catch(() => [])
+    const owned = Array.isArray(purchases)
+      ? purchases.find((p: any) => p.productId === productId)
+      : null
+
+    const purchaseToken: string =
+      owned?.purchaseToken || owned?.transactionReceipt || ""
+
+    if (!purchaseToken) return false
+
+    const validated = await validateReceipt({
+      platform: "android",
+      productId,
+      transactionReceipt: purchaseToken,
+      transactionId: owned?.transactionId || owned?.orderId || undefined,
+    })
+
+    if (!validated.ok) return false
+
+    // Acknowledge prevents Google from auto-refunding after 3 days
+    await RNIap.acknowledgePurchaseAndroid({ token: purchaseToken }).catch(() => {})
+    await refreshAccess()
+    return true
+  } catch {
+    return false
+  } finally {
+    getRNIap().then(r => r.endConnection()).catch(() => {})
+  }
 }
 
 export function useSubscription() {
@@ -119,10 +170,31 @@ export function useSubscription() {
       await refreshAccess()
       setState(s => ({ ...s, purchasing: false }))
     } catch (e: any) {
-      // User cancellation is not an error worth surfacing
+      const code: string = e?.code || ""
+      const msg: string = (e?.message || "").toLowerCase()
+
       const isCancelled =
-        e?.code === "E_USER_CANCELLED" ||
-        e?.message?.toLowerCase().includes("cancel")
+        code === "E_USER_CANCELLED" || msg.includes("cancel")
+
+      // ── Android: user already owns this subscription ───────────────────────
+      // Google Play throws E_ALREADY_OWNED when requestSubscription is called
+      // but a subscription already exists on this account (e.g. after reinstall
+      // or a previous purchase whose validation failed to reach the backend).
+      // Recovery: fetch the existing purchaseToken via getAvailablePurchases()
+      // and re-submit it to /api/billing/iap/validate silently.
+      const isAlreadyOwned =
+        code === "E_ALREADY_OWNED" ||
+        msg.includes("already owned") ||
+        msg.includes("itemalreadyowned")
+
+      if (isAlreadyOwned && Platform.OS === "android") {
+        const recovered = await validateExistingAndroidPurchase(productId, refreshAccess)
+        setState(s => ({ ...s, purchasing: false, error: recovered ? null : null }))
+        // Either way don't surface an error — if recovery failed the user can
+        // press Refresh Access; if it succeeded access is already updated.
+        return
+      }
+
       setState(s => ({
         ...s,
         purchasing: false,
@@ -131,6 +203,21 @@ export function useSubscription() {
     } finally {
       getRNIap().then(r => r.endConnection()).catch(() => {})
     }
+  }, [refreshAccess])
+
+  /**
+   * Silently check for existing Google Play purchases and validate them
+   * against the backend if found.
+   *
+   * Safe to call on every Account screen focus and Refresh Access press:
+   *   - returns immediately if IAP is disabled or platform is not Android
+   *   - does not show any UI or errors on failure
+   *   - idempotent: re-validating an already-validated token just re-confirms
+   *     the expiry date (backend never regresses paid_until)
+   */
+  const syncExistingPurchases = useCallback(async () => {
+    if (!IAP_ENABLED || Platform.OS !== "android") return
+    await validateExistingAndroidPurchase(IAP_PRODUCTS.MONTHLY, refreshAccess)
   }, [refreshAccess])
 
   const manageSubscription = useCallback(() => {
@@ -152,6 +239,7 @@ export function useSubscription() {
   return {
     ...state,
     purchase,
+    syncExistingPurchases,
     manageSubscription,
     iapEnabled: IAP_ENABLED,
     /**
