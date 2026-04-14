@@ -343,9 +343,10 @@ export function useSubscription() {
         Linking.openURL("itms-apps://apps.apple.com/account/subscriptions").catch(() => {})
       })
     } else {
-      // Opens Google Play subscription management
+      // Opens Google Play subscription management deep-linked to this app + sku.
+      // Falls back to the generic subscriptions page if the deep link fails.
       Linking.openURL(
-        "https://play.google.com/store/account/subscriptions?package=com.turbotaai.app",
+        `https://play.google.com/store/account/subscriptions?package=com.turbotaai.app&sku=${IAP_PRODUCTS.MONTHLY}`,
       ).catch(() => {
         Linking.openURL("https://play.google.com/store/account/subscriptions").catch(() => {})
       })
