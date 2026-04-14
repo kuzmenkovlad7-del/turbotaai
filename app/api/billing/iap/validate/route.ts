@@ -444,9 +444,37 @@ export async function POST(req: NextRequest) {
       if (!r.ok) err = r.error
       else { expiresMs = r.expiresMs; txId = txId || r.transactionId || null }
     } else {
-      // Android: transactionReceipt is the purchaseToken from Google Play
-      console.log(`[iap/validate] verifyGoogle start productId=${productId} tokenSuffix=...${String(transactionReceipt).slice(-12)}`)
-      const r = await verifyGoogle(String(productId), String(transactionReceipt))
+      // Android: transactionReceipt may arrive in two forms:
+      //
+      //   (a) Raw purchaseToken string — sent by syncExistingPurchases / recovery path,
+      //       which already extracts purchase.purchaseToken before calling this endpoint.
+      //
+      //   (b) JSON-serialised purchase object — sent by the main purchase() flow, where
+      //       react-native-iap sets purchase.transactionReceipt = JSON.stringify(purchase).
+      //       The mobile code picks transactionReceipt before purchaseToken as the field
+      //       name, so the full JSON blob ends up in this field.
+      //
+      // In case (b) the Google API receives the full JSON string as the token path
+      // segment, which returns 400/404 immediately.  We unwrap it here so the backend
+      // always forwards only the raw purchaseToken regardless of which mobile path sent it.
+      let rawToken = String(transactionReceipt)
+      let receiptParseNote = "raw_token"
+      try {
+        const parsed = JSON.parse(rawToken)
+        if (parsed && typeof parsed === "object" && typeof parsed.purchaseToken === "string" && parsed.purchaseToken) {
+          rawToken = parsed.purchaseToken
+          receiptParseNote = "extracted_from_json"
+          // Also recover orderId / transactionId from the serialised receipt if the
+          // caller did not supply a separate transactionId field.
+          if (!txId) {
+            txId = (parsed.orderId || parsed.transactionId) ?? null
+          }
+        }
+      } catch {
+        // Not JSON — already a raw token, use as-is
+      }
+      console.log(`[iap/validate] android receiptParse=${receiptParseNote} tokenSuffix=...${rawToken.slice(-12)}`)
+      const r = await verifyGoogle(String(productId), rawToken)
       console.log(`[iap/validate] verifyGoogle result ok=${r.ok} ${r.ok ? `expiresMs=${r.expiresMs}` : `error=${r.error}`}`)
       if (!r.ok) err = r.error
       else { expiresMs = r.expiresMs; txId = txId || r.transactionId || null }
