@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
+  Platform,
 } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 import ScreenWrapper from "@/components/ScreenWrapper"
@@ -32,6 +33,7 @@ export default function AccountScreen() {
     syncExistingPurchases,
     manageSubscription,
     iapEnabled,
+    syncLog,
     error: iapError,
   } = useSubscription()
 
@@ -468,6 +470,34 @@ export default function AccountScreen() {
               </Text>
             )}
           </View>
+
+          {/* IAP sync diagnostics — always visible on Android for on-device debugging.
+              Shows the result of the last syncExistingPurchases() run so the purchase
+              recovery path can be diagnosed without adb/logcat.
+              Remove this block once recovery is confirmed working in production. */}
+          {Platform.OS === "android" && syncLog !== null && (
+            <View style={styles.debugBox}>
+              <Text style={styles.debugTitle}>
+                {`IAP Sync  ${syncLog.ts.slice(11, 19)} UTC`}
+              </Text>
+              <Text style={styles.debugRow} selectable>
+                {`initOk:    ${syncLog.initOk}\n`}
+                {`purchases: ${syncLog.purchasesCount}\n`}
+                {syncLog.purchasesInfo.map((info, i) => `[${i}] ${info}\n`).join("")}
+                {`matchedBy: ${syncLog.matchedBy ?? "— (no match)"}\n`}
+                {`token:     ${syncLog.tokenPresent ? "present" : "MISSING"}\n`}
+                {`validate:  ${
+                  !syncLog.validateCalled
+                    ? "NOT called"
+                    : syncLog.validateStatus === "ok"
+                      ? "OK"
+                      : `FAIL: ${syncLog.validateError}`
+                }\n`}
+                {`refreshed: ${syncLog.refreshed}\n`}
+                {syncLog.error ? `error:     ${syncLog.error}` : ""}
+              </Text>
+            </View>
+          )}
 
           {/* EXPO_PUBLIC_DEBUG diagnostics — only visible when DEBUG_ENABLED=true */}
           {DEBUG_ENABLED && (
