@@ -79,7 +79,7 @@ function TypingIndicator() {
 export default function ChatScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
-  const { user, accessInfo, decrementTrialLeft, syncTrialLeft, refreshAccess } = useAuth()
+  const { user, accessInfo, decrementTrialLeft, syncTrialLeft, refreshAccess, markPaymentRequired } = useAuth()
   const { t, locale } = useT()
   const accessState = getAccessState(accessInfo)
   const [messages, setMessages] = useState<Message[]>([])
@@ -163,7 +163,14 @@ export default function ChatScreen() {
 
       // Payment required — trial exhausted server-side
       if (data.paymentRequired) {
-        // Sync access state so all screens immediately show the paywall
+        // Lock the UI on the SAME render cycle — don't wait for the async
+        // refreshAccess() to complete. Without this, the paywall error bubble
+        // appears in the chat while the footer still shows a stale trial count
+        // (e.g. "5 questions remaining"), because refreshAccess() is async and
+        // the local accessInfo was never decremented in the paymentRequired path.
+        // markPaymentRequired() works for any access type (trial/paid/promo),
+        // covering mid-session expiry of any plan.
+        markPaymentRequired()
         refreshAccess().catch(() => {})
         setMessages((prev) => [
           ...prev,
@@ -242,7 +249,7 @@ export default function ChatScreen() {
       sendingRef.current = false
       setSending(false)
     }
-  }, [input, user, t, locale, decrementTrialLeft, syncTrialLeft, refreshAccess])
+  }, [input, user, t, locale, decrementTrialLeft, syncTrialLeft, refreshAccess, markPaymentRequired])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => {

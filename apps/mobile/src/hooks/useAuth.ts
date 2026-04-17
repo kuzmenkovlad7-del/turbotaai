@@ -72,6 +72,15 @@ export type AuthContextValue = AuthState & {
    * for the background bootstrap round-trip to complete.
    */
   setAccessFromPromo: (promoUntil: string) => void
+  /**
+   * Immediately lock access when the server returns paymentRequired.
+   *
+   * Unlike syncTrialLeft(), this works regardless of the current access type
+   * (trial, paid, promo) so it handles mid-session expiry of any plan.
+   * Call this synchronously before refreshAccess() so the UI (paywall bar,
+   * trial chip) updates on the very next render — not after the network round-trip.
+   */
+  markPaymentRequired: () => void
 }
 
 const EMPTY_ACCESS: AccessInfo = {
@@ -104,6 +113,7 @@ export const AuthContext = createContext<AuthContextValue>({
   decrementTrialLeft: () => {},
   syncTrialLeft: () => {},
   setAccessFromPromo: () => {},
+  markPaymentRequired: () => {},
 })
 
 /**
@@ -413,6 +423,21 @@ export function useAuthProvider(): AuthContextValue {
     })
   }, [])
 
+  const markPaymentRequired = useCallback(() => {
+    setState((s) => {
+      if (!s.accessInfo) return s
+      return {
+        ...s,
+        accessInfo: {
+          ...s.accessInfo,
+          access: "none" as const,
+          hasAccess: false,
+          trialLeft: 0,
+        },
+      }
+    })
+  }, [])
+
   return {
     ...state,
     login,
@@ -423,6 +448,7 @@ export function useAuthProvider(): AuthContextValue {
     decrementTrialLeft,
     syncTrialLeft,
     setAccessFromPromo,
+    markPaymentRequired,
   }
 }
 
