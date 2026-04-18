@@ -282,7 +282,16 @@ export default function ChatScreen() {
     <View style={[styles.root, { paddingBottom: insets.bottom }]}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        // iOS: "padding" pushes the input up by the keyboard height, offset by the
+        // header (~90 px) so the bar lands directly above the keyboard.
+        //
+        // Android: behavior MUST be undefined (no-op). The manifest already sets
+        // windowSoftInputMode="adjustResize", which makes Android resize the window
+        // automatically when the keyboard appears. Adding behavior="height" here
+        // causes a double-shrink — Android shrinks the window AND KAV shrinks its
+        // own height by the same keyboard height — leaving zero visible space for
+        // the FlatList and input bar on most devices (confirmed on API 33/34).
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
         <FlatList
