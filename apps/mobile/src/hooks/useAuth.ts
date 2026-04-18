@@ -94,6 +94,22 @@ const EMPTY_ACCESS: AccessInfo = {
   autoRenew: false,
 }
 
+// Safe default when no prior state exists and the bootstrap network call fails.
+// Matches the web product rule: every new device gets TRIAL_QUESTIONS_LIMIT free
+// questions before being asked to subscribe. The server is the enforcement layer —
+// if a user's trial is actually exhausted, the chat endpoint will return
+// paymentRequired and markPaymentRequired() will lock the UI immediately.
+const TRIAL_ACCESS: AccessInfo = {
+  access: "trial",
+  hasAccess: true,
+  unlimited: false,
+  trialLeft: 5, // matches backend TRIAL_QUESTIONS_LIMIT default
+  paidUntil: null,
+  promoUntil: null,
+  subscriptionStatus: null,
+  autoRenew: false,
+}
+
 const NOOP_RESULT: AuthResult = { ok: false, error: "AuthContext not initialised" }
 const NOOP_ASYNC = async () => {}
 
@@ -168,6 +184,26 @@ export function useAuthProvider(): AuthContextValue {
       const { data, httpStatus } = await bootstrap()
       if (!mounted.current) return
 
+      // 4xx / 5xx from the backend (e.g. 400 "missing_device_hash" when
+      // Android Keystore hasn't flushed the device hash to SecureStore yet,
+      // or a transient 500). Treat as a soft failure:
+      //   • don't throw  — callers like login() / register() must still succeed
+      //   • don't process the error JSON as access="none" — that would show
+      //     "Нет активного плана" for a brand-new user with no prior state
+      //   • set bootstrapFailed=true so AppNavigator shows retry for guests
+      //   • use TRIAL_ACCESS when there is no cached state — matches the web
+      //     product rule that every new device starts with 5 free questions
+      if (httpStatus >= 400) {
+        setState(s => ({
+          ...s,
+          ready: true,
+          bootstrapFailed: true,
+          error: (data as any)?.error || `bootstrap HTTP ${httpStatus}`,
+          accessInfo: s.accessInfo ?? TRIAL_ACCESS,
+        }))
+        return
+      }
+
       const user = data.isLoggedIn && data.userId && data.email
         ? { id: data.userId, email: data.email }
         : null
@@ -230,7 +266,11 @@ export function useAuthProvider(): AuthContextValue {
         ready: true,
         error: e?.message,
         bootstrapFailed: true,
-        accessInfo: s.accessInfo ?? EMPTY_ACCESS,
+        // Use TRIAL_ACCESS (not EMPTY_ACCESS) when there is no prior cached
+        // state. A network failure on first launch must not permanently lock
+        // the user out — the server enforces quotas when they actually send a
+        // message, so optimistic trial is safe here.
+        accessInfo: s.accessInfo ?? TRIAL_ACCESS,
       }))
       bootstrapListenersRef.current.splice(0).forEach(({ reject }) => reject(e))
       throw e
@@ -273,7 +313,7 @@ export function useAuthProvider(): AuthContextValue {
             ready: true,
             error: e?.message,
             bootstrapFailed: true,
-            accessInfo: s.accessInfo ?? EMPTY_ACCESS,
+            accessInfo: s.accessInfo ?? TRIAL_ACCESS,
           }))
         }
       }
