@@ -2,7 +2,6 @@
 
 import { useMemo } from "react"
 import { useLanguage } from "@/lib/i18n/language-context"
-import type { Metadata } from "next"
 
 const copy = {
   uk: {
@@ -102,11 +101,11 @@ const copy = {
     cancelSteps: [
       "Open the TurbotaAI app.",
       "Go to Account → Subscription.",
-      "Tap "Cancel subscription" and confirm.",
+      "Tap 'Cancel subscription' and confirm.",
     ],
     deleteAccountTitle: "How to delete your account",
     deleteAccountSteps: [
-      "Send a request to support@turbotaai.com with the subject "Account Deletion".",
+      "Send a request to support@turbotaai.com with the subject 'Account Deletion'.",
       "Include the email address associated with your account.",
       "We will confirm your request and process it within 30 days.",
     ],
