@@ -72,6 +72,15 @@ export type AuthContextValue = AuthState & {
    * for the background bootstrap round-trip to complete.
    */
   setAccessFromPromo: (promoUntil: string) => void
+  /**
+   * Immediately lock access when the server returns paymentRequired.
+   *
+   * Unlike syncTrialLeft(), this works regardless of the current access type
+   * (trial, paid, promo) so it handles mid-session expiry of any plan.
+   * Call this synchronously before refreshAccess() so the UI (paywall bar,
+   * trial chip) updates on the very next render — not after the network round-trip.
+   */
+  markPaymentRequired: () => void
 }
 
 const EMPTY_ACCESS: AccessInfo = {
@@ -79,6 +88,22 @@ const EMPTY_ACCESS: AccessInfo = {
   hasAccess: false,
   unlimited: false,
   trialLeft: 0,
+  paidUntil: null,
+  promoUntil: null,
+  subscriptionStatus: null,
+  autoRenew: false,
+}
+
+// Safe default when no prior state exists and the bootstrap network call fails.
+// Matches the web product rule: every new device gets TRIAL_QUESTIONS_LIMIT free
+// questions before being asked to subscribe. The server is the enforcement layer —
+// if a user's trial is actually exhausted, the chat endpoint will return
+// paymentRequired and markPaymentRequired() will lock the UI immediately.
+const TRIAL_ACCESS: AccessInfo = {
+  access: "trial",
+  hasAccess: true,
+  unlimited: false,
+  trialLeft: 5, // matches backend TRIAL_QUESTIONS_LIMIT default
   paidUntil: null,
   promoUntil: null,
   subscriptionStatus: null,
@@ -104,6 +129,7 @@ export const AuthContext = createContext<AuthContextValue>({
   decrementTrialLeft: () => {},
   syncTrialLeft: () => {},
   setAccessFromPromo: () => {},
+  markPaymentRequired: () => {},
 })
 
 /**
@@ -135,6 +161,13 @@ export function useAuthProvider(): AuthContextValue {
    * (e.g. the "Refresh Access" button) waits for genuinely fresh data.
    */
   const bootstrapListenersRef = useRef<Array<{ resolve: () => void; reject: (err: unknown) => void }>>([])
+  /**
+   * Timestamp (Date.now()) of the last markPaymentRequired() call.
+   * Used by runBootstrap() to detect stale server responses: if a bootstrap
+   * was started BEFORE the payment-required event, its data is pre-expiry and
+   * must not override the locally-locked state.
+   */
+  const paymentRequiredTimeRef = useRef<number>(0)
 
   useEffect(() => {
     mounted.current = true
@@ -153,10 +186,35 @@ export function useAuthProvider(): AuthContextValue {
     }
     bootstrapping.current = true
     pendingRefresh.current = false
+    // Capture timestamp BEFORE the fetch so we can compare it with
+    // paymentRequiredTimeRef in the setState callback below.
+    const bootstrapStartedAt = Date.now()
+    console.log("[useAuth] bootstrap start", bootstrapStartedAt)
     try {
       await ensureDeviceHash()
       const { data, httpStatus } = await bootstrap()
       if (!mounted.current) return
+      console.log("[useAuth] bootstrap response", { httpStatus, access: (data as any)?.access, trialLeft: (data as any)?.trial_questions_left })
+
+      // 4xx / 5xx from the backend (e.g. 400 "missing_device_hash" when
+      // Android Keystore hasn't flushed the device hash to SecureStore yet,
+      // or a transient 500). Treat as a soft failure:
+      //   • don't throw  — callers like login() / register() must still succeed
+      //   • don't process the error JSON as access="none" — that would show
+      //     "Нет активного плана" for a brand-new user with no prior state
+      //   • set bootstrapFailed=true so AppNavigator shows retry for guests
+      //   • use TRIAL_ACCESS when there is no cached state — matches the web
+      //     product rule that every new device starts with 5 free questions
+      if (httpStatus >= 400) {
+        setState(s => ({
+          ...s,
+          ready: true,
+          bootstrapFailed: true,
+          error: (data as any)?.error || `bootstrap HTTP ${httpStatus}`,
+          accessInfo: s.accessInfo ?? TRIAL_ACCESS,
+        }))
+        return
+      }
 
       const user = data.isLoggedIn && data.userId && data.email
         ? { id: data.userId, email: data.email }
@@ -193,12 +251,28 @@ export function useAuthProvider(): AuthContextValue {
         error: data.error,
       }
 
-      // Server truth wins — with one guard: don't allow bootstrap to raise
-      // trial_questions_left when both prev and next states are "trial".
+      // Server truth wins — with two guards below.
       setState(s => {
         const prevAccess = s.accessInfo?.access
         const prevTrialLeft = s.accessInfo?.trialLeft ?? 0
         const serverAccess = data.access ?? "none"
+
+        // Guard 1 — stale bootstrap: markPaymentRequired() was called AFTER
+        // this bootstrap started, meaning the server response is from before
+        // the last question was consumed. The locked local state is correct;
+        // silently absorb ready/lastBootstrap but keep accessInfo as-is.
+        const localIsLocked = prevAccess === "none" && prevTrialLeft === 0
+        const serverSaysTrial = serverAccess === "trial"
+        if (localIsLocked && serverSaysTrial && bootstrapStartedAt < paymentRequiredTimeRef.current) {
+          console.log(
+            "[useAuth] stale bootstrap dropped — locked at", paymentRequiredTimeRef.current,
+            "bootstrap started at", bootstrapStartedAt
+          )
+          return { ...s, ready: true, bootstrapFailed: false, lastBootstrap }
+        }
+
+        // Guard 2 — don't allow bootstrap to raise trial_questions_left when
+        // both prev and next states are "trial" (server may lag a decrement).
         const guardedTrialLeft =
           prevAccess === "trial" && serverAccess === "trial" && prevTrialLeft > 0
             ? Math.min(prevTrialLeft, serverTrialLeft)
@@ -220,7 +294,11 @@ export function useAuthProvider(): AuthContextValue {
         ready: true,
         error: e?.message,
         bootstrapFailed: true,
-        accessInfo: s.accessInfo ?? EMPTY_ACCESS,
+        // Use TRIAL_ACCESS (not EMPTY_ACCESS) when there is no prior cached
+        // state. A network failure on first launch must not permanently lock
+        // the user out — the server enforces quotas when they actually send a
+        // message, so optimistic trial is safe here.
+        accessInfo: s.accessInfo ?? TRIAL_ACCESS,
       }))
       bootstrapListenersRef.current.splice(0).forEach(({ reject }) => reject(e))
       throw e
@@ -263,7 +341,7 @@ export function useAuthProvider(): AuthContextValue {
             ready: true,
             error: e?.message,
             bootstrapFailed: true,
-            accessInfo: s.accessInfo ?? EMPTY_ACCESS,
+            accessInfo: s.accessInfo ?? TRIAL_ACCESS,
           }))
         }
       }
@@ -382,6 +460,7 @@ export function useAuthProvider(): AuthContextValue {
   }, [])
 
   const syncTrialLeft = useCallback((n: number) => {
+    console.log("[useAuth] syncTrialLeft", n)
     setState((s) => {
       if (!s.accessInfo || s.accessInfo.access !== "trial") return s
       const newLeft = Math.max(0, n)
@@ -413,6 +492,25 @@ export function useAuthProvider(): AuthContextValue {
     })
   }, [])
 
+  const markPaymentRequired = useCallback(() => {
+    // Record timestamp BEFORE setState so the stale-bootstrap guard in
+    // runBootstrap() can compare it with the bootstrap's own start time.
+    paymentRequiredTimeRef.current = Date.now()
+    console.log("[useAuth] markPaymentRequired at", paymentRequiredTimeRef.current)
+    setState((s) => {
+      if (!s.accessInfo) return s
+      return {
+        ...s,
+        accessInfo: {
+          ...s.accessInfo,
+          access: "none" as const,
+          hasAccess: false,
+          trialLeft: 0,
+        },
+      }
+    })
+  }, [])
+
   return {
     ...state,
     login,
@@ -423,6 +521,7 @@ export function useAuthProvider(): AuthContextValue {
     decrementTrialLeft,
     syncTrialLeft,
     setAccessFromPromo,
+    markPaymentRequired,
   }
 }
 

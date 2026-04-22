@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
+  Platform,
 } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 import ScreenWrapper from "@/components/ScreenWrapper"
@@ -29,8 +30,10 @@ export default function AccountScreen() {
   const {
     purchasing,
     purchase,
+    syncExistingPurchases,
     manageSubscription,
     iapEnabled,
+    syncLog,
     error: iapError,
   } = useSubscription()
 
@@ -64,8 +67,11 @@ export default function AccountScreen() {
       if (now - lastFocusRefreshRef.current > 30_000) {
         lastFocusRefreshRef.current = now
         refreshAccess().catch(() => {})
+        // Silently recover any existing Google Play subscription on Android.
+        // No-op on iOS or when IAP is disabled.
+        syncExistingPurchases().catch(() => {})
       }
-    }, [refreshAccess]),
+    }, [refreshAccess, syncExistingPurchases]),
   )
 
   // Auto-dismiss the promo success message after 3 s so it never stays stale
@@ -232,6 +238,19 @@ export default function AccountScreen() {
     }
   }
 
+  // Shows date + time so short-lived test subscriptions don't look active longer than they are.
+  const fmtDateTime = (iso: string | null) => {
+    if (!iso) return null
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        year: "numeric", month: "short", day: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      })
+    } catch {
+      return iso
+    }
+  }
+
   const isPaid = accessInfo?.access === "paid"
   const isPromo = accessInfo?.access === "promo"
   const isTrial = accessInfo?.access === "trial"
@@ -290,7 +309,7 @@ export default function AccountScreen() {
               <Text style={styles.activeLabel}>{t.accountPremium}</Text>
               {accessInfo.paidUntil && (
                 <Text style={styles.activeDate}>
-                  {t.accountUntil(fmtDate(accessInfo.paidUntil)!)}
+                  {t.accountUntil(fmtDateTime(accessInfo.paidUntil)!)}
                 </Text>
               )}
               <View style={styles.detailRow}>
@@ -340,8 +359,11 @@ export default function AccountScreen() {
             </View>
           )}
 
-          {/* Auto-renew management for paid users */}
-          {isPaid && (
+          {/* Auto-renew management — iOS only.
+              On Android, subscriptions are managed entirely through Google Play;
+              the cancelAutoRenew API requires a web session and throws "Auth
+              session missing" on mobile. Redirect users to Google Play instead. */}
+          {isPaid && Platform.OS !== "android" && (
             <View style={styles.actionSection}>
               {accessInfo.autoRenew ? (
                 <Button
@@ -367,13 +389,13 @@ export default function AccountScreen() {
           )}
 
           {/* Manage Subscription — opens App Store / Play Store subscription management.
-              Only relevant for users with a native IAP subscription; web-only subscribers
-              have no entry in the platform stores to manage. */}
+              On Android this is the primary way to cancel or change the subscription.
+              Styled as "outline" to match "Refresh Access" visual weight. */}
           {isPaid && iapEnabled && (
             <View style={styles.actionSection}>
               <Button
                 title={t.accountManageSubscription}
-                variant="ghost"
+                variant="outline"
                 onPress={manageSubscription}
               />
             </View>
@@ -408,7 +430,12 @@ export default function AccountScreen() {
                 setRefreshError(null)
                 setRefreshDone(false)
                 try {
-                  await refreshAccess()
+                  // Run bootstrap and Android purchase recovery concurrently.
+                  // syncExistingPurchases is a no-op on iOS / when IAP is disabled.
+                  await Promise.all([
+                    refreshAccess(),
+                    syncExistingPurchases().catch(() => {}),
+                  ])
                   setRefreshDone(true)
                   setTimeout(() => setRefreshDone(false), 2_500)
                 } catch {
@@ -430,37 +457,41 @@ export default function AccountScreen() {
             )}
           </View>
 
-          {/* Promo code input */}
-          <View style={styles.promoSection}>
-            <Text style={styles.promoSectionTitle}>{t.accountApplyPromo}</Text>
-            <View style={styles.promoRow}>
-              <TextInput
-                style={styles.promoInput}
-                value={promoCode}
-                onChangeText={setPromoCode}
-                placeholder={t.accountPromoPlaceholder}
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                editable={!promoLoading}
-              />
-              <Button
-                title={t.accountPromoApply}
-                onPress={handleApplyPromo}
-                loading={promoLoading}
-                disabled={!promoCode.trim()}
-                style={styles.promoApplyBtn}
-                textStyle={{ fontSize: fontSize.sm }}
-              />
+          {/* Promo code input — hidden when user already has an active paid subscription */}
+          {!isPaid && (
+            <View style={styles.promoSection}>
+              <Text style={styles.promoSectionTitle}>{t.accountApplyPromo}</Text>
+              <View style={styles.promoRow}>
+                <TextInput
+                  style={styles.promoInput}
+                  value={promoCode}
+                  onChangeText={setPromoCode}
+                  placeholder={t.accountPromoPlaceholder}
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  editable={!promoLoading}
+                />
+                <Button
+                  title={t.accountPromoApply}
+                  onPress={handleApplyPromo}
+                  loading={promoLoading}
+                  disabled={!promoCode.trim()}
+                  style={styles.promoApplyBtn}
+                  textStyle={{ fontSize: fontSize.sm }}
+                />
+              </View>
+              {promoMsg && (
+                <Text style={[styles.promoFeedback, { color: promoMsg.ok ? colors.success : colors.error }]}>
+                  {promoMsg.text}
+                </Text>
+              )}
             </View>
-            {promoMsg && (
-              <Text style={[styles.promoFeedback, { color: promoMsg.ok ? colors.success : colors.error }]}>
-                {promoMsg.text}
-              </Text>
-            )}
-          </View>
+          )}
 
-          {/* EXPO_PUBLIC_DEBUG diagnostics — only visible when DEBUG_ENABLED=true */}
+          {/* EXPO_PUBLIC_DEBUG diagnostics — only visible when DEBUG_ENABLED=true.
+              DEBUG_ENABLED = __DEV__ && EXPO_PUBLIC_DEBUG=true, so this is never
+              shown in production release builds. */}
           {DEBUG_ENABLED && (
             <View style={styles.debugBox}>
               <Text style={styles.debugTitle}>🛠 Debug · Access state</Text>
@@ -479,6 +510,27 @@ export default function AccountScreen() {
                     {`ok:         ${lastPromoRedeem.ok}\n`}
                     {lastPromoRedeem.error ? `error:      ${lastPromoRedeem.error}\n` : ""}
                     {`fetchedAt:  ${lastPromoRedeem.fetchedAt}`}
+                  </Text>
+                </>
+              )}
+              {Platform.OS === "android" && syncLog !== null && (
+                <>
+                  <Text style={[styles.debugTitle, { marginTop: 8 }]}>{`IAP Sync ${syncLog.ts.slice(11, 19)} UTC`}</Text>
+                  <Text style={styles.debugRow} selectable>
+                    {`initOk:    ${syncLog.initOk}\n`}
+                    {`purchases: ${syncLog.purchasesCount}\n`}
+                    {syncLog.purchasesInfo.map((info, i) => `[${i}] ${info}\n`).join("")}
+                    {`matchedBy: ${syncLog.matchedBy ?? "— (no match)"}\n`}
+                    {`token:     ${syncLog.tokenPresent ? "present" : "MISSING"}\n`}
+                    {`validate:  ${
+                      !syncLog.validateCalled
+                        ? "NOT called"
+                        : syncLog.validateStatus === "ok"
+                          ? "OK"
+                          : `FAIL: ${syncLog.validateError}`
+                    }\n`}
+                    {`refreshed: ${syncLog.refreshed}\n`}
+                    {syncLog.error ? `error:     ${syncLog.error}` : ""}
                   </Text>
                 </>
               )}

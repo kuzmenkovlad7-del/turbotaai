@@ -79,7 +79,7 @@ function TypingIndicator() {
 export default function ChatScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
-  const { user, accessInfo, decrementTrialLeft, syncTrialLeft, refreshAccess } = useAuth()
+  const { user, accessInfo, decrementTrialLeft, syncTrialLeft, refreshAccess, markPaymentRequired } = useAuth()
   const { t, locale } = useT()
   const accessState = getAccessState(accessInfo)
   const [messages, setMessages] = useState<Message[]>([])
@@ -163,7 +163,14 @@ export default function ChatScreen() {
 
       // Payment required — trial exhausted server-side
       if (data.paymentRequired) {
-        // Sync access state so all screens immediately show the paywall
+        // Lock the UI on the SAME render cycle — don't wait for the async
+        // refreshAccess() to complete. Without this, the paywall error bubble
+        // appears in the chat while the footer still shows a stale trial count
+        // (e.g. "5 questions remaining"), because refreshAccess() is async and
+        // the local accessInfo was never decremented in the paymentRequired path.
+        // markPaymentRequired() works for any access type (trial/paid/promo),
+        // covering mid-session expiry of any plan.
+        markPaymentRequired()
         refreshAccess().catch(() => {})
         setMessages((prev) => [
           ...prev,
@@ -242,7 +249,7 @@ export default function ChatScreen() {
       sendingRef.current = false
       setSending(false)
     }
-  }, [input, user, t, locale, decrementTrialLeft, syncTrialLeft, refreshAccess])
+  }, [input, user, t, locale, decrementTrialLeft, syncTrialLeft, refreshAccess, markPaymentRequired])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => {
@@ -275,6 +282,15 @@ export default function ChatScreen() {
     <View style={[styles.root, { paddingBottom: insets.bottom }]}>
       <KeyboardAvoidingView
         style={styles.flex}
+        // iOS: "padding" pushes the input up by the keyboard height, offset by the
+        // header (~90 px) so the bar lands directly above the keyboard.
+        //
+        // Android: behavior MUST be undefined (no-op). The manifest already sets
+        // windowSoftInputMode="adjustResize", which makes Android resize the window
+        // automatically when the keyboard appears. Adding behavior="height" here
+        // causes a double-shrink — Android shrinks the window AND KAV shrinks its
+        // own height by the same keyboard height — leaving zero visible space for
+        // the FlatList and input bar on most devices (confirmed on API 33/34).
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
@@ -296,6 +312,11 @@ export default function ChatScreen() {
               contentOffset.y + layoutMeasurement.height >= contentSize.height - 80
           }}
           scrollEventThrottle={100}
+          // Android: without "handled", tapping Send dismisses keyboard before the tap
+          // registers, causing the first tap to do nothing. "on-drag" lets users scroll
+          // without explicitly closing the keyboard first.
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyIcon}>{"\uD83D\uDCAC"}</Text>
@@ -346,6 +367,14 @@ export default function ChatScreen() {
                 returnKeyType="send"
                 blurOnSubmit={false}
                 onSubmitEditing={sendMessage}
+                // Android: cursor/selection colour; without this many custom-skin
+                // devices (Samsung, Xiaomi, Redmi) show an invisible white cursor.
+                selectionColor={colors.primary}
+                // Android: remove the default bottom underline that some OEM skins render.
+                underlineColorAndroid="transparent"
+                // Android: "simple" avoids the complex Knuth-Plass line-breaking that
+                // can cause visible text reflows while typing on older Android versions.
+                textBreakStrategy="simple"
               />
               <TouchableOpacity
                 style={[styles.sendBtn, (!input.trim() || sending) && styles.sendBtnDisabled]}
@@ -374,6 +403,10 @@ const styles = StyleSheet.create({
   listEmpty: { flexGrow: 1 },
   bubble: {
     maxWidth: "82%",
+    // flexShrink prevents the bubble from overflowing its parent on devices with
+    // large system font scaling. Without it a very long word can stretch the bubble
+    // past the 82% max on some Android OEM builds.
+    flexShrink: 1,
     borderRadius: radii.lg,
     padding: spacing.md,
     marginBottom: spacing.sm,
@@ -402,8 +435,21 @@ const styles = StyleSheet.create({
     color: colors.error,
     marginBottom: 4,
   },
-  userText: { color: "#fff", fontSize: fontSize.md, lineHeight: 22 },
-  aiText: { color: colors.text, fontSize: fontSize.md, lineHeight: 22 },
+  userText: {
+    color: "#fff",
+    fontSize: fontSize.md,
+    lineHeight: 22,
+    // Android adds extra top/bottom space around text by default.
+    // Setting false gives the same tight layout as iOS and prevents
+    // clipped descenders on Samsung/Xiaomi with large font scaling.
+    includeFontPadding: false,
+  },
+  aiText: {
+    color: colors.text,
+    fontSize: fontSize.md,
+    lineHeight: 22,
+    includeFontPadding: false,
+  },
   typingDots: {
     color: colors.textMuted,
     fontSize: fontSize.lg,
@@ -452,8 +498,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: Platform.OS === "ios" ? 12 : 8,
     fontSize: fontSize.md,
+    // Explicit text colour so OEM dark-mode overrides (Samsung One UI, MIUI)
+    // cannot make the typed text invisible against the surfaceAlt background.
     color: colors.text,
     maxHeight: 100,
+    // Android: multiline TextInput defaults to "center" vertical alignment,
+    // which looks wrong on one-line inputs and breaks at line 2+.
+    textAlignVertical: "top",
+    includeFontPadding: false,
   },
   sendBtn: {
     backgroundColor: colors.primary,
