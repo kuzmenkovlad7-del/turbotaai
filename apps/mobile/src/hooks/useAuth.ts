@@ -161,6 +161,13 @@ export function useAuthProvider(): AuthContextValue {
    * (e.g. the "Refresh Access" button) waits for genuinely fresh data.
    */
   const bootstrapListenersRef = useRef<Array<{ resolve: () => void; reject: (err: unknown) => void }>>([])
+  /**
+   * Timestamp (Date.now()) of the last markPaymentRequired() call.
+   * Used by runBootstrap() to detect stale server responses: if a bootstrap
+   * was started BEFORE the payment-required event, its data is pre-expiry and
+   * must not override the locally-locked state.
+   */
+  const paymentRequiredTimeRef = useRef<number>(0)
 
   useEffect(() => {
     mounted.current = true
@@ -179,10 +186,15 @@ export function useAuthProvider(): AuthContextValue {
     }
     bootstrapping.current = true
     pendingRefresh.current = false
+    // Capture timestamp BEFORE the fetch so we can compare it with
+    // paymentRequiredTimeRef in the setState callback below.
+    const bootstrapStartedAt = Date.now()
+    console.log("[useAuth] bootstrap start", bootstrapStartedAt)
     try {
       await ensureDeviceHash()
       const { data, httpStatus } = await bootstrap()
       if (!mounted.current) return
+      console.log("[useAuth] bootstrap response", { httpStatus, access: (data as any)?.access, trialLeft: (data as any)?.trial_questions_left })
 
       // 4xx / 5xx from the backend (e.g. 400 "missing_device_hash" when
       // Android Keystore hasn't flushed the device hash to SecureStore yet,
@@ -239,12 +251,28 @@ export function useAuthProvider(): AuthContextValue {
         error: data.error,
       }
 
-      // Server truth wins — with one guard: don't allow bootstrap to raise
-      // trial_questions_left when both prev and next states are "trial".
+      // Server truth wins — with two guards below.
       setState(s => {
         const prevAccess = s.accessInfo?.access
         const prevTrialLeft = s.accessInfo?.trialLeft ?? 0
         const serverAccess = data.access ?? "none"
+
+        // Guard 1 — stale bootstrap: markPaymentRequired() was called AFTER
+        // this bootstrap started, meaning the server response is from before
+        // the last question was consumed. The locked local state is correct;
+        // silently absorb ready/lastBootstrap but keep accessInfo as-is.
+        const localIsLocked = prevAccess === "none" && prevTrialLeft === 0
+        const serverSaysTrial = serverAccess === "trial"
+        if (localIsLocked && serverSaysTrial && bootstrapStartedAt < paymentRequiredTimeRef.current) {
+          console.log(
+            "[useAuth] stale bootstrap dropped — locked at", paymentRequiredTimeRef.current,
+            "bootstrap started at", bootstrapStartedAt
+          )
+          return { ...s, ready: true, bootstrapFailed: false, lastBootstrap }
+        }
+
+        // Guard 2 — don't allow bootstrap to raise trial_questions_left when
+        // both prev and next states are "trial" (server may lag a decrement).
         const guardedTrialLeft =
           prevAccess === "trial" && serverAccess === "trial" && prevTrialLeft > 0
             ? Math.min(prevTrialLeft, serverTrialLeft)
@@ -432,6 +460,7 @@ export function useAuthProvider(): AuthContextValue {
   }, [])
 
   const syncTrialLeft = useCallback((n: number) => {
+    console.log("[useAuth] syncTrialLeft", n)
     setState((s) => {
       if (!s.accessInfo || s.accessInfo.access !== "trial") return s
       const newLeft = Math.max(0, n)
@@ -464,6 +493,10 @@ export function useAuthProvider(): AuthContextValue {
   }, [])
 
   const markPaymentRequired = useCallback(() => {
+    // Record timestamp BEFORE setState so the stale-bootstrap guard in
+    // runBootstrap() can compare it with the bootstrap's own start time.
+    paymentRequiredTimeRef.current = Date.now()
+    console.log("[useAuth] markPaymentRequired at", paymentRequiredTimeRef.current)
     setState((s) => {
       if (!s.accessInfo) return s
       return {
