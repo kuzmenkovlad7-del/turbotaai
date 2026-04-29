@@ -1,0 +1,12 @@
+diff --git a/node_modules/react-native-iap/ios/RNIapIos.swift b/node_modules/react-native-iap/ios/RNIapIos.swift
+index 0000000..1111111 100644
+--- a/node_modules/react-native-iap/ios/RNIapIos.swift
++++ b/node_modules/react-native-iap/ios/RNIapIos.swift
+@@ -467,6 +467,7 @@
+                         message: nsError?.localizedDescription,
+                         error: nsError)
+                 })
++            @unknown default: break
+             }
+         }
+     }
