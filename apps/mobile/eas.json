@@ -57,7 +57,8 @@
 
     "production-ios": {
       "ios": {
-        "buildConfiguration": "Release"
+        "buildConfiguration": "Release",
+        "image": "latest"
       },
       "distribution": "store",
       "env": {
@@ -81,6 +82,9 @@
     },
 
     "production": {
+      "ios": {
+        "image": "latest"
+      },
       "distribution": "store",
       "env": {
         "EXPO_PUBLIC_IAP_ENABLED": "true",
