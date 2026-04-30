@@ -16,7 +16,6 @@
         "EXPO_PUBLIC_DEBUG": "false"
       }
     },
-
     "preview": {
       "distribution": "internal",
       "ios": {
@@ -28,7 +27,6 @@
         "EXPO_PUBLIC_DEBUG": "false"
       }
     },
-
     "android-apk": {
       "android": {
         "buildType": "apk",
@@ -41,7 +39,6 @@
         "EXPO_PUBLIC_DEBUG": "false"
       }
     },
-
     "android-store-apk": {
       "android": {
         "buildType": "apk",
@@ -54,7 +51,6 @@
         "EXPO_PUBLIC_DEBUG": "false"
       }
     },
-
     "production-ios": {
       "ios": {
         "buildConfiguration": "Release",
@@ -67,7 +63,6 @@
         "EXPO_PUBLIC_DEBUG": "false"
       }
     },
-
     "production-android": {
       "android": {
         "buildType": "app-bundle",
@@ -80,7 +75,6 @@
         "EXPO_PUBLIC_DEBUG": "false"
       }
     },
-
     "production": {
       "ios": {
         "image": "latest"
@@ -96,9 +90,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "APPLE_ID_HERE",
-        "ascAppId": "ASC_APP_ID_HERE",
-        "appleTeamId": "APPLE_TEAM_ID_HERE"
+        "appleId": "kyza1045@gmail.com",
+        "ascAppId": "PASTE_ASC_APP_ID",
+        "appleTeamId": "B4B45W2R5U"
       },
       "android": {
         "serviceAccountKeyPath": "./google-play-key.json",
