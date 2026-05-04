@@ -204,6 +204,35 @@ export function useSubscription() {
     error: null,
   })
   const [syncLog, setSyncLog] = useState<IapSyncLog | null>(null)
+  // On Android productsReady starts true — products are validated inside purchase().
+  // On iOS we pre-fetch so the screen shows a loading/retry state before the
+  // subscribe button appears, avoiding a raw StoreKit error on first tap.
+  const [productsLoading, setProductsLoading] = useState(false)
+  const [productsReady, setProductsReady] = useState(() => Platform.OS !== "ios")
+
+  const loadProducts = useCallback(async () => {
+    if (!IAP_ENABLED) {
+      setProductsReady(false)
+      return
+    }
+    if (Platform.OS !== "ios") {
+      setProductsReady(true)
+      return
+    }
+    setProductsLoading(true)
+    setProductsReady(false)
+    try {
+      const RNIap = await getRNIap()
+      await RNIap.initConnection()
+      const subs = await RNIap.getSubscriptions({ skus: [IAP_PRODUCTS.MONTHLY] })
+      setProductsReady(Array.isArray(subs) && subs.length > 0)
+    } catch {
+      setProductsReady(false)
+    } finally {
+      setProductsLoading(false)
+      // Leave connection open — purchase() will reuse it immediately after.
+    }
+  }, [])
 
   const purchase = useCallback(async (productId: string) => {
     if (!IAP_ENABLED) {
@@ -358,6 +387,9 @@ export function useSubscription() {
     purchase,
     syncExistingPurchases,
     manageSubscription,
+    loadProducts,
+    productsLoading,
+    productsReady,
     /**
      * Last result from syncExistingPurchases / E_ALREADY_OWNED recovery.
      * null on iOS or when sync has not yet run. Displayed on AccountScreen

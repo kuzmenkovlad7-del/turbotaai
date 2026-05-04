@@ -186,6 +186,8 @@ const en = {
   accountPromoErrorServer: "Server error. Please try again later.",
   accountCancelPromo: "Cancel promo",
   accountCancelPromoConfirm: "Your promo access will be cancelled immediately.",
+  accountIapRetry: "Subscription unavailable. Tap to retry.",
+  accountIapError: "Subscription purchase unavailable. Please try again later.",
 
   // Bootstrap
   bootstrapErrorTitle: "Connection Error",
@@ -364,6 +366,8 @@ const uk: Translations = {
   accountPromoErrorServer: "Помилка сервера. Спробуйте пізніше.",
   accountCancelPromo: "Скасувати промо",
   accountCancelPromoConfirm: "Ваш промодоступ буде негайно скасовано.",
+  accountIapRetry: "Підписка недоступна. Натисніть, щоб спробувати ще.",
+  accountIapError: "Покупка підписки недоступна. Спробуйте пізніше.",
 
   bootstrapErrorTitle: "Помилка з'єднання",
   bootstrapErrorDesc: "Не вдалося підключитися до TurbotaAI. Перевірте інтернет та спробуйте ще раз.",
@@ -536,6 +540,8 @@ const ru: Translations = {
   accountPromoErrorServer: "Ошибка сервера. Попробуйте позже.",
   accountCancelPromo: "Отменить промо",
   accountCancelPromoConfirm: "Ваш промодоступ будет немедленно отменён.",
+  accountIapRetry: "Подписка недоступна. Нажмите, чтобы повторить.",
+  accountIapError: "Покупка подписки недоступна. Попробуйте позже.",
 
   bootstrapErrorTitle: "Ошибка соединения",
   bootstrapErrorDesc: "Не удалось подключиться к TurbotaAI. Проверьте интернет и попробуйте снова.",
