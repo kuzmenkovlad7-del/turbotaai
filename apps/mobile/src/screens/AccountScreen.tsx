@@ -32,6 +32,9 @@ export default function AccountScreen() {
     purchase,
     syncExistingPurchases,
     manageSubscription,
+    loadProducts,
+    productsLoading,
+    productsReady,
     iapEnabled,
     syncLog,
     error: iapError,
@@ -256,6 +259,18 @@ export default function AccountScreen() {
   const isTrial = accessInfo?.access === "trial"
   const showSubscribeCTA = !accessInfo?.unlimited
 
+  // Pre-load the IAP product whenever the subscribe CTA is visible so we can
+  // show a loading / retry state instead of a broken error on first tap.
+  // No-op on Android (products are validated inside purchase()).
+  // Must be placed after showSubscribeCTA is defined to avoid TDZ errors.
+  useFocusEffect(
+    useCallback(() => {
+      if (showSubscribeCTA && iapEnabled) {
+        loadProducts()
+      }
+    }, [showSubscribeCTA, iapEnabled, loadProducts]),
+  )
+
   return (
     <ScreenWrapper>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -405,18 +420,36 @@ export default function AccountScreen() {
           {showSubscribeCTA && (
             <View style={styles.actionSection}>
               {iapEnabled ? (
-                <Button
-                  title={t.accountMonthly}
-                  onPress={() => purchase(IAP_PRODUCTS.MONTHLY)}
-                  loading={purchasing}
-                />
+                productsLoading ? (
+                  // Products are being fetched from the store — show a neutral spinner
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primary}
+                    style={{ marginVertical: spacing.md }}
+                  />
+                ) : !productsReady ? (
+                  // Store returned no product (network error, product not yet approved,
+                  // or sandbox misconfiguration) — show a retry button, not a raw error.
+                  <Button
+                    title={t.accountIapRetry}
+                    variant="outline"
+                    onPress={loadProducts}
+                  />
+                ) : (
+                  <Button
+                    title={t.accountMonthly}
+                    onPress={() => purchase(IAP_PRODUCTS.MONTHLY)}
+                    loading={purchasing}
+                  />
+                )
               ) : (
                 // No IAP: show coming-soon notice (store-safe, no external link)
                 <View style={styles.iapComingSoon}>
                   <Text style={styles.iapComingSoonText}>{t.accountIapSoon}</Text>
                 </View>
               )}
-              {iapError && <Text style={styles.error}>{iapError}</Text>}
+              {/* Show user-friendly error — never expose raw StoreKit/Play error strings */}
+              {iapError && <Text style={styles.error}>{t.accountIapError}</Text>}
             </View>
           )}
 
@@ -457,8 +490,9 @@ export default function AccountScreen() {
             )}
           </View>
 
-          {/* Promo code input — hidden when user already has an active paid subscription */}
-          {!isPaid && (
+          {/* Promo code input — hidden on iOS (Apple policy: no alternative purchase
+              mechanisms) and hidden when user already has an active paid subscription */}
+          {!isPaid && Platform.OS !== "ios" && (
             <View style={styles.promoSection}>
               <Text style={styles.promoSectionTitle}>{t.accountApplyPromo}</Text>
               <View style={styles.promoRow}>
