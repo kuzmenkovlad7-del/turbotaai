@@ -189,6 +189,26 @@ const en = {
   accountIapRetry: "Subscription unavailable. Tap to retry.",
   accountIapError: "Subscription purchase unavailable. Please try again later.",
 
+  // Account deletion
+  accountDeleteAccount: "Delete Account",
+  accountDeleteWarning: "This will permanently delete your account and all associated data. This action cannot be undone.",
+  accountDeleteConfirmTitle: "Delete your account?",
+  accountDeleteConfirmMsg: "All your data, conversation history, and active subscription will be permanently deleted. You cannot undo this.",
+  accountDeleteAction: "Yes, Delete My Account",
+  accountDeleteSuccess: "Account deleted",
+  accountDeleteError: "Could not delete account. Please try again or contact support@turbotaai.com.",
+
+  // AI data-sharing consent
+  aiConsentTitle: "AI Data Processing",
+  aiConsentSubtitle: "Please review before using AI features",
+  aiConsentBody: "To provide chat, voice, and video AI responses, your messages and voice inputs are processed by OpenAI (openai.com) via our secure servers.",
+  aiConsentPoint1: "Data sent: your messages and voice input",
+  aiConsentPoint2: "AI provider: OpenAI (openai.com)",
+  aiConsentPoint3: "Purpose: generate AI responses only",
+  aiConsentPoint4: "We do not sell your data",
+  aiConsentAccept: "I Agree — Continue",
+  aiConsentLater: "Not Now",
+
   // Bootstrap
   bootstrapErrorTitle: "Connection Error",
   bootstrapErrorDesc: "Could not connect to TurbotaAI. Check your internet and try again.",
@@ -369,6 +389,24 @@ const uk: Translations = {
   accountIapRetry: "Підписка недоступна. Натисніть, щоб спробувати ще.",
   accountIapError: "Покупка підписки недоступна. Спробуйте пізніше.",
 
+  accountDeleteAccount: "Видалити акаунт",
+  accountDeleteWarning: "Це назавжди видалить ваш акаунт і всі пов'язані дані. Дія незворотна.",
+  accountDeleteConfirmTitle: "Видалити акаунт?",
+  accountDeleteConfirmMsg: "Усі ваші дані, історія розмов та активна підписка будуть назавжди видалені. Скасувати це неможливо.",
+  accountDeleteAction: "Так, видалити мій акаунт",
+  accountDeleteSuccess: "Акаунт видалено",
+  accountDeleteError: "Не вдалося видалити акаунт. Спробуйте ще раз або зверніться до support@turbotaai.com.",
+
+  aiConsentTitle: "Обробка даних AI",
+  aiConsentSubtitle: "Будь ласка, ознайомтесь перед використанням AI",
+  aiConsentBody: "Для надання відповідей у чаті, голосовому та відео-режимах ваші повідомлення та голосовий ввід обробляються сервісом OpenAI (openai.com) через наші захищені сервери.",
+  aiConsentPoint1: "Дані: ваші повідомлення та голос",
+  aiConsentPoint2: "Провайдер AI: OpenAI (openai.com)",
+  aiConsentPoint3: "Мета: лише генерація відповідей AI",
+  aiConsentPoint4: "Ми не продаємо ваші дані",
+  aiConsentAccept: "Погоджуюсь — продовжити",
+  aiConsentLater: "Не зараз",
+
   bootstrapErrorTitle: "Помилка з'єднання",
   bootstrapErrorDesc: "Не вдалося підключитися до TurbotaAI. Перевірте інтернет та спробуйте ще раз.",
   bootstrapRetry: "Спробувати ще",
@@ -542,6 +580,24 @@ const ru: Translations = {
   accountCancelPromoConfirm: "Ваш промодоступ будет немедленно отменён.",
   accountIapRetry: "Подписка недоступна. Нажмите, чтобы повторить.",
   accountIapError: "Покупка подписки недоступна. Попробуйте позже.",
+
+  accountDeleteAccount: "Удалить аккаунт",
+  accountDeleteWarning: "Это навсегда удалит ваш аккаунт и все связанные данные. Действие необратимо.",
+  accountDeleteConfirmTitle: "Удалить аккаунт?",
+  accountDeleteConfirmMsg: "Все ваши данные, история разговоров и активная подписка будут удалены навсегда. Отменить это невозможно.",
+  accountDeleteAction: "Да, удалить мой аккаунт",
+  accountDeleteSuccess: "Аккаунт удалён",
+  accountDeleteError: "Не удалось удалить аккаунт. Попробуйте ещё раз или обратитесь на support@turbotaai.com.",
+
+  aiConsentTitle: "Обработка данных AI",
+  aiConsentSubtitle: "Пожалуйста, ознакомьтесь перед использованием AI",
+  aiConsentBody: "Для предоставления ответов в чате, голосовом и видеорежимах ваши сообщения и голосовой ввод обрабатываются сервисом OpenAI (openai.com) через наши защищённые серверы.",
+  aiConsentPoint1: "Данные: ваши сообщения и голос",
+  aiConsentPoint2: "Провайдер AI: OpenAI (openai.com)",
+  aiConsentPoint3: "Цель: только генерация ответов AI",
+  aiConsentPoint4: "Мы не продаём ваши данные",
+  aiConsentAccept: "Согласен — продолжить",
+  aiConsentLater: "Не сейчас",
 
   bootstrapErrorTitle: "Ошибка соединения",
   bootstrapErrorDesc: "Не удалось подключиться к TurbotaAI. Проверьте интернет и попробуйте снова.",

@@ -295,6 +295,31 @@ eas submit --platform android
 
 ---
 
+## App Store Review Notes (build 1.0.0 / 4+)
+
+### Test account
+Use the sandbox credentials provided in App Store Connect → App Review → Notes.
+
+### Subscription (Guideline 2.1b)
+- The only IAP product referenced in code is `com.turbotaai.monthly` (matching App Store Connect exactly).
+- Promo code UI is hidden on iOS via `Platform.OS !== "ios"` — it never appears in a store build.
+- Tap **Account** tab → the Subscribe button loads the App Store product. If IAP is disabled (`EXPO_PUBLIC_IAP_ENABLED=false`) a neutral "coming soon" notice is shown instead.
+
+### Account Deletion (Guideline 5.1.1v)
+- Tap **Account** tab → scroll to the bottom → **"Delete Account"** card is visible for logged-in users.
+- Tap the button → confirmation alert ("Delete your account?") appears.
+- Confirm → account is permanently deleted via `DELETE /api/user/delete` (Supabase auth user + profile row removed). The app returns to the login screen immediately.
+- The feature is available without a subscription.
+
+### AI Data Sharing Consent (Guidelines 5.1.1i / 5.1.2i)
+- On first use of Chat, Voice, or Video AI features a full-screen modal ("AI Data Processing") is shown **before** any data is sent.
+- The modal identifies **OpenAI (openai.com)** as the AI provider, states what data is sent (messages, voice input), and explains the purpose (generate AI responses only).
+- Tapping **"I Agree — Continue"** stores consent in Secure Store; the modal will not appear again.
+- Tapping **"Not Now"** dismisses the modal without sending any data. The user can still browse the app; the modal re-appears the next time they attempt an AI action.
+- To test: delete and reinstall the app (or clear app data) → tap Chat → modal appears before any message is sent.
+
+---
+
 ## Branch & Merge Instructions
 
 - **Branch**: `claude/review-repo-files-o8zu7`

@@ -352,3 +352,10 @@ export async function resumeAutoRenew(): Promise<{ ok: boolean; error?: string }
   })
   return safeJson(res, { ok: false, error: `HTTP ${res.status}` })
 }
+
+/* ── Account management ── */
+
+export async function deleteAccount(): Promise<{ ok: boolean; error?: string }> {
+  const res = await apiFetch("/api/user/delete", { method: "DELETE" })
+  return safeJson(res, { ok: false, error: `HTTP ${res.status}` })
+}

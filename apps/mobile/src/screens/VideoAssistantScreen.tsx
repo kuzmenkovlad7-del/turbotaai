@@ -13,6 +13,8 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
+import { useAiConsent } from "@/hooks/useAiConsent"
+import AiConsentModal from "@/components/AiConsentModal"
 import { getAccessState } from "@/utils/accessState"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import { logEvent } from "@/services/analytics"
@@ -62,6 +64,8 @@ export default function VideoAssistantScreen() {
   const insets = useSafeAreaInsets()
   const { accessInfo, refreshAccess } = useAuth()
   const { t, locale } = useT()
+  const { consentGiven, acceptConsent } = useAiConsent()
+  const [showConsentModal, setShowConsentModal] = useState(false)
   const accessState = getAccessState(accessInfo)
 
   const [selectedCharacter, setSelectedCharacter] = useState<Character>(CHARACTERS[0])
@@ -109,6 +113,12 @@ export default function VideoAssistantScreen() {
         return
       }
 
+      // AI consent gate
+      if (consentGiven !== true) {
+        setShowConsentModal(true)
+        return
+      }
+
       const granted = await requestPermissions()
       if (!granted) {
         // Show the more restrictive error (camera covers both)
@@ -131,10 +141,15 @@ export default function VideoAssistantScreen() {
     } finally {
       setStarting(false)
     }
-  }, [starting, selectedCharacter, locale, t, navigation, requestPermissions, accessState.isLocked])
+  }, [starting, selectedCharacter, locale, t, navigation, requestPermissions, accessState.isLocked, consentGiven])
 
   return (
     <View style={[styles.root, { paddingBottom: insets.bottom }]}>
+      <AiConsentModal
+        visible={showConsentModal}
+        onAccept={() => { acceptConsent(); setShowConsentModal(false) }}
+        onLater={() => setShowConsentModal(false)}
+      />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}

@@ -13,6 +13,8 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
+import { useAiConsent } from "@/hooks/useAiConsent"
+import AiConsentModal from "@/components/AiConsentModal"
 import { getAccessState } from "@/utils/accessState"
 import { colors, fontSize, spacing, radii } from "@/constants/theme"
 import { logEvent } from "@/services/analytics"
@@ -49,6 +51,8 @@ export default function VoiceAssistantScreen() {
   const insets = useSafeAreaInsets()
   const { accessInfo, refreshAccess } = useAuth()
   const { t, locale } = useT()
+  const { consentGiven, acceptConsent } = useAiConsent()
+  const [showConsentModal, setShowConsentModal] = useState(false)
   const accessState = getAccessState(accessInfo)
 
   const [gender, setGender] = useState<VoiceGender>("female")
@@ -97,6 +101,12 @@ export default function VoiceAssistantScreen() {
         return
       }
 
+      // AI consent gate
+      if (consentGiven !== true) {
+        setShowConsentModal(true)
+        return
+      }
+
       const granted = await requestMicPermission()
       if (!granted) {
         setPermError(t.permMicDenied)
@@ -110,12 +120,17 @@ export default function VoiceAssistantScreen() {
     } finally {
       setStarting(false)
     }
-  }, [starting, gender, locale, t, navigation, requestMicPermission, accessState.isLocked])
+  }, [starting, gender, locale, t, navigation, requestMicPermission, accessState.isLocked, consentGiven])
 
   const selectedOption = GENDER_OPTIONS.find((g) => g.id === gender)!
 
   return (
     <View style={[styles.root, { paddingBottom: insets.bottom }]}>
+      <AiConsentModal
+        visible={showConsentModal}
+        onAccept={() => { acceptConsent(); setShowConsentModal(false) }}
+        onLater={() => setShowConsentModal(false)}
+      />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}

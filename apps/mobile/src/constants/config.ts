@@ -79,6 +79,7 @@ export const STORAGE_KEYS = {
   SESSION_PREFIX: "turbotaai_session_",
   REGION: "turbotaai_region",
   LANGUAGE: "turbotaai_language",
+  AI_CONSENT: "turbotaai_ai_consent",
 } as const
 
 /* ── Runtime validation ────────────────────────────────────── */

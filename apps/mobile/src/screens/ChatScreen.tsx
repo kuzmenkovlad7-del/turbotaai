@@ -14,6 +14,8 @@ import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
+import { useAiConsent } from "@/hooks/useAiConsent"
+import AiConsentModal from "@/components/AiConsentModal"
 import * as api from "@/services/api"
 import { generateUUID, getSessionId, setSessionId } from "@/services/storage"
 import { buildMessagePayload } from "@/services/messagePayload"
@@ -81,6 +83,8 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets()
   const { user, accessInfo, decrementTrialLeft, syncTrialLeft, refreshAccess, markPaymentRequired } = useAuth()
   const { t, locale } = useT()
+  const { consentGiven, acceptConsent } = useAiConsent()
+  const [showConsentModal, setShowConsentModal] = useState(false)
   const accessState = getAccessState(accessInfo)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -135,6 +139,13 @@ export default function ChatScreen() {
   const sendMessage = useCallback(async () => {
     const text = input.trim()
     if (!text || sendingRef.current) return
+
+    // AI consent gate — show modal and bail if user has not yet agreed
+    if (consentGiven !== true) {
+      setShowConsentModal(true)
+      return
+    }
+
     // Session ID may not have loaded from storage yet on very first tap — generate inline
     if (!sessionIdRef.current) {
       const newId = generateUUID()
@@ -249,7 +260,7 @@ export default function ChatScreen() {
       sendingRef.current = false
       setSending(false)
     }
-  }, [input, user, t, locale, decrementTrialLeft, syncTrialLeft, refreshAccess, markPaymentRequired])
+  }, [input, user, t, locale, decrementTrialLeft, syncTrialLeft, refreshAccess, markPaymentRequired, consentGiven])
 
   const renderMessage = useCallback(
     ({ item }: { item: Message }) => {
@@ -280,6 +291,11 @@ export default function ChatScreen() {
 
   return (
     <View style={[styles.root, { paddingBottom: insets.bottom }]}>
+      <AiConsentModal
+        visible={showConsentModal}
+        onAccept={() => { acceptConsent(); setShowConsentModal(false) }}
+        onLater={() => setShowConsentModal(false)}
+      />
       <KeyboardAvoidingView
         style={styles.flex}
         // iOS: "padding" pushes the input up by the keyboard height, offset by the

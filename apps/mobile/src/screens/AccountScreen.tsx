@@ -16,7 +16,7 @@ import Button from "@/components/Button"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/hooks/useLanguage"
 import { useSubscription } from "@/hooks/useSubscription"
-import { redeemPromo, cancelAutoRenew, resumeAutoRenew, cancelPromo } from "@/services/api"
+import { redeemPromo, cancelAutoRenew, resumeAutoRenew, cancelPromo, deleteAccount } from "@/services/api"
 import { logEvent } from "@/services/analytics"
 import { IAP_PRODUCTS, DEBUG_ENABLED } from "@/constants/config"
 import { LOCALE_LABELS, type Locale } from "@/constants/i18n"
@@ -60,6 +60,9 @@ export default function AccountScreen() {
   const [refreshingAccess, setRefreshingAccess] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
   const [refreshDone, setRefreshDone] = useState(false)
+
+  // Delete account state
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   // Refresh access when tab gains focus (e.g. returning from web browser after purchase/promo).
   // Debounced to 30 s so repeated tab switches don't spam the API.
@@ -105,6 +108,31 @@ export default function AccountScreen() {
       { text: t.accountSignOut, style: "destructive", onPress: logout },
     ])
   }
+
+  const handleDeleteAccount = useCallback(() => {
+    Alert.alert(t.accountDeleteConfirmTitle, t.accountDeleteConfirmMsg, [
+      { text: t.accountCancel, style: "cancel" },
+      {
+        text: t.accountDeleteAction,
+        style: "destructive",
+        onPress: async () => {
+          setDeleteLoading(true)
+          try {
+            const result = await deleteAccount()
+            if (result.ok) {
+              Alert.alert(t.accountDeleteSuccess, "", [{ text: "OK", onPress: logout }])
+            } else {
+              Alert.alert("Error", result.error || t.accountDeleteError)
+            }
+          } catch {
+            Alert.alert("Error", t.accountDeleteError)
+          } finally {
+            setDeleteLoading(false)
+          }
+        },
+      },
+    ])
+  }, [t, logout])
 
   const handleApplyPromo = useCallback(async () => {
     const code = promoCode.trim()
@@ -570,6 +598,26 @@ export default function AccountScreen() {
             </View>
           )}
         </View>
+
+        {/* Danger zone — only for authenticated users */}
+        {!!user && (
+          <View style={styles.dangerCard}>
+            <Text style={styles.dangerTitle}>{t.accountDeleteAccount}</Text>
+            <Text style={styles.dangerDesc}>{t.accountDeleteWarning}</Text>
+            <TouchableOpacity
+              style={[styles.deleteBtn, deleteLoading && { opacity: 0.6 }]}
+              onPress={handleDeleteAccount}
+              disabled={deleteLoading}
+              activeOpacity={0.8}
+            >
+              {deleteLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.deleteBtnText}>{t.accountDeleteAccount}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </ScreenWrapper>
   )
@@ -722,6 +770,39 @@ const styles = StyleSheet.create({
   promoFeedback: {
     fontSize: fontSize.sm,
     marginTop: spacing.sm,
+  },
+
+  // Danger zone card
+  dangerCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
+  dangerTitle: {
+    fontSize: fontSize.md,
+    fontWeight: "700",
+    color: colors.error,
+    marginBottom: spacing.sm,
+  },
+  dangerDesc: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: spacing.lg,
+  },
+  deleteBtn: {
+    backgroundColor: colors.error,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md,
+    alignItems: "center",
+  },
+  deleteBtnText: {
+    color: "#fff",
+    fontSize: fontSize.sm,
+    fontWeight: "700",
   },
 
   // EXPO_PUBLIC_DEBUG diagnostics panel
