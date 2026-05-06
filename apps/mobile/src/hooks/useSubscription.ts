@@ -7,6 +7,7 @@ import { validateReceipt } from "@/services/api"
 type SubState = {
   purchasing: boolean
   error: string | null
+  purchaseSuccess: boolean
 }
 
 /**
@@ -202,6 +203,7 @@ export function useSubscription() {
   const [state, setState] = useState<SubState>({
     purchasing: false,
     error: null,
+    purchaseSuccess: false,
   })
   const [syncLog, setSyncLog] = useState<IapSyncLog | null>(null)
   // On Android productsReady starts true — products are validated inside purchase().
@@ -209,6 +211,9 @@ export function useSubscription() {
   // subscribe button appears, avoiding a raw StoreKit error on first tap.
   const [productsLoading, setProductsLoading] = useState(false)
   const [productsReady, setProductsReady] = useState(() => Platform.OS !== "ios")
+  // Localized price string from StoreKit (e.g. "$9.99"). iOS only.
+  const [productPrice, setProductPrice] = useState<string | null>(null)
+  const [restoring, setRestoring] = useState(false)
 
   const loadProducts = useCallback(async () => {
     if (!IAP_ENABLED) {
@@ -225,7 +230,15 @@ export function useSubscription() {
       const RNIap = await getRNIap()
       await RNIap.initConnection()
       const subs = await RNIap.getSubscriptions({ skus: [IAP_PRODUCTS.MONTHLY] })
-      setProductsReady(Array.isArray(subs) && subs.length > 0)
+      if (Array.isArray(subs) && subs.length > 0) {
+        const sub = subs[0] as any
+        // localizedPrice is the App Store formatted price string (e.g. "$9.99")
+        const price: string | null = sub.localizedPrice || sub.price || null
+        setProductPrice(price)
+        setProductsReady(true)
+      } else {
+        setProductsReady(false)
+      }
     } catch {
       setProductsReady(false)
     } finally {
@@ -243,7 +256,7 @@ export function useSubscription() {
       return
     }
 
-    setState(s => ({ ...s, purchasing: true, error: null }))
+    setState(s => ({ ...s, purchasing: true, error: null, purchaseSuccess: false }))
 
     try {
       const RNIap = await getRNIap()
@@ -289,29 +302,37 @@ export function useSubscription() {
         (purchase as any)?.transactionId || (purchase as any)?.orderId || undefined
 
       if (transactionReceipt) {
-        const validated = await validateReceipt({
-          platform: Platform.OS as "ios" | "android",
-          productId,
-          transactionReceipt,
-          transactionId,
-        })
-        if (!validated.ok) {
-          throw new Error(validated.error || "Receipt validation failed")
+        // Validate receipt with backend — but NEVER throw on validation failure.
+        // StoreKit has already completed the transaction and charged the user.
+        // A backend error here does not mean the purchase failed; backend
+        // webhooks will grant access if this direct call fails.
+        // Throwing here was the root cause of Guideline 2.1(b) rejection.
+        try {
+          await validateReceipt({
+            platform: Platform.OS as "ios" | "android",
+            productId,
+            transactionReceipt,
+            transactionId,
+          })
+        } catch (validationErr: any) {
+          console.warn("[iap] receipt validation error (non-fatal):", validationErr?.message)
         }
-        // Acknowledge purchase on Android (prevents refund after 3 days)
+
+        // Always acknowledge / finish the transaction regardless of validation outcome.
+        // Failing to finish on iOS leaves the transaction in the queue and can prevent
+        // future purchases. Failing to acknowledge on Android triggers auto-refund after 3 days.
         if (Platform.OS === "android" && (purchase as any)?.purchaseToken) {
           await RNIap.acknowledgePurchaseAndroid({
             token: (purchase as any).purchaseToken,
           }).catch(() => {})
         }
-        // Finish the transaction on iOS
         if (Platform.OS === "ios") {
           await RNIap.finishTransaction({ purchase, isConsumable: false }).catch(() => {})
         }
       }
 
-      await refreshAccess()
-      setState(s => ({ ...s, purchasing: false }))
+      await refreshAccess().catch(() => {})
+      setState(s => ({ ...s, purchasing: false, error: null, purchaseSuccess: true }))
     } catch (e: any) {
       const code: string = e?.code || ""
       const msg: string = (e?.message || "").toLowerCase()
@@ -345,6 +366,62 @@ export function useSubscription() {
         error: isCancelled ? null : (e?.message || "Purchase could not be completed"),
       }))
     } finally {
+      getRNIap().then(r => r.endConnection()).catch(() => {})
+    }
+  }, [refreshAccess])
+
+  /**
+   * Restore previous App Store / Google Play purchases.
+   *
+   * On iOS this triggers StoreKit's native restore flow via getAvailablePurchases().
+   * The result is validated against the backend and access is refreshed.
+   * Required by Guideline 3.1.1 for apps with restorable IAP.
+   */
+  const restorePurchases = useCallback(async (): Promise<{
+    ok: boolean
+    noPurchases?: boolean
+    error?: string
+  }> => {
+    if (!IAP_ENABLED) return { ok: false, error: "IAP not enabled" }
+    setRestoring(true)
+    try {
+      const RNIap = await getRNIap()
+      await RNIap.initConnection()
+
+      const purchases: any[] = await RNIap.getAvailablePurchases().catch(() => [])
+      if (!Array.isArray(purchases) || purchases.length === 0) {
+        return { ok: false, noPurchases: true }
+      }
+
+      // Find the monthly subscription in the restored list
+      const owned = purchases.find((p: any) =>
+        p.productId === IAP_PRODUCTS.MONTHLY ||
+        (Array.isArray(p.productIds) && p.productIds.includes(IAP_PRODUCTS.MONTHLY)),
+      )
+      if (!owned) return { ok: false, noPurchases: true }
+
+      const receipt: string = owned.transactionReceipt || owned.purchaseToken || ""
+      if (!receipt) return { ok: false, noPurchases: true }
+
+      // Validate with backend — non-fatal if this fails; access may already be set
+      await validateReceipt({
+        platform: Platform.OS as "ios" | "android",
+        productId: IAP_PRODUCTS.MONTHLY,
+        transactionReceipt: receipt,
+        transactionId: owned.transactionId || owned.orderId || undefined,
+      }).catch(() => {})
+
+      // Finish the restored transaction on iOS
+      if (Platform.OS === "ios") {
+        await RNIap.finishTransaction({ purchase: owned, isConsumable: false }).catch(() => {})
+      }
+
+      await refreshAccess().catch(() => {})
+      return { ok: true }
+    } catch (e: any) {
+      return { ok: false, error: e?.message || "Restore failed" }
+    } finally {
+      setRestoring(false)
       getRNIap().then(r => r.endConnection()).catch(() => {})
     }
   }, [refreshAccess])
@@ -388,8 +465,11 @@ export function useSubscription() {
     syncExistingPurchases,
     manageSubscription,
     loadProducts,
+    restorePurchases,
     productsLoading,
     productsReady,
+    productPrice,
+    restoring,
     /**
      * Last result from syncExistingPurchases / E_ALREADY_OWNED recovery.
      * null on iOS or when sync has not yet run. Displayed on AccountScreen

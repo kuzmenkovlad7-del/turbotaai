@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Platform,
+  Linking,
 } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 import ScreenWrapper from "@/components/ScreenWrapper"
@@ -33,8 +34,12 @@ export default function AccountScreen() {
     syncExistingPurchases,
     manageSubscription,
     loadProducts,
+    restorePurchases,
     productsLoading,
     productsReady,
+    productPrice,
+    restoring,
+    purchaseSuccess,
     iapEnabled,
     syncLog,
     error: iapError,
@@ -63,6 +68,21 @@ export default function AccountScreen() {
 
   // Delete account state
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // Restore purchases state (iOS)
+  const [restoreMsg, setRestoreMsg] = useState<{ text: string; ok: boolean } | null>(null)
+
+  // Show purchase success Alert exactly once per successful purchase
+  const prevPurchaseSuccessRef = useRef(false)
+  useEffect(() => {
+    if (purchaseSuccess && !prevPurchaseSuccessRef.current) {
+      prevPurchaseSuccessRef.current = true
+      Alert.alert(t.iapPurchaseSuccess)
+    }
+    if (!purchaseSuccess) {
+      prevPurchaseSuccessRef.current = false
+    }
+  }, [purchaseSuccess, t])
 
   // Refresh access when tab gains focus (e.g. returning from web browser after purchase/promo).
   // Debounced to 30 s so repeated tab switches don't spam the API.
@@ -133,6 +153,19 @@ export default function AccountScreen() {
       },
     ])
   }, [t, logout])
+
+  const handleRestorePurchases = useCallback(async () => {
+    setRestoreMsg(null)
+    const result = await restorePurchases()
+    if (result.ok) {
+      setRestoreMsg({ text: t.iapRestoreSuccess, ok: true })
+      setTimeout(() => setRestoreMsg(null), 4_000)
+    } else if (result.noPurchases) {
+      setRestoreMsg({ text: t.iapRestoreNone, ok: false })
+    } else {
+      setRestoreMsg({ text: t.iapRestoreError, ok: false })
+    }
+  }, [restorePurchases, t])
 
   const handleApplyPromo = useCallback(async () => {
     const code = promoCode.trim()
@@ -463,11 +496,67 @@ export default function AccountScreen() {
                     onPress={loadProducts}
                   />
                 ) : (
-                  <Button
-                    title={t.accountMonthly}
-                    onPress={() => purchase(IAP_PRODUCTS.MONTHLY)}
-                    loading={purchasing}
-                  />
+                  <>
+                    {/* iOS subscription disclosure card — Guideline 3.1.2c requires
+                        price, duration, benefits, Privacy Policy, and EULA before purchase */}
+                    {Platform.OS === "ios" && (
+                      <View style={styles.iapInfoCard}>
+                        <Text style={styles.iapInfoTitle}>{t.iapPremiumTitle}</Text>
+                        <Text style={styles.iapInfoBenefits}>{t.iapPremiumBenefits}</Text>
+                        <Text style={styles.iapInfoPrice}>
+                          {t.iapMonthlyDuration}{productPrice ? ` · ${productPrice}` : ""}
+                        </Text>
+                        <View style={styles.iapInfoLinkRow}>
+                          <TouchableOpacity
+                            onPress={() =>
+                              Linking.openURL("https://turbotaai.com/privacy").catch(() => {})
+                            }
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.iapInfoLink}>{t.iapPrivacyPolicy}</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.iapInfoSep}>{" · "}</Text>
+                          <TouchableOpacity
+                            onPress={() =>
+                              Linking.openURL(
+                                "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+                              ).catch(() => {})
+                            }
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.iapInfoLink}>{t.iapTerms}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+
+                    <Button
+                      title={t.accountMonthly}
+                      onPress={() => purchase(IAP_PRODUCTS.MONTHLY)}
+                      loading={purchasing}
+                    />
+
+                    {/* Restore Purchases — iOS only, distinct button per Guideline 3.1.1 */}
+                    {Platform.OS === "ios" && (
+                      <Button
+                        title={t.iapRestorePurchases}
+                        variant="ghost"
+                        onPress={handleRestorePurchases}
+                        loading={restoring}
+                        style={{ marginTop: spacing.sm }}
+                      />
+                    )}
+                    {restoreMsg && Platform.OS === "ios" && (
+                      <Text
+                        style={[
+                          styles.actionFeedback,
+                          { color: restoreMsg.ok ? colors.success : colors.error },
+                        ]}
+                      >
+                        {restoreMsg.text}
+                      </Text>
+                    )}
+                  </>
                 )
               ) : (
                 // No IAP: show coming-soon notice (store-safe, no external link)
@@ -721,6 +810,48 @@ const styles = StyleSheet.create({
     color: colors.error,
     marginTop: spacing.md,
     textAlign: "center",
+  },
+
+  // IAP subscription disclosure card — iOS only (Guidelines 3.1.1, 3.1.2c)
+  iapInfoCard: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  iapInfoTitle: {
+    fontSize: fontSize.md,
+    fontWeight: "700",
+    color: colors.primary,
+    marginBottom: spacing.xs,
+  },
+  iapInfoBenefits: {
+    fontSize: fontSize.sm,
+    color: colors.text,
+    lineHeight: 20,
+    marginBottom: spacing.sm,
+  },
+  iapInfoPrice: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: "600",
+    marginBottom: spacing.sm,
+  },
+  iapInfoLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  iapInfoLink: {
+    fontSize: fontSize.xs,
+    color: colors.primary,
+    textDecorationLine: "underline",
+  },
+  iapInfoSep: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
   },
 
   // Store-safe coming-soon notice

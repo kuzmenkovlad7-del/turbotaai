@@ -300,10 +300,24 @@ eas submit --platform android
 ### Test account
 Use the sandbox credentials provided in App Store Connect → App Review → Notes.
 
-### Subscription (Guideline 2.1b)
+### Subscription — Guideline 2.1b: No error after successful purchase
+- After StoreKit charges the user, the transaction is always finished and access refreshed — even if our backend receipt validation returns an error. The user never sees an error message after a successful App Store charge.
+- If backend validation fails silently, the user can tap **Restore Purchases** or **Refresh Access** to recover without re-purchasing.
 - The only IAP product referenced in code is `com.turbotaai.monthly` (matching App Store Connect exactly).
 - Promo code UI is hidden on iOS via `Platform.OS !== "ios"` — it never appears in a store build.
-- Tap **Account** tab → the Subscribe button loads the App Store product. If IAP is disabled (`EXPO_PUBLIC_IAP_ENABLED=false`) a neutral "coming soon" notice is shown instead.
+
+### Subscription — Guideline 3.1.1: Restore Purchases button
+- On iOS, a distinct **Restore Purchases** button appears below the Subscribe button.
+- Tapping it calls `getAvailablePurchases()` (StoreKit restore flow), validates any found receipt against our backend, and refreshes premium access.
+- Results are shown in localized text: success, "No previous purchases found", or a friendly error — never a raw StoreKit string.
+
+### Subscription — Guideline 3.1.2c: Subscription disclosure
+- Before the Subscribe button, iOS users see a disclosure card (styled in-app) showing:
+  - **Product name**: TurbotaAI Premium
+  - **What you get**: Unlimited AI Chat, Voice & Video. Cancel anytime from Apple ID settings.
+  - **Billing**: duration + price fetched directly from StoreKit (`localizedPrice`) — e.g. "Monthly · $9.99"
+  - **Links**: tappable Privacy Policy (`https://turbotaai.com/privacy`) and Apple standard EULA (`https://www.apple.com/legal/internet-services/itunes/dev/stdeula/`)
+- To test: sign in with sandbox account → Account tab → scroll to Subscription section → disclosure card appears above the Subscribe button.
 
 ### Account Deletion (Guideline 5.1.1v)
 - Tap **Account** tab → scroll to the bottom → **"Delete Account"** card is visible for logged-in users.

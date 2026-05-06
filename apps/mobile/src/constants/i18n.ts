@@ -189,6 +189,18 @@ const en = {
   accountIapRetry: "Subscription unavailable. Tap to retry.",
   accountIapError: "Subscription purchase unavailable. Please try again later.",
 
+  // IAP paywall disclosure (Apple Guideline 3.1.2c)
+  iapPremiumTitle: "TurbotaAI Premium",
+  iapPremiumBenefits: "Unlimited AI chat, voice assistant, video assistant, and all premium app features.",
+  iapMonthlyDuration: "Monthly subscription",
+  iapPrivacyPolicy: "Privacy Policy",
+  iapTerms: "Terms of Use",
+  iapRestorePurchases: "Restore Purchases",
+  iapRestoreSuccess: "Purchases restored successfully.",
+  iapRestoreNone: "No previous purchases found.",
+  iapRestoreError: "Could not restore purchases. Please try again.",
+  iapPurchaseSuccess: "Subscription activated! Welcome to TurbotaAI Premium.",
+
   // Account deletion
   accountDeleteAccount: "Delete Account",
   accountDeleteWarning: "This will permanently delete your account and all associated data. This action cannot be undone.",
@@ -389,6 +401,17 @@ const uk: Translations = {
   accountIapRetry: "Підписка недоступна. Натисніть, щоб спробувати ще.",
   accountIapError: "Покупка підписки недоступна. Спробуйте пізніше.",
 
+  iapPremiumTitle: "TurbotaAI Premium",
+  iapPremiumBenefits: "Необмежений доступ до AI-чату, голосового помічника, відео-помічника та всіх преміум-функцій.",
+  iapMonthlyDuration: "Місячна підписка",
+  iapPrivacyPolicy: "Політика конфіденційності",
+  iapTerms: "Умови використання",
+  iapRestorePurchases: "Відновити покупки",
+  iapRestoreSuccess: "Покупки успішно відновлено.",
+  iapRestoreNone: "Попередніх покупок не знайдено.",
+  iapRestoreError: "Не вдалося відновити покупки. Спробуйте ще раз.",
+  iapPurchaseSuccess: "Підписку активовано! Ласкаво просимо до TurbotaAI Premium.",
+
   accountDeleteAccount: "Видалити акаунт",
   accountDeleteWarning: "Це назавжди видалить ваш акаунт і всі пов'язані дані. Дія незворотна.",
   accountDeleteConfirmTitle: "Видалити акаунт?",
@@ -580,6 +603,17 @@ const ru: Translations = {
   accountCancelPromoConfirm: "Ваш промодоступ будет немедленно отменён.",
   accountIapRetry: "Подписка недоступна. Нажмите, чтобы повторить.",
   accountIapError: "Покупка подписки недоступна. Попробуйте позже.",
+
+  iapPremiumTitle: "TurbotaAI Premium",
+  iapPremiumBenefits: "Неограниченный доступ к AI-чату, голосовому помощнику, видео-помощнику и всем премиум-функциям.",
+  iapMonthlyDuration: "Месячная подписка",
+  iapPrivacyPolicy: "Политика конфиденциальности",
+  iapTerms: "Условия использования",
+  iapRestorePurchases: "Восстановить покупки",
+  iapRestoreSuccess: "Покупки успешно восстановлены.",
+  iapRestoreNone: "Предыдущих покупок не найдено.",
+  iapRestoreError: "Не удалось восстановить покупки. Попробуйте ещё раз.",
+  iapPurchaseSuccess: "Подписка активирована! Добро пожаловать в TurbotaAI Premium.",
 
   accountDeleteAccount: "Удалить аккаунт",
   accountDeleteWarning: "Это навсегда удалит ваш аккаунт и все связанные данные. Действие необратимо.",
