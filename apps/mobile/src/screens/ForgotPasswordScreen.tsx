@@ -20,7 +20,7 @@ type Props = {
 }
 
 export default function ForgotPasswordScreen({ onBack }: Props) {
-  const { t } = useT()
+  const { t, locale } = useT()
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
@@ -32,12 +32,12 @@ export default function ForgotPasswordScreen({ onBack }: Props) {
     if (!trimmed) return setError(t.loginErrEmail)
 
     if (!isSupabaseConfigured()) {
-      return setError("Supabase is not configured.")
+      return setError(t.forgotPasswordErrConfig)
     }
 
     setLoading(true)
     try {
-      const result = await resetPassword(trimmed)
+      const result = await resetPassword(trimmed, locale)
       if (result.ok) {
         setSent(true)
       } else {

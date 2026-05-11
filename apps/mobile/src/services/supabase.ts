@@ -128,11 +128,12 @@ export async function refreshSession(): Promise<AuthResult> {
 }
 
 /** Send password reset email via Supabase */
-export async function resetPassword(email: string): Promise<AuthResult> {
+export async function resetPassword(email: string, lang?: string): Promise<AuthResult> {
   const sb = getSupabase()
-  const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: "https://turbotaai.com/reset-password",
-  })
+  const redirectTo = lang
+    ? `https://turbotaai.com/reset-password?lang=${lang}`
+    : "https://turbotaai.com/reset-password"
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo })
   if (error) return { ok: false, error: error.message }
   return { ok: true }
 }
