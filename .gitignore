@@ -68,3 +68,12 @@ apps/mobile/google-play-key.json
 # mobile build artifacts
 apps/mobile/artifacts/
 apps/mobile/dist/
+
+# private QA exports and workflow internals — never commit
+docs/private-qa/
+docs/private/
+
+# env files — allow only the public example; block all real env files
+.env.*
+!.env.example
+!.env.*.example
